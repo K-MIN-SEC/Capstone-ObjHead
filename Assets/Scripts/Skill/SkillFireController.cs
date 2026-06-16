@@ -8,11 +8,14 @@ public class SkillFireController : MonoBehaviour
     [SerializeField, Min(0.05f)] private float projectileRadius = 0.18f;
     [FormerlySerializedAs("spawnDistanceFromTarget")]
     [SerializeField, Min(0f)] private float spawnDistanceFromCharacter = 0.7f;
-    [SerializeField, Min(0.1f)] private float minLaunchSpeed = 3.5f;
-    [SerializeField, Min(0.1f)] private float maxLaunchSpeed = 13f;
     [SerializeField, Min(0f)] private float projectileGravityScale = 1f;
     [SerializeField, Min(0.1f)] private float projectileLifetime = 8f;
     [SerializeField] private Color projectileColor = new Color(1f, 0.25f, 0.05f, 1f);
+
+    [Header("Worms Throw Speed")]
+    [SerializeField, Min(1f)] private float maxThrowSpeedPxPerSecond = 1200f;
+    [SerializeField, Min(0f)] private float throwSpeedMultiplier = 0.5f;
+    [SerializeField, Min(1f)] private float fallbackPixelsPerUnit = 100f;
 
     [Header("Impact")]
     [SerializeField, Min(0)] private int maxDamage = 35;
@@ -113,9 +116,9 @@ public class SkillFireController : MonoBehaviour
         hasFiredThisTurn = true;
 
         Vector2 direction = aimController.AimDirection;
+        aimController.RememberCurrentAimForTeam();
         Vector2 spawnPosition = aimController.AimOrigin + direction * spawnDistanceFromCharacter;
-        float throwPowerMultiplier = ownerCombat != null ? ownerCombat.ThrowPower : 1f;
-        float launchSpeed = Mathf.Lerp(minLaunchSpeed, maxLaunchSpeed, Mathf.Clamp01(normalizedPower)) * throwPowerMultiplier;
+        Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);
         ObjectHeadSkillSettings skillSettings = skillSelector != null
             ? skillSelector.GetCurrentSkillSettings()
             : ObjectHeadSkillSettings.CreateDefault(null, projectileColor, explosionColor, maxDamage, projectileRadius * explosionRadiusMultiplier, knockbackForce);
@@ -134,7 +137,7 @@ public class SkillFireController : MonoBehaviour
 
         SkillProjectile projectile = projectileObject.AddComponent<SkillProjectile>();
         projectile.Initialize(
-            direction * launchSpeed,
+            launchVelocity,
             projectileRadius,
             projectileGravityScale,
             projectileLifetime,
@@ -160,6 +163,22 @@ public class SkillFireController : MonoBehaviour
         }
 
         skillSelector?.NotifySkillFired();
+    }
+
+    private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)
+    {
+        Vector2 normalizedDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector2.right;
+        float pixelsPerUnit = ResolvePixelsPerUnit();
+        float maxThrowSpeedUnitsPerSecond = maxThrowSpeedPxPerSecond * throwSpeedMultiplier / pixelsPerUnit;
+        return normalizedDirection * maxThrowSpeedUnitsPerSecond * Mathf.Clamp01(charge);
+    }
+
+    private float ResolvePixelsPerUnit()
+    {
+        TerrainManager terrain = FindTerrainManager();
+        return terrain != null
+            ? Mathf.Max(1f, terrain.PixelsPerUnit)
+            : Mathf.Max(1f, fallbackPixelsPerUnit);
     }
 
     private IEnumerator GrowSeedVineRoutine(

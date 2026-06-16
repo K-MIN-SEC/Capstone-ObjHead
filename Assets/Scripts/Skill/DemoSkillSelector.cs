@@ -30,6 +30,11 @@ public struct ObjectHeadSkillSettings
     public float chainSpacingWorld;
     public float chainDelaySeconds;
     public int chainMaxTotalDamage;
+    public float chainSpreadRadiusWorld;
+    public bool useWideClusterPattern;
+    public bool useRollingChainPath;
+    public float rollingChainMinSpeed;
+    public float rollingChainAngularSpeed;
     public float delaySeconds;
     public int zoneDurationTurns;
     public int zoneDamagePerTick;
@@ -49,6 +54,7 @@ public struct ObjectHeadSkillSettings
     public int commonHeadTypeId;
     public int terrainBurstCount;
     public int terrainBurstStampRadiusPx;
+    public int terrainBurstMaxPlacementAttemptsPerStamp;
     public float terrainBurstIntervalSeconds;
     public float terrainBurstSpreadWorld;
     public float terrainBurstVerticalBiasWorld;
@@ -80,6 +86,11 @@ public struct ObjectHeadSkillSettings
             chainSpacingWorld = 0.25f,
             chainDelaySeconds = 0.1f,
             chainMaxTotalDamage = maxDamage,
+            chainSpreadRadiusWorld = 0f,
+            useWideClusterPattern = false,
+            useRollingChainPath = false,
+            rollingChainMinSpeed = 0f,
+            rollingChainAngularSpeed = 0f,
             delaySeconds = 0f,
             zoneDurationTurns = 0,
             zoneDamagePerTick = 0,
@@ -99,9 +110,10 @@ public struct ObjectHeadSkillSettings
             commonHeadTypeId = 0,
             terrainBurstCount = 0,
             terrainBurstStampRadiusPx = 0,
+            terrainBurstMaxPlacementAttemptsPerStamp = 4,
             terrainBurstIntervalSeconds = 0.06f,
             terrainBurstSpreadWorld = 1f,
-            terrainBurstVerticalBiasWorld = 0.25f,
+            terrainBurstVerticalBiasWorld = 0f,
             finalTerrainRadiusXWorld = 1f,
             finalTerrainRadiusYWorld = 0.8f,
             maxBuildHeightAboveSurfaceWorld = 5f
@@ -113,6 +125,10 @@ public struct ObjectHeadSkillSettings
 [RequireComponent(typeof(CharacterVisual))]
 public class DemoSkillSelector : MonoBehaviour
 {
+    private const int BasicSlotCount = 3;
+    private const int CommonSlotCount = 3;
+    private const int TotalLoadoutSlotCount = BasicSlotCount + CommonSlotCount;
+
     [SerializeField] private ObjectHeadCharacterKind characterKind = ObjectHeadCharacterKind.Bulb;
     [SerializeField, Range(0, 2)] private int selectedSkillIndex;
     [SerializeField] private bool allowKeyboardSelection = true;
@@ -121,6 +137,7 @@ public class DemoSkillSelector : MonoBehaviour
     [SerializeField, Min(1)] private int seedTerrainBurstCount = 12;
     [SerializeField, Min(1)] private int seedTerrainBurstStampRadiusPx = 9;
     [SerializeField, Min(0.01f)] private float seedTerrainBurstIntervalSeconds = 0.055f;
+    [SerializeField, Min(1)] private int terrainBurstMaxPlacementAttemptsPerStamp = 4;
     [SerializeField, Min(0.1f)] private float seedTerrainRadiusXWorld = 1.2f;
     [SerializeField, Min(0.5f)] private float seedTerrainRadiusYWorld = 0.95f;
     [SerializeField, Min(0.5f)] private float minimumCreatedTerrainRadiusYWorld = 0.5f;
@@ -304,9 +321,10 @@ public class DemoSkillSelector : MonoBehaviour
             settings.terrainRadiusPx = 18;
             settings.terrainBurstCount = seedTerrainBurstCount;
             settings.terrainBurstStampRadiusPx = seedTerrainBurstStampRadiusPx;
+            settings.terrainBurstMaxPlacementAttemptsPerStamp = terrainBurstMaxPlacementAttemptsPerStamp;
             settings.terrainBurstIntervalSeconds = seedTerrainBurstIntervalSeconds;
             settings.terrainBurstSpreadWorld = seedTerrainRadiusXWorld;
-            settings.terrainBurstVerticalBiasWorld = 0.3f;
+            settings.terrainBurstVerticalBiasWorld = 0f;
             settings.finalTerrainRadiusXWorld = seedTerrainRadiusXWorld;
             settings.finalTerrainRadiusYWorld = Mathf.Max(
                 minimumCreatedTerrainRadiusYWorld,
@@ -372,7 +390,10 @@ public class DemoSkillSelector : MonoBehaviour
         settings.knockbackForce = 7f;
         settings.chainCount = 6;
         settings.chainSpacingWorld = 0.5f;
-        settings.chainDelaySeconds = 0.11f;
+        settings.chainDelaySeconds = 0.14f;
+        settings.useRollingChainPath = true;
+        settings.rollingChainMinSpeed = 3.2f;
+        settings.rollingChainAngularSpeed = 720f;
         settings.impactColor = new Color(1f, 0.85f, 0.05f, 0.55f);
     }
 
@@ -418,17 +439,25 @@ public class DemoSkillSelector : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+        if (keyboard != null)
         {
-            return;
+            if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) SetSkillIndex(0);
+            if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) SetSkillIndex(1);
+            if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) SetSkillIndex(2);
+            if (keyboard.f1Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bulb);
+            if (keyboard.f2Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Seed);
+            if (keyboard.f3Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
         }
 
-        if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) SetSkillIndex(0);
-        if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) SetSkillIndex(1);
-        if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) SetSkillIndex(2);
-        if (keyboard.f1Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bulb);
-        if (keyboard.f2Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Seed);
-        if (keyboard.f3Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
+        if (ObjectHeadGamepadInput.WasPreviousWeaponPressed())
+        {
+            CycleLoadoutSelection(-1);
+        }
+
+        if (ObjectHeadGamepadInput.WasNextWeaponPressed())
+        {
+            CycleLoadoutSelection(1);
+        }
 #else
         if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) SetSkillIndex(0);
         if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) SetSkillIndex(1);
@@ -437,6 +466,59 @@ public class DemoSkillSelector : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F2)) SetCharacterKind(ObjectHeadCharacterKind.Seed);
         if (Input.GetKeyDown(KeyCode.F3)) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
 #endif
+    }
+
+    private void CycleLoadoutSelection(int direction)
+    {
+        if (direction == 0)
+        {
+            return;
+        }
+
+        int currentIndex = GetCurrentLoadoutIndex();
+        int step = direction > 0 ? 1 : -1;
+        for (int attempt = 1; attempt <= TotalLoadoutSlotCount; attempt++)
+        {
+            int candidate = Mod(currentIndex + step * attempt, TotalLoadoutSlotCount);
+            if (TrySelectLoadoutIndex(candidate))
+            {
+                return;
+            }
+        }
+    }
+
+    private int GetCurrentLoadoutIndex()
+    {
+        if (commonHeadUseController != null && commonHeadUseController.HasSelectedCommonHead)
+        {
+            return BasicSlotCount + commonHeadUseController.SelectedSlotIndex;
+        }
+
+        return Mathf.Clamp(selectedSkillIndex, 0, BasicSlotCount - 1);
+    }
+
+    private bool TrySelectLoadoutIndex(int loadoutIndex)
+    {
+        if (loadoutIndex < BasicSlotCount)
+        {
+            SetSkillIndex(loadoutIndex);
+            return true;
+        }
+
+        if (commonHeadUseController == null)
+        {
+            commonHeadUseController = GetComponent<CommonHeadUseController>();
+        }
+
+        int commonSlotIndex = loadoutIndex - BasicSlotCount;
+        return commonHeadUseController != null &&
+               commonHeadUseController.HasCommonHeadInSlot(commonSlotIndex) &&
+               commonHeadUseController.TrySelectCommonHeadSlot(commonSlotIndex);
+    }
+
+    private static int Mod(int value, int divisor)
+    {
+        return ((value % divisor) + divisor) % divisor;
     }
 
     private static TurnManager FindTurnManager()

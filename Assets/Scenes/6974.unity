@@ -478,7 +478,7 @@ MonoBehaviour:
   targetingScale: 0.18
   chargingScale: 0.16
   targetingSpriteAngleOffset: 0
-  chargingSpriteAngleOffset: 90
+  chargingSpriteAngleOffset: -90
   visualSortingOrder: 25
 --- !u!114 &100200007
 MonoBehaviour:
@@ -794,7 +794,7 @@ MonoBehaviour:
   targetingScale: 0.18
   chargingScale: 0.16
   targetingSpriteAngleOffset: 0
-  chargingSpriteAngleOffset: 90
+  chargingSpriteAngleOffset: -90
   visualSortingOrder: 25
 --- !u!114 &100300007
 MonoBehaviour:
@@ -939,6 +939,8 @@ MonoBehaviour:
   startingIndex: 0
   allowManualTurnEnd: 1
   turnDurationSeconds: 30
+  residualMovementSeconds: 5
+  damageSettlementSeconds: 1
 --- !u!1 &300000000
 GameObject:
   m_ObjectHideFlags: 0

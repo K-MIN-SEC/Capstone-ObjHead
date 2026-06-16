@@ -17,6 +17,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField] private int chunkSizePx = 64;
     [SerializeField] private int collisionCellSizePx = 4;
     [SerializeField, Range(1f, 2.5f)] private float mapWidthMultiplier = 1.5f;
+    [SerializeField, Range(12f, 20f)] private float upperSkyPaddingWorld = 16f;
     [SerializeField] private bool useFixedTestSpawnSeed;
     [FormerlySerializedAs("deterministicSpawnSeed")]
     [SerializeField] private int fixedTestSpawnSeed = 6974;
@@ -29,6 +30,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float backgroundWaterlineNormalized = 0.166f;
     [SerializeField] private bool addTerrainEditBrush = true;
     [SerializeField] private bool cleanupExistingPrototypeScene = true;
+    [SerializeField] private bool addGamepadDebugOverlay = true;
 
     private TerrainManager terrain;
     private TurnManager turnManager;
@@ -98,6 +100,13 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
         {
             new GameObject("ObjectHeadHUD").AddComponent<ObjectHeadHUD>();
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (addGamepadDebugOverlay && FindAny<ObjectHeadGamepadDebugOverlay>() == null)
+        {
+            new GameObject("ObjectHeadGamepadDebugOverlay").AddComponent<ObjectHeadGamepadDebugOverlay>();
+        }
+#endif
     }
 
     private void CleanupExistingPrototypeScene()
@@ -143,7 +152,8 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
             pixelsPerUnit,
             chunkSizePx,
             collisionCellSizePx,
-            mapWidthMultiplier);
+            mapWidthMultiplier,
+            upperSkyPaddingWorld);
 
         if (addTerrainEditBrush)
         {

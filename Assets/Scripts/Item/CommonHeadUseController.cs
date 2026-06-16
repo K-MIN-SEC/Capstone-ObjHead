@@ -9,32 +9,40 @@ public class CommonHeadUseController : MonoBehaviour
 {
     [Header("Throw")]
     [SerializeField, Min(0.05f)] private float projectileRadius = 0.18f;
-    [SerializeField, Min(0.1f)] private float minLaunchSpeed = 3.5f;
-    [SerializeField, Min(0.1f)] private float maxLaunchSpeed = 13f;
     [SerializeField, Min(0f)] private float projectileGravityScale = 1f;
     [SerializeField, Min(0.1f)] private float projectileLifetime = 8f;
     [SerializeField, Min(0f)] private float spawnDistanceFromCharacter = 0.75f;
 
+    [Header("Worms Throw Speed")]
+    [SerializeField, Min(1f)] private float maxThrowSpeedPxPerSecond = 1200f;
+    [SerializeField, Min(0f)] private float throwSpeedMultiplier = 0.5f;
+    [SerializeField, Min(1f)] private float fallbackPixelsPerUnit = 100f;
+
     [Header("Attack Head")]
-    [SerializeField, Min(0)] private int attackDamage = 24;
-    [SerializeField, Min(1)] private int attackTerrainRadiusPx = 34;
-    [SerializeField, Min(0.1f)] private float attackExplosionRadiusWorld = 1.35f;
-    [SerializeField, Min(0f)] private float attackKnockbackForce = 8f;
+    [SerializeField, Min(1)] private int attackClusterCount = 8;
+    [SerializeField, Min(0)] private int attackClusterDamagePerExplosion = 16;
+    [SerializeField, Min(0)] private int attackClusterMaxTotalDamage = 72;
+    [SerializeField, Min(1)] private int attackClusterTerrainRadiusPx = 40;
+    [SerializeField, Min(0.1f)] private float attackClusterExplosionRadiusWorld = 1.25f;
+    [SerializeField, Min(0.1f)] private float attackClusterSpreadRadiusWorld = 2.6f;
+    [SerializeField, Min(0.01f)] private float attackClusterDelaySeconds = 0.09f;
+    [SerializeField, Min(0f)] private float attackClusterKnockbackForce = 9.5f;
 
     [Header("Terrain Head")]
-    [SerializeField, Min(1)] private int createdTerrainRadiusPx = 14;
-    [SerializeField, Min(1)] private int terrainBurstCount = 8;
-    [SerializeField, Min(1)] private int terrainBurstStampRadiusPx = 8;
-    [SerializeField, Min(0.01f)] private float terrainBurstInterval = 0.065f;
-    [SerializeField, Min(0.1f)] private float terrainBurstSpreadWorld = 0.82f;
-    [SerializeField, Min(0.1f)] private float terrainBurstRadiusXWorld = 0.82f;
-    [SerializeField, Min(0.1f)] private float terrainBurstRadiusYWorld = 0.68f;
-    [SerializeField, Min(0.5f)] private float maxBuildHeightAboveSurfaceWorld = 5f;
+    [SerializeField, Min(1)] private int createdTerrainRadiusPx = 20;
+    [SerializeField, Min(1)] private int terrainBurstCount = 22;
+    [SerializeField, Min(1)] private int terrainBurstStampRadiusPx = 12;
+    [SerializeField, Min(0.01f)] private float terrainBurstInterval = 0.045f;
+    [SerializeField, Min(0.1f)] private float terrainBurstSpreadWorld = 2.2f;
+    [SerializeField, Min(0.1f)] private float terrainBurstRadiusXWorld = 2.2f;
+    [SerializeField, Min(0.1f)] private float terrainBurstRadiusYWorld = 1.65f;
+    [SerializeField, Min(0.5f)] private float maxBuildHeightAboveSurfaceWorld = 7f;
 
     [Header("Jet Jump")]
-    [SerializeField, Min(0.1f)] private float minJetJumpSpeed = 4f;
-    [SerializeField, Min(0.1f)] private float maxJetJumpSpeed = 11f;
-    [SerializeField, Min(0.1f)] private float mobilityResolveSeconds = 0.45f;
+    [SerializeField, Min(0.1f)] private float minJetJumpSpeed = 7f;
+    [SerializeField, Min(0.1f)] private float maxJetJumpSpeed = 17f;
+    [SerializeField, Min(0.25f)] private float jetJumpResolveTimeoutSeconds = 5f;
+    [SerializeField, Min(0.02f)] private float jetJumpLandingStableSeconds = 0.12f;
 
     private CommonHeadInventory inventory;
     private PlayerInventoryManager inventoryManager;
@@ -56,6 +64,24 @@ public class CommonHeadUseController : MonoBehaviour
     public Sprite SelectedSprite => selectedSprite;
     public float MinJetJumpSpeed => minJetJumpSpeed;
     public float MaxJetJumpSpeed => maxJetJumpSpeed;
+
+    public bool HasCommonHeadInSlot(int slotIndex)
+    {
+        RefreshReferences();
+        return inventory != null && inventory.GetSlot(slotIndex) != CommonHeadType.None;
+    }
+
+    public bool TrySelectCommonHeadSlot(int slotIndex)
+    {
+        RefreshReferences();
+        if (inventory == null || inventory.GetSlot(slotIndex) == CommonHeadType.None)
+        {
+            return false;
+        }
+
+        SelectSlot(slotIndex);
+        return true;
+    }
 
     private void Awake()
     {
@@ -211,6 +237,7 @@ public class CommonHeadUseController : MonoBehaviour
         commonActionInProgress = true;
         powerChargeController?.CancelCharge();
         aimController?.ConfirmFacingFromAim();
+        aimController?.RememberCurrentAimForTeam();
         characterVisual?.PlayThrowPose(0.25f);
         characterVisual?.HideHeadForThrow();
         Debug.Log($"{name} used {consumedType} common head from slot {slotIndex + 6} at power {normalizedPower:0.00}.");
@@ -240,15 +267,14 @@ public class CommonHeadUseController : MonoBehaviour
     {
         Vector2 direction = aimController != null ? aimController.AimDirection : Vector2.right;
         Vector2 origin = aimController != null ? aimController.AimOrigin : (Vector2)transform.position;
-        float throwPowerMultiplier = combat != null ? combat.ThrowPower : 1f;
-        float launchSpeed = Mathf.Lerp(minLaunchSpeed, maxLaunchSpeed, Mathf.Clamp01(normalizedPower)) * throwPowerMultiplier;
+        Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);
 
         GameObject projectileObject = new GameObject(projectileName);
         projectileObject.transform.position = origin + direction * spawnDistanceFromCharacter;
         SkillProjectile projectile = projectileObject.AddComponent<SkillProjectile>();
         projectile.Resolved += CompleteCommonAction;
         projectile.Initialize(
-            direction * launchSpeed,
+            launchVelocity,
             projectileRadius,
             projectileGravityScale,
             projectileLifetime,
@@ -265,21 +291,71 @@ public class CommonHeadUseController : MonoBehaviour
         IgnoreOwnerCollision(projectile.GetComponent<Collider2D>());
     }
 
+    private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)
+    {
+        Vector2 normalizedDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector2.right;
+        float pixelsPerUnit = ResolvePixelsPerUnit();
+        float maxThrowSpeedUnitsPerSecond = maxThrowSpeedPxPerSecond * throwSpeedMultiplier / pixelsPerUnit;
+        return normalizedDirection * maxThrowSpeedUnitsPerSecond * Mathf.Clamp01(charge);
+    }
+
+    private float ResolvePixelsPerUnit()
+    {
+        TerrainManager terrain = FindAny<TerrainManager>();
+        return terrain != null
+            ? Mathf.Max(1f, terrain.PixelsPerUnit)
+            : Mathf.Max(1f, fallbackPixelsPerUnit);
+    }
+
     private IEnumerator JetJumpRoutine(float normalizedPower)
     {
         turnManager.NotifyResolving();
         Rigidbody2D body = GetComponent<Rigidbody2D>();
         Vector2 direction = aimController != null ? aimController.EffectiveAimDirection : Vector2.up;
         float launchSpeed = Mathf.Lerp(minJetJumpSpeed, maxJetJumpSpeed, Mathf.Clamp01(normalizedPower));
+        bool leftGround = turnCharacter == null || !turnCharacter.IsGrounded;
+        float groundedStableSeconds = 0f;
+        float elapsed = 0f;
 
         turnCharacter?.BeginJetJumpFallDamageImmunity();
-        turnCharacter?.PreserveExternalMotion(mobilityResolveSeconds + 0.25f);
+        turnCharacter?.PreserveExternalMotion(jetJumpResolveTimeoutSeconds);
         if (body != null)
         {
             body.AddForce(direction * launchSpeed, ForceMode2D.Impulse);
         }
 
-        yield return new WaitForSeconds(mobilityResolveSeconds);
+        while (elapsed < jetJumpResolveTimeoutSeconds)
+        {
+            if (combat != null && combat.IsDead)
+            {
+                break;
+            }
+
+            if (turnCharacter == null ||
+                !turnCharacter.isActiveAndEnabled ||
+                !turnCharacter.gameObject.activeInHierarchy)
+            {
+                break;
+            }
+
+            if (!turnCharacter.IsGrounded)
+            {
+                leftGround = true;
+                groundedStableSeconds = 0f;
+            }
+            else if (leftGround)
+            {
+                groundedStableSeconds += Time.deltaTime;
+                if (groundedStableSeconds >= jetJumpLandingStableSeconds)
+                {
+                    break;
+                }
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
         CompleteCommonAction();
         turnManager.NotifyActionResolved();
     }
@@ -290,12 +366,20 @@ public class CommonHeadUseController : MonoBehaviour
             sprite != null ? sprite : CommonHeadItem.GetDefaultSprite(CommonHeadType.Attack),
             new Color(1f, 0.35f, 0.12f, 1f),
             new Color(1f, 0.12f, 0f, 0.58f),
-            attackDamage,
-            attackExplosionRadiusWorld,
-            attackKnockbackForce);
-        settings.effectType = SkillEffectType.DamageExplosion;
-        settings.terrainRadiusPx = attackTerrainRadiusPx;
-        settings.projectileVisualDiameter = 0.65f;
+            attackClusterDamagePerExplosion,
+            attackClusterExplosionRadiusWorld,
+            attackClusterKnockbackForce);
+        settings.effectType = SkillEffectType.ChainExplosion;
+        settings.terrainRadiusPx = attackClusterTerrainRadiusPx;
+        settings.chainCount = attackClusterCount;
+        settings.chainSpacingWorld = 0.5f;
+        settings.chainDelaySeconds = attackClusterDelaySeconds;
+        settings.chainMaxTotalDamage = attackClusterMaxTotalDamage;
+        settings.chainSpreadRadiusWorld = attackClusterSpreadRadiusWorld;
+        settings.useWideClusterPattern = true;
+        settings.skillId = 101;
+        settings.commonHeadTypeId = (int)CommonHeadType.Attack;
+        settings.projectileVisualDiameter = 0.7f;
         return settings;
     }
 
@@ -312,8 +396,10 @@ public class CommonHeadUseController : MonoBehaviour
         settings.terrainRadiusPx = createdTerrainRadiusPx;
         settings.terrainBurstCount = terrainBurstCount;
         settings.terrainBurstStampRadiusPx = terrainBurstStampRadiusPx;
+        settings.terrainBurstMaxPlacementAttemptsPerStamp = 4;
         settings.terrainBurstIntervalSeconds = terrainBurstInterval;
         settings.terrainBurstSpreadWorld = terrainBurstSpreadWorld;
+        settings.terrainBurstVerticalBiasWorld = 0f;
         settings.finalTerrainRadiusXWorld = terrainBurstRadiusXWorld;
         settings.finalTerrainRadiusYWorld = Mathf.Max(0.5f, terrainBurstRadiusYWorld);
         settings.maxBuildHeightAboveSurfaceWorld = maxBuildHeightAboveSurfaceWorld;
