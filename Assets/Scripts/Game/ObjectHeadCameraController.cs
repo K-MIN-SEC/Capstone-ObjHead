@@ -19,9 +19,12 @@ public class ObjectHeadCameraController : MonoBehaviour
 
     private Camera targetCamera;
     private Vector3 manualOffset;
+    private Vector2 lastActionFocusPosition;
     private bool overviewMode;
     private bool manualControl;
     private bool forceCharacterFocus;
+    private bool hasLastActionFocusPosition;
+    private int observedTurnSerial = -1;
     private SkillProjectile lastSeenProjectile;
 
     private void Awake()
@@ -45,6 +48,8 @@ public class ObjectHeadCameraController : MonoBehaviour
         }
 
         ObserveProjectileStart();
+        ObserveTurnChange();
+        UpdateActionFocusFromProjectile();
         ReadManualInput();
         if (overviewMode || manualControl)
         {
@@ -52,10 +57,9 @@ public class ObjectHeadCameraController : MonoBehaviour
             return;
         }
 
-        Transform target = FindFollowTarget();
-        if (target != null)
+        if (TryGetFollowPosition(out Vector2 targetPosition))
         {
-            Vector3 desired = new Vector3(target.position.x, target.position.y, transform.position.z) + manualOffset;
+            Vector3 desired = new Vector3(targetPosition.x, targetPosition.y, transform.position.z) + manualOffset;
             transform.position = Vector3.Lerp(
                 transform.position,
                 ClampToTerrain(desired),
@@ -72,6 +76,27 @@ public class ObjectHeadCameraController : MonoBehaviour
         terrain = terrainManager;
         turnManager = manager;
         FocusOnCurrentTarget(true);
+    }
+
+    public bool IsOutsideReachableView(Vector2 worldPosition, float marginWorld = 0f)
+    {
+        if (!TryGetReachableViewBounds(out float minX, out float maxX, out float minY, out float maxY))
+        {
+            return false;
+        }
+
+        float margin = Mathf.Max(0f, marginWorld);
+        return worldPosition.x < minX - margin ||
+               worldPosition.x > maxX + margin ||
+               worldPosition.y < minY - margin ||
+               worldPosition.y > maxY + margin;
+    }
+
+    public void FocusOnCurrentCharacterImmediate(bool resetZoom = false)
+    {
+        hasLastActionFocusPosition = false;
+        lastSeenProjectile = null;
+        FocusOnCurrentTarget(resetZoom);
     }
 
     public void FitToTerrainOverview()
@@ -107,12 +132,10 @@ public class ObjectHeadCameraController : MonoBehaviour
         manualControl = false;
         forceCharacterFocus = true;
         manualOffset = Vector3.zero;
-        Transform target = turnManager != null && turnManager.CurrentCharacter != null
-            ? turnManager.CurrentCharacter.transform
-            : null;
-        if (target != null)
+        if (turnManager != null && turnManager.CurrentCharacter != null)
         {
-            transform.position = ClampToTerrain(new Vector3(target.position.x, target.position.y, transform.position.z));
+            Vector3 targetPosition = turnManager.CurrentCharacter.transform.position;
+            transform.position = ClampToTerrain(new Vector3(targetPosition.x, targetPosition.y, transform.position.z));
         }
         else
         {
@@ -150,6 +173,8 @@ public class ObjectHeadCameraController : MonoBehaviour
                 pan -= mouse.delta.ReadValue() * 0.018f;
             }
         }
+
+        pan += ObjectHeadGamepadInput.CameraPan();
 #else
         if (Input.GetKey(KeyCode.O)) pan.y += 1f;
         if (Input.GetKey(KeyCode.K)) pan.x -= 1f;
@@ -184,8 +209,9 @@ public class ObjectHeadCameraController : MonoBehaviour
             overviewMode = false;
             manualControl = true;
             forceCharacterFocus = false;
+            Vector2 panStep = pan.sqrMagnitude > 1f ? pan.normalized : pan;
             transform.position = ClampToTerrain(
-                transform.position + (Vector3)(pan.normalized * manualPanSpeed * Time.unscaledDeltaTime));
+                transform.position + (Vector3)(panStep * manualPanSpeed * Time.unscaledDeltaTime));
         }
 
         if (Mathf.Abs(zoomDelta) > 0f)
@@ -212,17 +238,38 @@ public class ObjectHeadCameraController : MonoBehaviour
         FitToTerrainOverview();
     }
 
-    private Transform FindFollowTarget()
+    private bool TryGetFollowPosition(out Vector2 targetPosition)
     {
         SkillProjectile projectile = FindAny<SkillProjectile>();
         if (!forceCharacterFocus && projectile != null && projectile.IsFlying)
         {
-            return projectile.transform;
+            targetPosition = projectile.transform.position;
+            return true;
         }
 
-        return turnManager != null && turnManager.CurrentCharacter != null
-            ? turnManager.CurrentCharacter.transform
-            : null;
+        if (!forceCharacterFocus && ShouldPreferActionFocus())
+        {
+            if (projectile != null)
+            {
+                targetPosition = projectile.transform.position;
+                return true;
+            }
+
+            if (hasLastActionFocusPosition)
+            {
+                targetPosition = lastActionFocusPosition;
+                return true;
+            }
+        }
+
+        if (turnManager != null && turnManager.CurrentCharacter != null)
+        {
+            targetPosition = turnManager.CurrentCharacter.transform.position;
+            return true;
+        }
+
+        targetPosition = default;
+        return false;
     }
 
     private void ObserveProjectileStart()
@@ -238,27 +285,112 @@ public class ObjectHeadCameraController : MonoBehaviour
         manualControl = false;
         overviewMode = false;
         manualOffset = Vector3.zero;
+        RememberActionFocus(projectile.transform.position);
+    }
+
+    private void ObserveTurnChange()
+    {
+        if (turnManager == null)
+        {
+            turnManager = FindAny<TurnManager>();
+        }
+
+        if (turnManager == null || observedTurnSerial == turnManager.TurnSerial)
+        {
+            return;
+        }
+
+        observedTurnSerial = turnManager.TurnSerial;
+        hasLastActionFocusPosition = false;
+        lastSeenProjectile = null;
+    }
+
+    private void UpdateActionFocusFromProjectile()
+    {
+        SkillProjectile projectile = FindAny<SkillProjectile>();
+        if (projectile != null && !forceCharacterFocus)
+        {
+            RememberActionFocus(projectile.transform.position);
+        }
+    }
+
+    private void RememberActionFocus(Vector2 position)
+    {
+        lastActionFocusPosition = position;
+        hasLastActionFocusPosition = true;
+    }
+
+    private bool ShouldPreferActionFocus()
+    {
+        return turnManager != null &&
+               hasLastActionFocusPosition &&
+               (turnManager.IsResidualTimeActive ||
+                turnManager.CurrentPhase == TurnPhase.ProjectileFlying ||
+                turnManager.CurrentPhase == TurnPhase.PostImpactDelay ||
+                turnManager.CurrentPhase == TurnPhase.Resolving);
     }
 
     private Vector3 ClampToTerrain(Vector3 position)
     {
-        if (terrain == null || targetCamera == null || terrain.WidthPx <= 0 || terrain.HeightPx <= 0)
+        if (!TryGetCameraCenterBounds(out float minX, out float maxX, out float minY, out float maxY))
         {
             return position;
+        }
+
+        position.x = minX <= maxX ? Mathf.Clamp(position.x, minX, maxX) : (minX + maxX) * 0.5f;
+        position.y = minY <= maxY ? Mathf.Clamp(position.y, minY, maxY) : (minY + maxY) * 0.5f;
+        return position;
+    }
+
+    private bool TryGetReachableViewBounds(out float minX, out float maxX, out float minY, out float maxY)
+    {
+        if (!TryGetCameraCenterBounds(out float centerMinX, out float centerMaxX, out float centerMinY, out float centerMaxY))
+        {
+            minX = maxX = minY = maxY = 0f;
+            return false;
+        }
+
+        float halfHeight = targetCamera.orthographicSize;
+        float halfWidth = halfHeight * targetCamera.aspect;
+        minX = Mathf.Min(centerMinX, centerMaxX) - halfWidth;
+        maxX = Mathf.Max(centerMinX, centerMaxX) + halfWidth;
+        minY = Mathf.Min(centerMinY, centerMaxY) - halfHeight;
+        maxY = Mathf.Max(centerMinY, centerMaxY) + halfHeight;
+        return true;
+    }
+
+    private bool TryGetCameraCenterBounds(out float minX, out float maxX, out float minY, out float maxY)
+    {
+        if (terrain == null || targetCamera == null || terrain.WidthPx <= 0 || terrain.HeightPx <= 0)
+        {
+            minX = maxX = minY = maxY = 0f;
+            return false;
         }
 
         float halfHeight = targetCamera.orthographicSize;
         float halfWidth = halfHeight * targetCamera.aspect;
         float terrainWidth = terrain.WidthPx / (float)terrain.PixelsPerUnit;
         float terrainHeight = terrain.HeightPx / (float)terrain.PixelsPerUnit;
-        float minX = terrain.TerrainOriginWorld.x + halfWidth - paddingWorld.x;
-        float maxX = terrain.TerrainOriginWorld.x + terrainWidth - halfWidth + paddingWorld.x;
-        float minY = terrain.TerrainOriginWorld.y + halfHeight - paddingWorld.y;
-        float maxY = terrain.TerrainOriginWorld.y + terrainHeight - halfHeight + paddingWorld.y;
+        minX = terrain.TerrainOriginWorld.x + halfWidth - paddingWorld.x;
+        maxX = terrain.TerrainOriginWorld.x + terrainWidth - halfWidth + paddingWorld.x;
+        minY = terrain.TerrainOriginWorld.y + halfHeight - paddingWorld.y;
+        maxY = terrain.TerrainOriginWorld.y + terrainHeight - halfHeight + paddingWorld.y;
 
-        position.x = minX <= maxX ? Mathf.Clamp(position.x, minX, maxX) : terrain.TerrainOriginWorld.x + terrainWidth * 0.5f;
-        position.y = minY <= maxY ? Mathf.Clamp(position.y, minY, maxY) : terrain.TerrainOriginWorld.y + terrainHeight * 0.5f;
-        return position;
+        if (minX > maxX)
+        {
+            float centerX = terrain.TerrainOriginWorld.x + terrainWidth * 0.5f;
+            minX = centerX;
+            maxX = centerX;
+        }
+
+        if (minY > maxY)
+        {
+            float centerY = terrain.TerrainOriginWorld.y + terrainHeight * 0.5f;
+            minY = centerY;
+            maxY = centerY;
+        }
+
+        return true;
     }
 
     private static T FindAny<T>() where T : Object

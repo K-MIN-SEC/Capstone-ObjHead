@@ -12,9 +12,11 @@ public class CommonHeadItem : MonoBehaviour
     private static PhysicsMaterial2D itemPhysicsMaterial;
 
     private CommonHeadType itemType;
+    private Rigidbody2D body;
     private Collider2D groundCollider;
     private Collider2D pickupTrigger;
     private bool registered;
+    private bool pinnedToGround;
 
     public static int ActiveCount
     {
@@ -57,8 +59,9 @@ public class CommonHeadItem : MonoBehaviour
         Rigidbody2D body = itemObject.AddComponent<Rigidbody2D>();
         body.gravityScale = 1.5f;
         body.mass = 0.25f;
-        body.freezeRotation = false;
-        body.angularDamping = 0.8f;
+        body.freezeRotation = true;
+        body.constraints = RigidbodyConstraints2D.FreezeRotation;
+        body.angularDamping = 20f;
         body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
 
@@ -73,6 +76,7 @@ public class CommonHeadItem : MonoBehaviour
 
         CommonHeadItem item = itemObject.AddComponent<CommonHeadItem>();
         item.itemType = type;
+        item.body = body;
         item.groundCollider = groundCollider;
         item.pickupTrigger = pickupTrigger;
         item.RefreshIgnoredCharacterCollisions();
@@ -82,6 +86,11 @@ public class CommonHeadItem : MonoBehaviour
 
     private void Start()
     {
+        if (body == null)
+        {
+            body = GetComponent<Rigidbody2D>();
+        }
+
         RefreshIgnoredCharacterCollisions();
     }
 
@@ -158,6 +167,16 @@ public class CommonHeadItem : MonoBehaviour
         Destroy(gameObject);
     }
 
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        TryPinToStaticSurface(collision.collider);
+    }
+
+    private void OnCollisionStay2D(Collision2D collision)
+    {
+        TryPinToStaticSurface(collision.collider);
+    }
+
     private void OnDestroy()
     {
         if (!registered)
@@ -174,6 +193,41 @@ public class CommonHeadItem : MonoBehaviour
     {
         activeCounts[itemType] = GetActiveCount(itemType) + 1;
         registered = true;
+    }
+
+    private void TryPinToStaticSurface(Collider2D other)
+    {
+        if (pinnedToGround ||
+            other == null ||
+            other.isTrigger ||
+            other.attachedRigidbody != null)
+        {
+            return;
+        }
+
+        PinToGround();
+    }
+
+    private void PinToGround()
+    {
+        if (body == null)
+        {
+            body = GetComponent<Rigidbody2D>();
+        }
+
+        if (body == null)
+        {
+            return;
+        }
+
+        body.linearVelocity = Vector2.zero;
+        body.angularVelocity = 0f;
+        body.gravityScale = 0f;
+        body.constraints =
+            RigidbodyConstraints2D.FreezePositionX |
+            RigidbodyConstraints2D.FreezePositionY |
+            RigidbodyConstraints2D.FreezeRotation;
+        pinnedToGround = true;
     }
 
     private static Color ColorForType(CommonHeadType type)

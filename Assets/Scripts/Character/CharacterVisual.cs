@@ -46,6 +46,18 @@ public class CharacterVisual : MonoBehaviour
     public bool SpriteFacesRightByDefault => spriteFacesRightByDefault;
     public event Action<bool> FacingChanged;
 
+    public Sprite GetSkillHeadSprite(int skillIndex)
+    {
+        if (headSprites == null)
+        {
+            LoadSprites();
+        }
+
+        return headSprites != null
+            ? headSprites[(int)characterKind, Mathf.Clamp(skillIndex, 0, 2)]
+            : null;
+    }
+
     private void Awake()
     {
         LoadSprites();

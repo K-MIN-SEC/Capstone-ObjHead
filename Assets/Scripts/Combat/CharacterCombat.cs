@@ -13,6 +13,14 @@ public class CharacterCombat : MonoBehaviour
     [SerializeField] private Color deadColor = new Color(0.25f, 0.25f, 0.25f, 1f);
     [SerializeField, Min(0.01f)] private float hitFlashSeconds = 0.15f;
     [SerializeField, Min(0f)] private float knockbackControlLockSeconds = 0.9f;
+    [SerializeField, Min(0f)] private float knockbackNoFrictionSeconds = 0.2f;
+
+    [Header("Explosion Knockback")]
+    [SerializeField, Min(1f)] private float fallbackPixelsPerUnit = 100f;
+    [SerializeField, Min(0f)] private float explosionRadiusPerDamage = 1.2f;
+    [SerializeField, Min(0f)] private float explosionKnockbackPerDamage = 11.3f;
+    [SerializeField, Min(0f)] private float maxExplosionKnockbackPxPerSecond = 1200f;
+    [SerializeField, Min(0f)] private float explosionUpwardBias = 0.25f;
 
     [Header("Health Label")]
     [SerializeField] private bool showHealthLabel = true;
@@ -20,8 +28,6 @@ public class CharacterCombat : MonoBehaviour
     [SerializeField, Min(0.01f)] private float healthLabelCharacterSize = 0.11f;
     [SerializeField, Min(0f)] private float healthLabelAnimationSeconds = 0.3f;
     [SerializeField] private Color healthyLabelColor = Color.white;
-    [SerializeField] private Color warningLabelColor = new Color(1f, 0.85f, 0.2f, 1f);
-    [SerializeField] private Color dangerLabelColor = new Color(1f, 0.28f, 0.18f, 1f);
     [SerializeField] private Color deadLabelColor = new Color(0.65f, 0.65f, 0.65f, 1f);
     [SerializeField] private Color healthLabelShadowColor = new Color(0f, 0f, 0f, 0.8f);
     [SerializeField] private int healthLabelSortingOrder = 70;
@@ -40,6 +46,8 @@ public class CharacterCombat : MonoBehaviour
     private TurnCharacterController turnController;
     private CharacterVisual characterVisual;
     private TurnManager turnManager;
+    private TerrainManager terrainManager;
+    private ObjectHeadTeamMember teamMember;
     private Color originalColor = Color.white;
     private Coroutine hitFlashRoutine;
     private Coroutine healthLabelAnimationRoutine;
@@ -76,6 +84,8 @@ public class CharacterCombat : MonoBehaviour
         bodyCollider = GetComponent<Collider2D>();
         characterVisual = GetComponent<CharacterVisual>();
         turnManager = FindTurnManager();
+        terrainManager = FindTerrainManager();
+        teamMember = GetComponent<ObjectHeadTeamMember>();
         currentHp = maxHp;
         displayedHp = currentHp;
 
@@ -180,7 +190,56 @@ public class CharacterCombat : MonoBehaviour
         }
 
         turnController?.PreserveExternalMotion(knockbackControlLockSeconds);
+        turnController?.SuppressGroundFriction(knockbackNoFrictionSeconds);
         body.AddForce(force / knockbackResistance, ForceMode2D.Impulse);
+    }
+
+    public void ApplyExplosionKnockback(Vector2 explosionCenterWorld, float maxDamage)
+    {
+        if (isDead || body == null || maxDamage <= 0f)
+        {
+            return;
+        }
+
+        float pixelsPerUnit = ResolvePixelsPerUnit();
+        Vector2 characterCenterWorld = KnockbackCenter;
+        float distancePx = Vector2.Distance(explosionCenterWorld, characterCenterWorld) * pixelsPerUnit;
+        float blastRadiusPx = Mathf.Max(0f, maxDamage * explosionRadiusPerDamage);
+        if (blastRadiusPx <= 0f)
+        {
+            return;
+        }
+
+        float falloff = Mathf.Clamp01(1f - distancePx / blastRadiusPx);
+        if (falloff <= 0f)
+        {
+            return;
+        }
+
+        float maxKnockbackSpeedPxPerSecond = Mathf.Min(
+            maxDamage * explosionKnockbackPerDamage,
+            maxExplosionKnockbackPxPerSecond);
+        float knockbackSpeedPxPerSecond = maxKnockbackSpeedPxPerSecond * falloff;
+        float knockbackSpeedUnitsPerSecond = knockbackSpeedPxPerSecond / pixelsPerUnit;
+
+        Vector2 direction = characterCenterWorld - explosionCenterWorld;
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            direction = Vector2.up;
+        }
+        else
+        {
+            direction.Normalize();
+        }
+
+        direction = (direction + Vector2.up * explosionUpwardBias).normalized;
+
+        turnController?.PreserveExternalMotion(knockbackControlLockSeconds);
+        turnController?.SuppressGroundFriction(knockbackNoFrictionSeconds);
+
+        Vector2 velocity = body.linearVelocity + direction * knockbackSpeedUnitsPerSecond;
+        float maxExplosionVelocityCapUnits = maxExplosionKnockbackPxPerSecond / pixelsPerUnit;
+        body.linearVelocity = Vector2.ClampMagnitude(velocity, maxExplosionVelocityCapUnits);
     }
 
     public void Die()
@@ -511,18 +570,14 @@ public class CharacterCombat : MonoBehaviour
             return deadLabelColor;
         }
 
-        float health01 = maxHp > 0 ? currentHp / (float)maxHp : 0f;
-        if (health01 <= 0.3f)
+        if (teamMember == null)
         {
-            return dangerLabelColor;
+            teamMember = GetComponent<ObjectHeadTeamMember>();
         }
 
-        if (health01 <= 0.6f)
-        {
-            return warningLabelColor;
-        }
-
-        return healthyLabelColor;
+        return teamMember != null
+            ? ObjectHeadTeamColors.GetColor(teamMember.PlayerIndex)
+            : healthyLabelColor;
     }
 
     private void UpdateHealthLabelPosition()
@@ -548,6 +603,27 @@ public class CharacterCombat : MonoBehaviour
         return UnityEngine.Object.FindAnyObjectByType<TurnManager>();
 #else
         return UnityEngine.Object.FindObjectOfType<TurnManager>();
+#endif
+    }
+
+    private float ResolvePixelsPerUnit()
+    {
+        if (terrainManager == null)
+        {
+            terrainManager = FindTerrainManager();
+        }
+
+        return terrainManager != null
+            ? Mathf.Max(1f, terrainManager.PixelsPerUnit)
+            : Mathf.Max(1f, fallbackPixelsPerUnit);
+    }
+
+    private static TerrainManager FindTerrainManager()
+    {
+#if UNITY_6000_0_OR_NEWER || UNITY_2023_1_OR_NEWER
+        return UnityEngine.Object.FindAnyObjectByType<TerrainManager>();
+#else
+        return UnityEngine.Object.FindObjectOfType<TerrainManager>();
 #endif
     }
 
