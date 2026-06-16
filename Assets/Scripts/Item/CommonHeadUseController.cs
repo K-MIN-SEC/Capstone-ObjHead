@@ -9,11 +9,14 @@ public class CommonHeadUseController : MonoBehaviour
 {
     [Header("Throw")]
     [SerializeField, Min(0.05f)] private float projectileRadius = 0.18f;
-    [SerializeField, Min(0.1f)] private float minLaunchSpeed = 3.5f;
-    [SerializeField, Min(0.1f)] private float maxLaunchSpeed = 13f;
     [SerializeField, Min(0f)] private float projectileGravityScale = 1f;
     [SerializeField, Min(0.1f)] private float projectileLifetime = 8f;
     [SerializeField, Min(0f)] private float spawnDistanceFromCharacter = 0.75f;
+
+    [Header("Worms Throw Speed")]
+    [SerializeField, Min(1f)] private float maxThrowSpeedPxPerSecond = 1200f;
+    [SerializeField, Min(0f)] private float throwSpeedMultiplier = 0.5f;
+    [SerializeField, Min(1f)] private float fallbackPixelsPerUnit = 100f;
 
     [Header("Attack Head")]
     [SerializeField, Min(1)] private int attackClusterCount = 8;
@@ -61,6 +64,24 @@ public class CommonHeadUseController : MonoBehaviour
     public Sprite SelectedSprite => selectedSprite;
     public float MinJetJumpSpeed => minJetJumpSpeed;
     public float MaxJetJumpSpeed => maxJetJumpSpeed;
+
+    public bool HasCommonHeadInSlot(int slotIndex)
+    {
+        RefreshReferences();
+        return inventory != null && inventory.GetSlot(slotIndex) != CommonHeadType.None;
+    }
+
+    public bool TrySelectCommonHeadSlot(int slotIndex)
+    {
+        RefreshReferences();
+        if (inventory == null || inventory.GetSlot(slotIndex) == CommonHeadType.None)
+        {
+            return false;
+        }
+
+        SelectSlot(slotIndex);
+        return true;
+    }
 
     private void Awake()
     {
@@ -216,6 +237,7 @@ public class CommonHeadUseController : MonoBehaviour
         commonActionInProgress = true;
         powerChargeController?.CancelCharge();
         aimController?.ConfirmFacingFromAim();
+        aimController?.RememberCurrentAimForTeam();
         characterVisual?.PlayThrowPose(0.25f);
         characterVisual?.HideHeadForThrow();
         Debug.Log($"{name} used {consumedType} common head from slot {slotIndex + 6} at power {normalizedPower:0.00}.");
@@ -245,15 +267,14 @@ public class CommonHeadUseController : MonoBehaviour
     {
         Vector2 direction = aimController != null ? aimController.AimDirection : Vector2.right;
         Vector2 origin = aimController != null ? aimController.AimOrigin : (Vector2)transform.position;
-        float throwPowerMultiplier = combat != null ? combat.ThrowPower : 1f;
-        float launchSpeed = Mathf.Lerp(minLaunchSpeed, maxLaunchSpeed, Mathf.Clamp01(normalizedPower)) * throwPowerMultiplier;
+        Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);
 
         GameObject projectileObject = new GameObject(projectileName);
         projectileObject.transform.position = origin + direction * spawnDistanceFromCharacter;
         SkillProjectile projectile = projectileObject.AddComponent<SkillProjectile>();
         projectile.Resolved += CompleteCommonAction;
         projectile.Initialize(
-            direction * launchSpeed,
+            launchVelocity,
             projectileRadius,
             projectileGravityScale,
             projectileLifetime,
@@ -268,6 +289,22 @@ public class CommonHeadUseController : MonoBehaviour
             settings);
 
         IgnoreOwnerCollision(projectile.GetComponent<Collider2D>());
+    }
+
+    private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)
+    {
+        Vector2 normalizedDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector2.right;
+        float pixelsPerUnit = ResolvePixelsPerUnit();
+        float maxThrowSpeedUnitsPerSecond = maxThrowSpeedPxPerSecond * throwSpeedMultiplier / pixelsPerUnit;
+        return normalizedDirection * maxThrowSpeedUnitsPerSecond * Mathf.Clamp01(charge);
+    }
+
+    private float ResolvePixelsPerUnit()
+    {
+        TerrainManager terrain = FindAny<TerrainManager>();
+        return terrain != null
+            ? Mathf.Max(1f, terrain.PixelsPerUnit)
+            : Mathf.Max(1f, fallbackPixelsPerUnit);
     }
 
     private IEnumerator JetJumpRoutine(float normalizedPower)

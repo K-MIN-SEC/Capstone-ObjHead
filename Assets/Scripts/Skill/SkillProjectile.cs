@@ -9,9 +9,9 @@ using UnityEngine;
 public class SkillProjectile : MonoBehaviour
 {
     private const int CircleTextureSize = 64;
-    private const float MinimumKnockbackFalloff = 0.45f;
-    private const float MinimumHorizontalComponent = 0.35f;
-    private const float MinimumVerticalComponent = 0.2f;
+
+    [SerializeField, Min(0f)] private float flightSpinDegreesPerSecond = 720f;
+    [SerializeField, Min(0f)] private float cameraExitCullMarginWorld = 0.25f;
 
     private static Sprite circleSprite;
 
@@ -29,6 +29,7 @@ public class SkillProjectile : MonoBehaviour
     private Vector2 previousPosition;
     private bool hasPreviousPosition;
     private Vector2 launchDirection;
+    private ObjectHeadCameraController cameraController;
 
     public bool IsFlying => isFlying && !isCompleted;
     public event Action Resolved;
@@ -61,6 +62,7 @@ public class SkillProjectile : MonoBehaviour
         previousPosition = transform.position;
         hasPreviousPosition = true;
         terrain = FindTerrainManager();
+        cameraController = FindCameraController();
         skillSettings = settings;
         isFlying = true;
 
@@ -99,9 +101,11 @@ public class SkillProjectile : MonoBehaviour
         circleCollider.radius = 0.5f;
 
         body.gravityScale = gravityScale;
+        body.freezeRotation = false;
         body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.linearVelocity = velocity;
+        body.angularVelocity = CalculateFlightSpinVelocity(velocity);
     }
 
     private void FixedUpdate()
@@ -139,6 +143,11 @@ public class SkillProjectile : MonoBehaviour
         if (body != null && body.linearVelocity.sqrMagnitude > 0.001f)
         {
             lastVelocity = body.linearVelocity;
+        }
+
+        if (TryResolveCameraExit())
+        {
+            return;
         }
 
         remainingLifetime -= Time.deltaTime;
@@ -306,7 +315,6 @@ public class SkillProjectile : MonoBehaviour
     private IEnumerator ApplyChainExplosionRoutine(Vector2 impactPoint)
     {
         int count = Mathf.Max(1, skillSettings.chainCount);
-        float fallbackHorizontalSign = Mathf.Abs(lastVelocity.x) > 0.001f ? Mathf.Sign(lastVelocity.x) : 0f;
         Vector2 spreadDirection = GetHorizontalImpactDirection();
         Vector2 perpendicular = new Vector2(-spreadDirection.y, spreadDirection.x);
         float delay = Mathf.Clamp(skillSettings.chainDelaySeconds, 0.08f, 0.15f);
@@ -323,7 +331,7 @@ public class SkillProjectile : MonoBehaviour
 
             DestroyTerrainAtImpact(point);
             SpawnExplosionMarker(point);
-            ApplyCappedChainDamageAtPoint(point, fallbackHorizontalSign, accumulatedDamage);
+            ApplyCappedChainDamageAtPoint(point, accumulatedDamage);
 
             if (i < count - 1)
             {
@@ -335,7 +343,6 @@ public class SkillProjectile : MonoBehaviour
     private IEnumerator ApplyRollingChainExplosionRoutine(Vector2 impactPoint)
     {
         int count = Mathf.Max(1, skillSettings.chainCount);
-        float fallbackHorizontalSign = Mathf.Abs(lastVelocity.x) > 0.001f ? Mathf.Sign(lastVelocity.x) : 0f;
         float delay = Mathf.Clamp(skillSettings.chainDelaySeconds, 0.08f, 0.2f);
         Dictionary<CharacterCombat, int> accumulatedDamage = new Dictionary<CharacterCombat, int>();
 
@@ -345,7 +352,7 @@ public class SkillProjectile : MonoBehaviour
             Vector2 point = i == 0 ? impactPoint : (Vector2)transform.position;
             DestroyTerrainAtImpact(point);
             SpawnExplosionMarker(point);
-            ApplyCappedChainDamageAtPoint(point, fallbackHorizontalSign, accumulatedDamage);
+            ApplyCappedChainDamageAtPoint(point, accumulatedDamage);
 
             if (i < count - 1)
             {
@@ -405,7 +412,6 @@ public class SkillProjectile : MonoBehaviour
 
     private void ApplyCappedChainDamageAtPoint(
         Vector2 center,
-        float fallbackHorizontalSign,
         Dictionary<CharacterCombat, int> accumulatedDamage)
     {
         if (skillSettings.maxDamage <= 0 || skillSettings.explosionRadiusWorld <= 0f)
@@ -433,7 +439,6 @@ public class SkillProjectile : MonoBehaviour
             }
 
             Vector2 characterCenter = combat.KnockbackCenter;
-            Vector2 impactToCharacter = characterCenter - center;
             float falloff = DamageSystem.CalculateExplosionFalloff(
                 hits[i],
                 center,
@@ -445,44 +450,10 @@ public class SkillProjectile : MonoBehaviour
                 continue;
             }
 
-            Vector2 knockbackDirection = CalculateKnockbackDirection(center, characterCenter, impactToCharacter, fallbackHorizontalSign);
-            float curvedFalloff = Mathf.Pow(falloff, 0.75f);
-            float knockbackFalloff = Mathf.Lerp(MinimumKnockbackFalloff, 1f, curvedFalloff);
-
-            combat.ApplyKnockback(knockbackDirection * skillSettings.knockbackForce * knockbackFalloff);
+            combat.ApplyExplosionKnockback(center, skillSettings.maxDamage);
             combat.TakeDamage(damage);
             accumulatedDamage[combat] = currentDamage + damage;
         }
-    }
-
-    private Vector2 CalculateKnockbackDirection(Vector2 center, Vector2 characterCenter, Vector2 impactToCharacter, float fallbackHorizontalSign)
-    {
-        if (impactToCharacter.sqrMagnitude < 0.001f)
-        {
-            impactToCharacter = Vector2.up;
-        }
-
-        Vector2 knockbackDirection = impactToCharacter.normalized;
-        if (Mathf.Abs(knockbackDirection.x) < MinimumHorizontalComponent)
-        {
-            float horizontalOffset = characterCenter.x - center.x;
-            float horizontalSign = Mathf.Abs(horizontalOffset) > 0.001f
-                ? Mathf.Sign(horizontalOffset)
-                : Mathf.Abs(fallbackHorizontalSign) > 0.001f
-                    ? Mathf.Sign(fallbackHorizontalSign)
-                    : 1f;
-
-            knockbackDirection.x = MinimumHorizontalComponent * horizontalSign;
-            knockbackDirection.Normalize();
-        }
-
-        if (Mathf.Abs(knockbackDirection.y) < MinimumVerticalComponent)
-        {
-            knockbackDirection.y = MinimumVerticalComponent * (knockbackDirection.y < 0f ? -1f : 1f);
-            knockbackDirection.Normalize();
-        }
-
-        return knockbackDirection;
     }
 
     private void SpawnExplosionMarker(Vector2 point)
@@ -830,6 +801,49 @@ public class SkillProjectile : MonoBehaviour
         }
     }
 
+    private bool TryResolveCameraExit()
+    {
+        if (!isFlying)
+        {
+            return false;
+        }
+
+        if (cameraController == null)
+        {
+            cameraController = FindCameraController();
+        }
+
+        if (cameraController == null ||
+            !cameraController.IsOutsideReachableView(transform.position, cameraExitCullMarginWorld))
+        {
+            return false;
+        }
+
+        ResolveCameraExit();
+        return true;
+    }
+
+    private void ResolveCameraExit()
+    {
+        if (isCompleted)
+        {
+            return;
+        }
+
+        isCompleted = true;
+        isFlying = false;
+        DisablePhysicsAtImpact(transform.position);
+        CompleteTurn();
+
+        if (cameraController == null)
+        {
+            cameraController = FindCameraController();
+        }
+
+        cameraController?.FocusOnCurrentCharacterImmediate(false);
+        Destroy(gameObject);
+    }
+
     private IEnumerator ExplosionFadeRoutine(Vector2 impactPoint)
     {
         DisablePhysicsAtImpact(impactPoint);
@@ -885,6 +899,26 @@ public class SkillProjectile : MonoBehaviour
             : Mathf.Max(0.01f, radius * 2f);
         float spriteDiameter = sprite != null ? Mathf.Max(sprite.bounds.size.x, sprite.bounds.size.y) : 1f;
         transform.localScale = Vector3.one * Mathf.Max(0.01f, visualDiameter / Mathf.Max(0.01f, spriteDiameter));
+    }
+
+    private float CalculateFlightSpinVelocity(Vector2 velocity)
+    {
+        if (flightSpinDegreesPerSecond <= 0f)
+        {
+            return 0f;
+        }
+
+        if (Mathf.Abs(velocity.x) > 0.001f)
+        {
+            return -Mathf.Sign(velocity.x) * flightSpinDegreesPerSecond;
+        }
+
+        if (Mathf.Abs(launchDirection.x) > 0.001f)
+        {
+            return -Mathf.Sign(launchDirection.x) * flightSpinDegreesPerSecond;
+        }
+
+        return -flightSpinDegreesPerSecond;
     }
 
     private static Sprite GetCircleSprite()
@@ -949,6 +983,15 @@ public class SkillProjectile : MonoBehaviour
         return Object.FindAnyObjectByType<TerrainManager>();
 #else
         return Object.FindObjectOfType<TerrainManager>();
+#endif
+    }
+
+    private ObjectHeadCameraController FindCameraController()
+    {
+#if UNITY_6000_0_OR_NEWER || UNITY_2023_1_OR_NEWER
+        return Object.FindAnyObjectByType<ObjectHeadCameraController>();
+#else
+        return Object.FindObjectOfType<ObjectHeadCameraController>();
 #endif
     }
 }

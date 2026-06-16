@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -6,6 +7,8 @@ using UnityEngine.InputSystem;
 [DisallowMultipleComponent]
 public class AimController : MonoBehaviour
 {
+    private const float KeyboardStyleStickThreshold = 0.25f;
+
     [Header("Sprites")]
     [SerializeField] private Sprite targetingSprite;
     [SerializeField] private Sprite chargingSprite;
@@ -27,9 +30,13 @@ public class AimController : MonoBehaviour
 
     private TurnCharacterController turnCharacter;
     private CharacterVisual characterVisual;
+    private ObjectHeadTeamMember teamMember;
     private TurnManager turnManager;
     private int facingSign = 1;
     private float chargePower;
+    private bool hadAimControl;
+    private bool aimLockActive;
+    private Vector2 lockedAimDirection = Vector2.right;
     private Transform targetingRoot;
     private Transform targetingImage;
     private SpriteRenderer targetingRenderer;
@@ -43,8 +50,13 @@ public class AimController : MonoBehaviour
     private float lastChargingMeshPower = -1f;
     private static Sprite fallbackTargetingSprite;
     private static Sprite fallbackChargingSprite;
+    private static readonly Dictionary<int, Vector2> LastTeamAimDirections = new Dictionary<int, Vector2>();
+    private static bool useKeyboardStyleGamepadAim;
 
     public float ChargePower => chargePower;
+    public static string GamepadAimModeLabel => useKeyboardStyleGamepadAim
+        ? "keyboard-style"
+        : "stick-angle";
     public Vector2 AimOrigin => (Vector2)transform.position + originOffset;
     public Vector2 AimDirection => EffectiveAimDirection;
     public Vector2 EffectiveAimDirection
@@ -68,6 +80,7 @@ public class AimController : MonoBehaviour
     {
         turnCharacter = GetComponent<TurnCharacterController>();
         characterVisual = GetComponent<CharacterVisual>();
+        teamMember = GetComponent<ObjectHeadTeamMember>();
         turnManager = FindTurnManager();
         facingSign = startsFacingRight ? 1 : -1;
         if (characterVisual != null)
@@ -108,16 +121,52 @@ public class AimController : MonoBehaviour
             turnManager = FindTurnManager();
         }
 
-        SyncFacingFromVisual();
         bool canAim = turnCharacter != null &&
             turnCharacter.HasControl &&
             (turnManager == null || turnManager.CanCharacterFire(turnCharacter));
+        if (canAim && !hadAimControl)
+        {
+            RestoreRememberedTeamAim();
+        }
+
+        if (canAim && WasAimLockPressed())
+        {
+            aimLockActive = !aimLockActive;
+            if (aimLockActive)
+            {
+                lockedAimDirection = EffectiveAimDirection;
+            }
+        }
+
+        if (canAim && ObjectHeadGamepadInput.WasAimModeTogglePressed())
+        {
+            useKeyboardStyleGamepadAim = !useKeyboardStyleGamepadAim;
+        }
+
+        if (!canAim)
+        {
+            aimLockActive = false;
+        }
+
         if (canAim)
         {
-            ReadAimInput();
+            if (aimLockActive)
+            {
+                ApplyAimDirection(lockedAimDirection);
+            }
+            else
+            {
+                SyncFacingFromVisual();
+                ReadAimInput();
+            }
+        }
+        else
+        {
+            SyncFacingFromVisual();
         }
 
         UpdateVisuals(canAim);
+        hadAimControl = canAim;
     }
 
     public void SetChargePower(float normalizedPower)
@@ -128,8 +177,18 @@ public class AimController : MonoBehaviour
 
     public void ConfirmFacingFromAim()
     {
-        SyncFacingFromVisual();
         characterVisual?.SetFacingRight(facingSign > 0);
+    }
+
+    public void RememberCurrentAimForTeam()
+    {
+        int teamIndex = ResolveTeamIndex();
+        if (teamIndex <= 0)
+        {
+            return;
+        }
+
+        LastTeamAimDirections[teamIndex] = EffectiveAimDirection;
     }
 
     private void ReadAimInput()
@@ -137,23 +196,29 @@ public class AimController : MonoBehaviour
         float verticalInput = 0f;
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
-        {
-            return;
-        }
 
-        if (keyboard.leftArrowKey.isPressed)
+        if (keyboard != null && keyboard.leftArrowKey.isPressed)
         {
             SetFacingSign(-1);
         }
 
-        if (keyboard.rightArrowKey.isPressed)
+        if (keyboard != null && keyboard.rightArrowKey.isPressed)
         {
             SetFacingSign(1);
         }
 
-        if (keyboard.upArrowKey.isPressed) verticalInput += 1f;
-        if (keyboard.downArrowKey.isPressed) verticalInput -= 1f;
+        if (keyboard != null && keyboard.upArrowKey.isPressed) verticalInput += 1f;
+        if (keyboard != null && keyboard.downArrowKey.isPressed) verticalInput -= 1f;
+
+        Vector2 aimStick = ObjectHeadGamepadInput.AimStick();
+        if (useKeyboardStyleGamepadAim)
+        {
+            AddKeyboardStyleGamepadAim(aimStick, ref verticalInput);
+        }
+        else if (TryApplyAnalogAim(aimStick))
+        {
+            return;
+        }
 #else
         if (Input.GetKey(KeyCode.LeftArrow))
         {
@@ -174,6 +239,98 @@ public class AimController : MonoBehaviour
             90f);
     }
 
+    private bool TryApplyAnalogAim(Vector2 aimStick)
+    {
+        if (aimStick.sqrMagnitude <= 0.0001f)
+        {
+            return false;
+        }
+
+        if (Mathf.Abs(aimStick.x) >= 0.08f)
+        {
+            SetFacingSign(aimStick.x >= 0f ? 1 : -1);
+        }
+
+        float horizontalMagnitude = Mathf.Max(0.001f, Mathf.Abs(aimStick.x));
+        float angle = Mathf.Atan2(aimStick.y, horizontalMagnitude) * Mathf.Rad2Deg;
+        localAimAngleDegrees = Mathf.Clamp(angle, -90f, 90f);
+        return true;
+    }
+
+    private void AddKeyboardStyleGamepadAim(Vector2 aimStick, ref float verticalInput)
+    {
+        if (aimStick.sqrMagnitude <= KeyboardStyleStickThreshold * KeyboardStyleStickThreshold)
+        {
+            return;
+        }
+
+        if (Mathf.Abs(aimStick.x) >= KeyboardStyleStickThreshold)
+        {
+            SetFacingSign(aimStick.x >= 0f ? 1 : -1);
+        }
+
+        if (Mathf.Abs(aimStick.y) >= KeyboardStyleStickThreshold)
+        {
+            verticalInput += Mathf.Sign(aimStick.y);
+        }
+    }
+
+    private bool WasAimLockPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        return (keyboard != null &&
+                   (keyboard.leftCtrlKey.wasPressedThisFrame ||
+                    keyboard.rightCtrlKey.wasPressedThisFrame)) ||
+               ObjectHeadGamepadInput.WasAimLockPressed();
+#else
+        return Input.GetKeyDown(KeyCode.LeftControl) ||
+               Input.GetKeyDown(KeyCode.RightControl) ||
+               ObjectHeadGamepadInput.WasAimLockPressed();
+#endif
+    }
+
+    private void RestoreRememberedTeamAim()
+    {
+        int teamIndex = ResolveTeamIndex();
+        if (teamIndex <= 0 ||
+            !LastTeamAimDirections.TryGetValue(teamIndex, out Vector2 rememberedDirection))
+        {
+            return;
+        }
+
+        ApplyAimDirection(rememberedDirection);
+    }
+
+    private void ApplyAimDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        direction.Normalize();
+        if (Mathf.Abs(direction.x) >= 0.001f)
+        {
+            facingSign = direction.x >= 0f ? 1 : -1;
+        }
+
+        float horizontalMagnitude = Mathf.Max(0.001f, Mathf.Abs(direction.x));
+        float angle = Mathf.Atan2(direction.y, horizontalMagnitude) * Mathf.Rad2Deg;
+        localAimAngleDegrees = Mathf.Clamp(angle, -90f, 90f);
+        characterVisual?.SetFacingRight(facingSign > 0);
+    }
+
+    private int ResolveTeamIndex()
+    {
+        if (teamMember == null)
+        {
+            teamMember = GetComponent<ObjectHeadTeamMember>();
+        }
+
+        return teamMember != null ? teamMember.PlayerIndex : 0;
+    }
+
     private void SetFacingSign(int sign)
     {
         facingSign = sign >= 0 ? 1 : -1;
@@ -190,6 +347,11 @@ public class AimController : MonoBehaviour
 
     private void HandleFacingChanged(bool facingRight)
     {
+        if (aimLockActive)
+        {
+            return;
+        }
+
         facingSign = facingRight ? 1 : -1;
         UpdateVisuals(turnCharacter != null && turnCharacter.HasControl);
     }

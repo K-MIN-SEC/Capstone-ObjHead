@@ -147,9 +147,12 @@ public class PowerChargeController : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
-        pressed = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
-        held = keyboard != null && keyboard.spaceKey.isPressed;
-        released = keyboard != null && keyboard.spaceKey.wasReleasedThisFrame;
+        pressed = (keyboard != null && keyboard.spaceKey.wasPressedThisFrame) ||
+                  ObjectHeadGamepadInput.WasChargePressed();
+        held = (keyboard != null && keyboard.spaceKey.isPressed) ||
+               ObjectHeadGamepadInput.IsChargeHeld();
+        released = (keyboard != null && keyboard.spaceKey.wasReleasedThisFrame) ||
+                   ObjectHeadGamepadInput.WasChargeReleased();
 #else
         pressed = Input.GetKeyDown(KeyCode.Space);
         held = Input.GetKey(KeyCode.Space);
@@ -161,7 +164,8 @@ public class PowerChargeController : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
-        return keyboard != null && keyboard.cKey.wasPressedThisFrame;
+        return (keyboard != null && keyboard.cKey.wasPressedThisFrame) ||
+               ObjectHeadGamepadInput.WasCancelPressed();
 #else
         return Input.GetKeyDown(KeyCode.C);
 #endif

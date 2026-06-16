@@ -125,6 +125,10 @@ public struct ObjectHeadSkillSettings
 [RequireComponent(typeof(CharacterVisual))]
 public class DemoSkillSelector : MonoBehaviour
 {
+    private const int BasicSlotCount = 3;
+    private const int CommonSlotCount = 3;
+    private const int TotalLoadoutSlotCount = BasicSlotCount + CommonSlotCount;
+
     [SerializeField] private ObjectHeadCharacterKind characterKind = ObjectHeadCharacterKind.Bulb;
     [SerializeField, Range(0, 2)] private int selectedSkillIndex;
     [SerializeField] private bool allowKeyboardSelection = true;
@@ -435,17 +439,25 @@ public class DemoSkillSelector : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+        if (keyboard != null)
         {
-            return;
+            if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) SetSkillIndex(0);
+            if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) SetSkillIndex(1);
+            if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) SetSkillIndex(2);
+            if (keyboard.f1Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bulb);
+            if (keyboard.f2Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Seed);
+            if (keyboard.f3Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
         }
 
-        if (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame) SetSkillIndex(0);
-        if (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame) SetSkillIndex(1);
-        if (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame) SetSkillIndex(2);
-        if (keyboard.f1Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bulb);
-        if (keyboard.f2Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Seed);
-        if (keyboard.f3Key.wasPressedThisFrame) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
+        if (ObjectHeadGamepadInput.WasPreviousWeaponPressed())
+        {
+            CycleLoadoutSelection(-1);
+        }
+
+        if (ObjectHeadGamepadInput.WasNextWeaponPressed())
+        {
+            CycleLoadoutSelection(1);
+        }
 #else
         if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) SetSkillIndex(0);
         if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) SetSkillIndex(1);
@@ -454,6 +466,59 @@ public class DemoSkillSelector : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F2)) SetCharacterKind(ObjectHeadCharacterKind.Seed);
         if (Input.GetKeyDown(KeyCode.F3)) SetCharacterKind(ObjectHeadCharacterKind.Bomb);
 #endif
+    }
+
+    private void CycleLoadoutSelection(int direction)
+    {
+        if (direction == 0)
+        {
+            return;
+        }
+
+        int currentIndex = GetCurrentLoadoutIndex();
+        int step = direction > 0 ? 1 : -1;
+        for (int attempt = 1; attempt <= TotalLoadoutSlotCount; attempt++)
+        {
+            int candidate = Mod(currentIndex + step * attempt, TotalLoadoutSlotCount);
+            if (TrySelectLoadoutIndex(candidate))
+            {
+                return;
+            }
+        }
+    }
+
+    private int GetCurrentLoadoutIndex()
+    {
+        if (commonHeadUseController != null && commonHeadUseController.HasSelectedCommonHead)
+        {
+            return BasicSlotCount + commonHeadUseController.SelectedSlotIndex;
+        }
+
+        return Mathf.Clamp(selectedSkillIndex, 0, BasicSlotCount - 1);
+    }
+
+    private bool TrySelectLoadoutIndex(int loadoutIndex)
+    {
+        if (loadoutIndex < BasicSlotCount)
+        {
+            SetSkillIndex(loadoutIndex);
+            return true;
+        }
+
+        if (commonHeadUseController == null)
+        {
+            commonHeadUseController = GetComponent<CommonHeadUseController>();
+        }
+
+        int commonSlotIndex = loadoutIndex - BasicSlotCount;
+        return commonHeadUseController != null &&
+               commonHeadUseController.HasCommonHeadInSlot(commonSlotIndex) &&
+               commonHeadUseController.TrySelectCommonHeadSlot(commonSlotIndex);
+    }
+
+    private static int Mod(int value, int divisor)
+    {
+        return ((value % divisor) + divisor) % divisor;
     }
 
     private static TurnManager FindTurnManager()

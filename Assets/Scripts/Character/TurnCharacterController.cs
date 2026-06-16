@@ -8,6 +8,7 @@ using UnityEngine.InputSystem;
 public class TurnCharacterController : MonoBehaviour
 {
     private const float ExternalMotionGroundedYThreshold = 0.05f;
+    private static PhysicsMaterial2D noFrictionMaterial;
 
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 5f;
@@ -34,6 +35,7 @@ public class TurnCharacterController : MonoBehaviour
     private Rigidbody2D body;
     private Collider2D bodyCollider;
     private CharacterVisual characterVisual;
+    private PowerChargeController powerChargeController;
     private float horizontalInput;
     private bool jumpRequested;
     private bool jumpHeld;
@@ -50,6 +52,8 @@ public class TurnCharacterController : MonoBehaviour
     private bool leftGroundDuringImmunity;
     private float fallDamageImmunityRemaining;
     private float groundedStabilityTimer;
+    private float noFrictionTimer;
+    private PhysicsMaterial2D originalColliderMaterial;
 
     public bool HasControl => hasControl;
     public bool IsGrounded => isGrounded;
@@ -67,7 +71,9 @@ public class TurnCharacterController : MonoBehaviour
         body = GetComponent<Rigidbody2D>();
         bodyCollider = GetComponent<Collider2D>();
         characterVisual = GetComponent<CharacterVisual>();
+        powerChargeController = GetComponent<PowerChargeController>();
         body.gravityScale = 0f;
+        originalColliderMaterial = bodyCollider != null ? bodyCollider.sharedMaterial : null;
     }
 
     private void OnDisable()
@@ -76,6 +82,7 @@ public class TurnCharacterController : MonoBehaviour
         ResetInput();
         ClearHazardSlow();
         ClearFallDamageImmunity();
+        RestoreColliderFriction();
     }
 
     private void Update()
@@ -97,6 +104,7 @@ public class TurnCharacterController : MonoBehaviour
     {
         isGrounded = CheckGrounded();
         UpdateFallDamageImmunity();
+        UpdateNoFrictionTimer();
         Vector2 velocity = body.linearVelocity;
         bool preserveExternalMotion = ShouldPreserveExternalMotion(velocity);
         bool canUseInput = hasControl && !preserveExternalMotion;
@@ -169,6 +177,22 @@ public class TurnCharacterController : MonoBehaviour
         ResetInput();
     }
 
+    public void SuppressGroundFriction(float seconds)
+    {
+        if (bodyCollider == null || seconds <= 0f)
+        {
+            return;
+        }
+
+        if (noFrictionTimer <= 0f)
+        {
+            originalColliderMaterial = bodyCollider.sharedMaterial;
+        }
+
+        noFrictionTimer = Mathf.Max(noFrictionTimer, seconds);
+        bodyCollider.sharedMaterial = GetNoFrictionMaterial();
+    }
+
     public void BeginJetJumpFallDamageImmunity()
     {
         ignoreFallDamageUntilGrounded = true;
@@ -207,6 +231,7 @@ public class TurnCharacterController : MonoBehaviour
         timedMoveSpeedMultiplierTimer = 0f;
         hazardMoveSpeedMultiplier = 1f;
         externalMotionTimer = 0f;
+        RestoreColliderFriction();
         ClearFallDamageImmunity();
         ResetInput();
     }
@@ -230,27 +255,35 @@ public class TurnCharacterController : MonoBehaviour
 
     private bool ShouldPreserveExternalMotion(Vector2 velocity)
     {
-        return externalMotionTimer > 0f && (!isGrounded || velocity.y > ExternalMotionGroundedYThreshold);
+        return externalMotionTimer > 0f &&
+               (!isGrounded || velocity.y > ExternalMotionGroundedYThreshold || noFrictionTimer > 0f);
     }
 
 #if ENABLE_INPUT_SYSTEM
     private void ReadInputSystemKeyboard()
     {
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
-        {
-            ResetInput();
-            return;
-        }
 
         horizontalInput = 0f;
-        if (keyboard.aKey.isPressed) horizontalInput -= 1f;
-        if (keyboard.dKey.isPressed) horizontalInput += 1f;
+        if (keyboard != null && keyboard.aKey.isPressed) horizontalInput -= 1f;
+        if (keyboard != null && keyboard.dKey.isPressed) horizontalInput += 1f;
+        horizontalInput = Mathf.Clamp(horizontalInput + ObjectHeadGamepadInput.MoveX(), -1f, 1f);
         UpdateFacingFromMovement();
 
         bool wasJumpHeld = jumpHeld;
-        jumpHeld = keyboard.wKey.isPressed || keyboard.enterKey.isPressed || keyboard.numpadEnterKey.isPressed;
-        if (keyboard.wKey.wasPressedThisFrame || keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
+        bool allowGamepadJump = powerChargeController == null || !powerChargeController.IsCharging;
+        bool gamepadJumpHeld = allowGamepadJump && ObjectHeadGamepadInput.IsJumpHeld();
+        bool gamepadJumpPressed = allowGamepadJump && ObjectHeadGamepadInput.WasJumpPressed();
+        jumpHeld = (keyboard != null &&
+                    (keyboard.wKey.isPressed ||
+                     keyboard.enterKey.isPressed ||
+                     keyboard.numpadEnterKey.isPressed)) ||
+                   gamepadJumpHeld;
+        if ((keyboard != null &&
+             (keyboard.wKey.wasPressedThisFrame ||
+              keyboard.enterKey.wasPressedThisFrame ||
+              keyboard.numpadEnterKey.wasPressedThisFrame)) ||
+            gamepadJumpPressed)
         {
             jumpRequested = true;
         }
@@ -326,6 +359,45 @@ public class TurnCharacterController : MonoBehaviour
         {
             timedMoveSpeedMultiplier = 1f;
         }
+    }
+
+    private void UpdateNoFrictionTimer()
+    {
+        if (noFrictionTimer <= 0f)
+        {
+            return;
+        }
+
+        noFrictionTimer = Mathf.Max(0f, noFrictionTimer - Time.fixedDeltaTime);
+        if (noFrictionTimer <= 0f)
+        {
+            RestoreColliderFriction();
+        }
+    }
+
+    private void RestoreColliderFriction()
+    {
+        noFrictionTimer = 0f;
+        if (bodyCollider != null && bodyCollider.sharedMaterial == noFrictionMaterial)
+        {
+            bodyCollider.sharedMaterial = originalColliderMaterial;
+        }
+    }
+
+    private static PhysicsMaterial2D GetNoFrictionMaterial()
+    {
+        if (noFrictionMaterial != null)
+        {
+            return noFrictionMaterial;
+        }
+
+        noFrictionMaterial = new PhysicsMaterial2D("TemporaryNoFriction")
+        {
+            friction = 0f,
+            bounciness = 0f
+        };
+        noFrictionMaterial.hideFlags = HideFlags.HideAndDontSave;
+        return noFrictionMaterial;
     }
 
     private bool CheckGrounded()

@@ -30,6 +30,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float backgroundWaterlineNormalized = 0.166f;
     [SerializeField] private bool addTerrainEditBrush = true;
     [SerializeField] private bool cleanupExistingPrototypeScene = true;
+    [SerializeField] private bool addGamepadDebugOverlay = true;
 
     private TerrainManager terrain;
     private TurnManager turnManager;
@@ -99,6 +100,13 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
         {
             new GameObject("ObjectHeadHUD").AddComponent<ObjectHeadHUD>();
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (addGamepadDebugOverlay && FindAny<ObjectHeadGamepadDebugOverlay>() == null)
+        {
+            new GameObject("ObjectHeadGamepadDebugOverlay").AddComponent<ObjectHeadGamepadDebugOverlay>();
+        }
+#endif
     }
 
     private void CleanupExistingPrototypeScene()
