@@ -41,6 +41,8 @@ public class TurnManager : MonoBehaviour
     private float remainingResidualSeconds;
     private float remainingSettlementSeconds;
     private Coroutine damageSettlementRoutine;
+    private bool useExternalTurnAuthority;
+    private int locallyControlledPlayerIndex;
 
     public event Action<TurnCharacterController> TurnStarted;
     public event Action<TurnCharacterController> TurnEnded;
@@ -127,10 +129,60 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        TickTurnTimer();
-        if (allowManualTurnEnd && WasEndTurnPressed())
+        if (!useExternalTurnAuthority)
         {
-            EndTurn();
+            TickTurnTimer();
+            if (allowManualTurnEnd && WasEndTurnPressed())
+            {
+                EndTurn();
+            }
+        }
+    }
+
+    public void ConfigureNetworkControl(int localPlayerIndex, bool externalTurnAuthority)
+    {
+        locallyControlledPlayerIndex = Mathf.Clamp(localPlayerIndex, 0, 4);
+        useExternalTurnAuthority = externalTurnAuthority;
+        ApplyCharacterControlState();
+    }
+
+    public void ApplyAuthoritativeTurnState(
+        int authoritativeTurnIndex,
+        int authoritativeTurnSerial,
+        int authoritativeRoundSerial,
+        TurnPhase authoritativePhase,
+        float authoritativeRemainingTurnSeconds,
+        float authoritativeRemainingResidualSeconds,
+        bool authoritativeResidualTimeActive,
+        bool authoritativeActionUsed)
+    {
+        if (!useExternalTurnAuthority || characters == null || characters.Length == 0)
+        {
+            return;
+        }
+
+        int normalizedTurnIndex = Mathf.Clamp(authoritativeTurnIndex, 0, characters.Length - 1);
+        bool changedTurn = currentTurnIndex != normalizedTurnIndex || turnSerial != authoritativeTurnSerial;
+        int previousRound = roundSerial;
+        if (changedTurn)
+        {
+            currentTurnIndex = normalizedTurnIndex;
+            roundSerial = Mathf.Max(1, authoritativeRoundSerial);
+            ApplyCurrentTurn(roundSerial > previousRound);
+            turnSerial = authoritativeTurnSerial;
+        }
+
+        remainingTurnSeconds = Mathf.Max(0f, authoritativeRemainingTurnSeconds);
+        remainingResidualSeconds = Mathf.Max(0f, authoritativeRemainingResidualSeconds);
+        residualTimeActive = authoritativeResidualTimeActive;
+        actionUsedThisTurn = authoritativeActionUsed;
+        if (CurrentPhase != authoritativePhase)
+        {
+            SetPhase(authoritativePhase);
+        }
+        else
+        {
+            ApplyCharacterControlState();
         }
     }
 
@@ -604,7 +656,10 @@ public class TurnManager : MonoBehaviour
                     continue;
                 }
 
-                bool canMove = character == CurrentCharacter && CanCharacterMove(character);
+                ObjectHeadTeamMember member = character.GetComponent<ObjectHeadTeamMember>();
+                bool belongsToLocalPlayer = locallyControlledPlayerIndex <= 0 ||
+                    (member != null && member.PlayerIndex == locallyControlledPlayerIndex);
+                bool canMove = belongsToLocalPlayer && character == CurrentCharacter && CanCharacterMove(character);
                 character.SetControlEnabled(canMove);
                 if (!canMove)
                 {

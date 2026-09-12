@@ -175,6 +175,17 @@ public class AimController : MonoBehaviour
         UpdateChargingMesh();
     }
 
+    public void SetAimDirection(Vector2 worldDirection)
+    {
+        if (worldDirection.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        ApplyAimDirection(worldDirection.normalized);
+        SyncFacingFromVisual();
+    }
+
     public void ConfirmFacingFromAim()
     {
         characterVisual?.SetFacingRight(facingSign > 0);

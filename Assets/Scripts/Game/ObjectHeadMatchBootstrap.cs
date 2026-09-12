@@ -31,6 +31,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField] private bool addTerrainEditBrush = true;
     [SerializeField] private bool cleanupExistingPrototypeScene = true;
     [SerializeField] private bool addGamepadDebugOverlay = true;
+    [SerializeField] private ObjectHeadMapAuthoring mapAuthoring;
 
     private TerrainManager terrain;
     private TurnManager turnManager;
@@ -64,6 +65,8 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
         built = true;
 
+        ResolveSceneAuthoring();
+
         if (cleanupExistingPrototypeScene)
         {
             CleanupExistingPrototypeScene();
@@ -83,7 +86,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
         TerrainRandomSpawner randomSpawner = new GameObject("TerrainRandomSpawner").AddComponent<TerrainRandomSpawner>();
         int characterSpawnSeed = ResolveCharacterSpawnSeed();
-        randomSpawner.Configure(terrain, orderedCharacters, characterSpawnSeed);
+        randomSpawner.Configure(terrain, orderedCharacters, characterSpawnSeed, mapAuthoring);
         randomSpawner.SpawnCharacters();
 
         BuildCommonHeadSystem(terrain, turnManager);
@@ -107,6 +110,29 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
             new GameObject("ObjectHeadGamepadDebugOverlay").AddComponent<ObjectHeadGamepadDebugOverlay>();
         }
 #endif
+    }
+
+    private void ResolveSceneAuthoring()
+    {
+        if (mapAuthoring == null)
+        {
+            mapAuthoring = FindAny<ObjectHeadMapAuthoring>();
+        }
+
+        if (mapAuthoring == null)
+        {
+            return;
+        }
+
+        if (mapAuthoring.TryGetTerrainOrigin(out Vector2 authoredTerrainOrigin))
+        {
+            terrainOriginWorld = authoredTerrainOrigin;
+        }
+
+        if (mapAuthoring.TryGetWaterSurfaceY(out float authoredWaterSurfaceY))
+        {
+            waterSurfaceY = authoredWaterSurfaceY;
+        }
     }
 
     private void CleanupExistingPrototypeScene()

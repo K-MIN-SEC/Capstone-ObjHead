@@ -5,6 +5,8 @@ using UnityEngine.Serialization;
 [DisallowMultipleComponent]
 public class SkillFireController : MonoBehaviour
 {
+    public static event System.Action<SkillFireController, float, Vector2, int> FireCommitted;
+
     [SerializeField, Min(0.05f)] private float projectileRadius = 0.18f;
     [FormerlySerializedAs("spawnDistanceFromTarget")]
     [SerializeField, Min(0f)] private float spawnDistanceFromCharacter = 0.7f;
@@ -95,6 +97,16 @@ public class SkillFireController : MonoBehaviour
 
     public void Fire(float normalizedPower)
     {
+        FireInternal(normalizedPower, true);
+    }
+
+    public void FireReplicated(float normalizedPower)
+    {
+        FireInternal(normalizedPower, false);
+    }
+
+    private void FireInternal(float normalizedPower, bool publishNetworkEvent)
+    {
         if (aimController == null)
         {
             return;
@@ -116,6 +128,14 @@ public class SkillFireController : MonoBehaviour
         hasFiredThisTurn = true;
 
         Vector2 direction = aimController.AimDirection;
+        if (publishNetworkEvent)
+        {
+            FireCommitted?.Invoke(
+                this,
+                Mathf.Clamp01(normalizedPower),
+                direction,
+                skillSelector != null ? skillSelector.SelectedSkillIndex : 0);
+        }
         aimController.RememberCurrentAimForTeam();
         Vector2 spawnPosition = aimController.AimOrigin + direction * spawnDistanceFromCharacter;
         Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);

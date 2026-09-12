@@ -19,6 +19,7 @@ public class TerrainRandomSpawner : MonoBehaviour
     [SerializeField] private TerrainManager terrain;
     [SerializeField] private TurnCharacterController[] characters = new TurnCharacterController[0];
     [SerializeField] private int deterministicSeed = 6974;
+    [SerializeField] private ObjectHeadMapAuthoring mapAuthoring;
     [SerializeField, Min(0f)] private float mapEdgePaddingWorld = 2.5f;
     [SerializeField, Min(0f)] private float waterPaddingWorld = 1.5f;
     [SerializeField, Min(0f)] private float sameTeamMinimumDistance = 2f;
@@ -42,15 +43,26 @@ public class TerrainRandomSpawner : MonoBehaviour
         {
             if (terrain == null) terrain = FindTerrain();
             if (characters == null || characters.Length == 0) RefreshCharactersFromScene();
+            if (mapAuthoring == null) mapAuthoring = FindMapAuthoring();
             SpawnCharacters();
         }
     }
 
     public void Configure(TerrainManager terrainManager, TurnCharacterController[] turnCharacters, int seed)
     {
+        Configure(terrainManager, turnCharacters, seed, null);
+    }
+
+    public void Configure(
+        TerrainManager terrainManager,
+        TurnCharacterController[] turnCharacters,
+        int seed,
+        ObjectHeadMapAuthoring authoredLayout)
+    {
         terrain = terrainManager;
         characters = turnCharacters ?? new TurnCharacterController[0];
         deterministicSeed = seed;
+        mapAuthoring = authoredLayout;
     }
 
     public void SpawnCharacters()
@@ -282,6 +294,12 @@ public class TerrainRandomSpawner : MonoBehaviour
 
     private void GetPlayerRegion(int zeroBasedPlayerOrder, int playerCount, out float minX, out float maxX)
     {
+        int playerIndex = zeroBasedPlayerOrder + 1;
+        if (mapAuthoring != null && mapAuthoring.TryGetPlayerSpawnXRange(playerIndex, out minX, out maxX))
+        {
+            return;
+        }
+
         Bounds bounds = terrain.GetTerrainBounds();
         float left = bounds.min.x + mapEdgePaddingWorld;
         float right = bounds.max.x - mapEdgePaddingWorld;
@@ -372,6 +390,15 @@ public class TerrainRandomSpawner : MonoBehaviour
         return Object.FindAnyObjectByType<TerrainManager>();
 #else
         return Object.FindObjectOfType<TerrainManager>();
+#endif
+    }
+
+    private static ObjectHeadMapAuthoring FindMapAuthoring()
+    {
+#if UNITY_6000_0_OR_NEWER || UNITY_2023_1_OR_NEWER
+        return Object.FindAnyObjectByType<ObjectHeadMapAuthoring>();
+#else
+        return Object.FindObjectOfType<ObjectHeadMapAuthoring>();
 #endif
     }
 }
