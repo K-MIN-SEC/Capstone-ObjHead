@@ -92,6 +92,14 @@ public class TurnManager : MonoBehaviour
 
     private void Awake()
     {
+        ObjectHeadBalanceTable balance = ObjectHeadBalanceTable.Load();
+        if (balance != null)
+        {
+            turnDurationSeconds = Mathf.Max(5f, balance.GetFloat("turn.duration_seconds", turnDurationSeconds));
+            residualMovementSeconds = Mathf.Max(0.1f, balance.GetFloat("turn.residual_movement_seconds", residualMovementSeconds));
+            damageSettlementSeconds = Mathf.Max(0f, balance.GetFloat("turn.damage_settlement_seconds", damageSettlementSeconds));
+        }
+
         if (characters == null || characters.Length == 0)
         {
             RefreshCharactersFromScene();
@@ -224,6 +232,24 @@ public class TurnManager : MonoBehaviour
         StartResidualTime("Action used.");
         SetPhase(TurnPhase.ProjectileFlying);
         return true;
+    }
+
+    public bool TryBeginReplicatedAction(TurnCharacterController character)
+    {
+        if (character == null || character != CurrentCharacter || isMatchOver)
+        {
+            return false;
+        }
+
+        if (!actionUsedThisTurn)
+        {
+            return TryBeginAction(character);
+        }
+
+        return residualTimeActive &&
+               (CurrentPhase == TurnPhase.ProjectileFlying ||
+                CurrentPhase == TurnPhase.PostImpactDelay ||
+                CurrentPhase == TurnPhase.Resolving);
     }
 
     public void NotifyPostImpactDelay()

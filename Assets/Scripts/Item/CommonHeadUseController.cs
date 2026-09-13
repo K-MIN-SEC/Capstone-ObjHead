@@ -85,6 +85,7 @@ public class CommonHeadUseController : MonoBehaviour
 
     private void Awake()
     {
+        ApplyBalanceSheet();
         inventoryManager = FindAny<PlayerInventoryManager>();
         turnCharacter = GetComponent<TurnCharacterController>();
         combat = GetComponent<CharacterCombat>();
@@ -92,6 +93,39 @@ public class CommonHeadUseController : MonoBehaviour
         powerChargeController = GetComponent<PowerChargeController>();
         characterVisual = GetComponent<CharacterVisual>();
         turnManager = FindAny<TurnManager>();
+    }
+
+    private void ApplyBalanceSheet()
+    {
+        ObjectHeadBalanceTable balance = ObjectHeadBalanceTable.Load();
+        if (balance == null)
+        {
+            return;
+        }
+
+        maxThrowSpeedPxPerSecond = Mathf.Max(1f, balance.GetFloat("throw.max_speed_px_per_second", maxThrowSpeedPxPerSecond));
+        throwSpeedMultiplier = Mathf.Max(0f, balance.GetFloat("throw.speed_multiplier", throwSpeedMultiplier));
+        fallbackPixelsPerUnit = Mathf.Max(1f, balance.GetFloat("throw.fallback_pixels_per_unit", fallbackPixelsPerUnit));
+        attackClusterCount = Mathf.Max(1, balance.GetInt("common.attack.cluster_count", attackClusterCount));
+        attackClusterDamagePerExplosion = Mathf.Max(0, balance.GetInt("common.attack.damage_per_explosion", attackClusterDamagePerExplosion));
+        attackClusterMaxTotalDamage = Mathf.Max(0, balance.GetInt("common.attack.max_total_damage", attackClusterMaxTotalDamage));
+        attackClusterTerrainRadiusPx = Mathf.Max(1, balance.GetInt("common.attack.terrain_radius_px", attackClusterTerrainRadiusPx));
+        attackClusterExplosionRadiusWorld = Mathf.Max(0.1f, balance.GetFloat("common.attack.explosion_radius_world", attackClusterExplosionRadiusWorld));
+        attackClusterSpreadRadiusWorld = Mathf.Max(0.1f, balance.GetFloat("common.attack.spread_radius_world", attackClusterSpreadRadiusWorld));
+        attackClusterDelaySeconds = Mathf.Max(0.01f, balance.GetFloat("common.attack.delay_seconds", attackClusterDelaySeconds));
+        attackClusterKnockbackForce = Mathf.Max(0f, balance.GetFloat("common.attack.knockback_force", attackClusterKnockbackForce));
+        createdTerrainRadiusPx = Mathf.Max(1, balance.GetInt("common.terrain.created_radius_px", createdTerrainRadiusPx));
+        terrainBurstCount = Mathf.Max(1, balance.GetInt("common.terrain.burst_count", terrainBurstCount));
+        terrainBurstStampRadiusPx = Mathf.Max(1, balance.GetInt("common.terrain.stamp_radius_px", terrainBurstStampRadiusPx));
+        terrainBurstInterval = Mathf.Max(0.01f, balance.GetFloat("common.terrain.interval_seconds", terrainBurstInterval));
+        terrainBurstSpreadWorld = Mathf.Max(0.1f, balance.GetFloat("common.terrain.spread_world", terrainBurstSpreadWorld));
+        terrainBurstRadiusXWorld = Mathf.Max(0.1f, balance.GetFloat("common.terrain.radius_x_world", terrainBurstRadiusXWorld));
+        terrainBurstRadiusYWorld = Mathf.Max(0.1f, balance.GetFloat("common.terrain.radius_y_world", terrainBurstRadiusYWorld));
+        maxBuildHeightAboveSurfaceWorld = Mathf.Max(0.5f, balance.GetFloat("common.terrain.max_build_height_world", maxBuildHeightAboveSurfaceWorld));
+        minJetJumpSpeed = Mathf.Max(0.1f, balance.GetFloat("common.jet.min_speed", minJetJumpSpeed));
+        maxJetJumpSpeed = Mathf.Max(minJetJumpSpeed, balance.GetFloat("common.jet.max_speed", maxJetJumpSpeed));
+        jetJumpResolveTimeoutSeconds = Mathf.Max(0.25f, balance.GetFloat("common.jet.resolve_timeout_seconds", jetJumpResolveTimeoutSeconds));
+        jetJumpLandingStableSeconds = Mathf.Max(0.02f, balance.GetFloat("common.jet.landing_stable_seconds", jetJumpLandingStableSeconds));
     }
 
     private void OnDisable()

@@ -19,6 +19,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
     private ISocket socket;
     private IMatch currentMatch;
     private IMatchmakerTicket matchmakerTicket;
+    private int pendingMatchPlayerCount = 2;
     private ObjectHeadLobbyState lobbyState;
     private string displayName = "Player";
     private string localProfileId = "A";
@@ -27,6 +28,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
     private string host;
     private int port;
     private string serverKey;
+    private string roomCode;
     private string status = "Offline";
     private bool gameStarting;
 
@@ -40,6 +42,11 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public string Status => status;
     public string MatchId => currentMatch != null ? currentMatch.Id : string.Empty;
+    public string RoomCode => !string.IsNullOrWhiteSpace(roomCode)
+        ? roomCode
+        : lobbyState != null && !string.IsNullOrWhiteSpace(lobbyState.roomCode)
+            ? lobbyState.roomCode
+            : MatchId;
     public string LocalUserId => session != null ? session.UserId : string.Empty;
     public string HostUserId => lobbyState != null ? lobbyState.hostUserId : string.Empty;
     public ObjectHeadLobbyState LobbyState => lobbyState;
@@ -61,7 +68,16 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         GameObject root = new GameObject("ObjectHeadNetworkRuntime");
         DontDestroyOnLoad(root);
         root.AddComponent<ObjectHeadNetworkManager>();
-        root.AddComponent<ObjectHeadNetworkDemoPanel>();
+        if (HasCommandLineFlag("-objectHeadDebugPanel"))
+        {
+            root.AddComponent<ObjectHeadNetworkDemoPanel>();
+        }
+    }
+
+    private static bool HasCommandLineFlag(string flag)
+    {
+        return Environment.GetCommandLineArgs().Any(argument =>
+            string.Equals(argument, flag, StringComparison.OrdinalIgnoreCase));
     }
 
     private void Awake()
@@ -166,6 +182,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             matchmakerTicket = null;
             currentMatch = null;
             lobbyState = null;
+            roomCode = string.Empty;
             gameStarting = false;
             SetStatus("Offline");
             LobbyChanged?.Invoke(null);
@@ -178,10 +195,12 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         await LeaveCurrentMatchAsync();
 
         currentMatch = await socket.CreateMatchAsync();
+        roomCode = await RegisterRoomCodeAsync(currentMatch.Id);
         lobbyState = new ObjectHeadLobbyState
         {
             revision = 1,
             matchId = currentMatch.Id,
+            roomCode = roomCode,
             hostUserId = LocalUserId,
             settings = NormalizeSettings(requestedSettings),
             players = new[] { CreateLocalLobbyPlayer(false) }
@@ -192,16 +211,19 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         await BroadcastLobbyStateAsync();
     }
 
-    public async Task JoinRoomAsync(string matchId)
+    public async Task JoinRoomAsync(string roomCodeOrMatchId)
     {
         EnsureConnected();
-        if (string.IsNullOrWhiteSpace(matchId))
+        if (string.IsNullOrWhiteSpace(roomCodeOrMatchId))
         {
-            throw new ArgumentException("A match ID is required.", nameof(matchId));
+            throw new ArgumentException("A room code is required.", nameof(roomCodeOrMatchId));
         }
 
         await LeaveCurrentMatchAsync();
-        currentMatch = await socket.JoinMatchAsync(matchId.Trim());
+        string requested = roomCodeOrMatchId.Trim();
+        string matchId = await ResolveMatchIdAsync(requested);
+        currentMatch = await socket.JoinMatchAsync(matchId);
+        roomCode = LooksLikeFriendlyRoomCode(requested) ? requested.ToUpperInvariant() : string.Empty;
         lobbyState = null;
         SetStatus("Joined room. Waiting for the host state...");
         NotifyStateChanged();
@@ -214,6 +236,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         await LeaveCurrentMatchAsync();
 
         int count = Mathf.Clamp(playerCount, 2, 4);
+        pendingMatchPlayerCount = count;
         Dictionary<string, string> stringProperties = new Dictionary<string, string>
         {
             { "game", "object_head_battle" },
@@ -350,9 +373,14 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         try
         {
             matchmakerTicket = null;
+            List<IUserPresence> participants = GetMatchedPresences(matched);
             currentMatch = await socket.JoinMatchAsync(matched);
+            roomCode = string.Empty;
+            if (participants.Count == 0)
+            {
+                participants = GetAllPresences();
+            }
 
-            List<IUserPresence> participants = GetAllPresences();
             string electedHost = participants
                 .Select(presence => presence.UserId)
                 .Where(userId => !string.IsNullOrEmpty(userId))
@@ -365,9 +393,18 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
                 {
                     revision = 1,
                     matchId = currentMatch.Id,
+                    roomCode = string.Empty,
                     hostUserId = electedHost,
-                    settings = config.DefaultRoomSettings,
-                    players = participants.Select(CreateLobbyPlayer).ToArray()
+                    settings = BuildQuickMatchSettings(),
+                    players = participants
+                        .OrderBy(presence => presence.UserId, StringComparer.Ordinal)
+                        .Select((presence, index) =>
+                        {
+                            ObjectHeadLobbyPlayer player = CreateLobbyPlayer(presence);
+                            player.playerIndex = index + 1;
+                            return player;
+                        })
+                        .ToArray()
                 };
                 SetStatus("Quick match found. You are the host.");
                 NotifyLobbyChanged();
@@ -385,6 +422,41 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             SetStatus("Could not join matched game: " + exception.Message);
             Log(exception.ToString());
         }
+    }
+
+    private static List<IUserPresence> GetMatchedPresences(IMatchmakerMatched matched)
+    {
+        List<IUserPresence> result = new List<IUserPresence>();
+        if (matched == null)
+        {
+            return result;
+        }
+
+        void AddPresence(IUserPresence presence)
+        {
+            if (presence != null &&
+                !string.IsNullOrEmpty(presence.UserId) &&
+                result.All(existing => existing.UserId != presence.UserId))
+            {
+                result.Add(presence);
+            }
+        }
+
+        AddPresence(matched.Self?.Presence);
+        foreach (IMatchmakerUser user in matched.Users ?? Array.Empty<IMatchmakerUser>())
+        {
+            AddPresence(user?.Presence);
+        }
+
+        return result;
+    }
+
+    private ObjectHeadRoomSettings BuildQuickMatchSettings()
+    {
+        ObjectHeadRoomSettings settings = config.DefaultRoomSettings;
+        settings.minPlayers = pendingMatchPlayerCount;
+        settings.maxPlayers = pendingMatchPlayerCount;
+        return settings;
     }
 
     private async void HandlePresenceChanged(IMatchPresenceEvent presenceEvent)
@@ -454,6 +526,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
                     }
 
                     lobbyState = receivedLobby;
+                    roomCode = receivedLobby.roomCode;
                     SetStatus("Lobby synchronized.");
                     NotifyLobbyChanged();
                     break;
@@ -571,7 +644,8 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
     {
         yield return null;
         Scene activeScene = SceneManager.GetActiveScene();
-        SceneManager.LoadScene(activeScene.name);
+        string targetScene = config.ResolveSceneName(GameStartData.Instance != null ? GameStartData.Instance.mapId : null);
+        SceneManager.LoadScene(string.IsNullOrWhiteSpace(targetScene) ? activeScene.name : targetScene);
         gameStarting = false;
     }
 
@@ -588,8 +662,61 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             await socket.LeaveMatchAsync(currentMatch);
             currentMatch = null;
             lobbyState = null;
+            roomCode = string.Empty;
             NotifyLobbyChanged();
         }
+    }
+
+    private async Task<string> RegisterRoomCodeAsync(string matchId)
+    {
+        try
+        {
+            IApiRpc response = await client.RpcAsync(
+                session,
+                "objecthead_register_room_code",
+                JsonUtility.ToJson(new ObjectHeadRoomCodeRequest { match_id = matchId }));
+            ObjectHeadRoomCodeResponse data = JsonUtility.FromJson<ObjectHeadRoomCodeResponse>(response.Payload);
+            if (data != null && !string.IsNullOrWhiteSpace(data.room_code))
+            {
+                return data.room_code.Trim().ToUpperInvariant();
+            }
+        }
+        catch (Exception exception)
+        {
+            Log("Room-code registration unavailable; using the internal match ID. " + exception.Message);
+        }
+
+        return matchId;
+    }
+
+    private async Task<string> ResolveMatchIdAsync(string roomCodeOrMatchId)
+    {
+        if (!LooksLikeFriendlyRoomCode(roomCodeOrMatchId))
+        {
+            return roomCodeOrMatchId;
+        }
+
+        IApiRpc response = await client.RpcAsync(
+            session,
+            "objecthead_resolve_room_code",
+            JsonUtility.ToJson(new ObjectHeadRoomCodeResponse
+            {
+                room_code = roomCodeOrMatchId.Trim().ToUpperInvariant()
+            }));
+        ObjectHeadRoomCodeResponse data = JsonUtility.FromJson<ObjectHeadRoomCodeResponse>(response.Payload);
+        if (data == null || string.IsNullOrWhiteSpace(data.match_id))
+        {
+            throw new InvalidOperationException("The room code could not be resolved.");
+        }
+
+        return data.match_id.Trim();
+    }
+
+    private static bool LooksLikeFriendlyRoomCode(string value)
+    {
+        string trimmed = value != null ? value.Trim() : string.Empty;
+        return trimmed.Length == 6 && trimmed.All(character =>
+            char.IsLetterOrDigit(character) && character <= 127);
     }
 
     private List<IUserPresence> GetAllPresences()

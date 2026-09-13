@@ -35,6 +35,8 @@ services:
     ports:
       - "7350:7350"
       - "7351:7351"
+    volumes:
+      - ./modules:/nakama/data/modules:ro
     healthcheck:
       test: ["CMD", "/nakama/nakama", "healthcheck"]
       interval: 10s

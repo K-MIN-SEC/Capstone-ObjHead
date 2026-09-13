@@ -49,6 +49,7 @@ public class TerrainManager : MonoBehaviour
     private bool initialized;
 
     public event Action TerrainChanged;
+    public event Action<TerrainEditOperation> OperationApplied;
 
     public int WidthPx => runtimeVisualTexture != null
         ? runtimeVisualTexture.width
@@ -483,6 +484,13 @@ public class TerrainManager : MonoBehaviour
 
         bool changed = DestroyCircleInternal(worldCenter, radiusPx);
         ApplyTextureAndDirtyChunks(changed);
+        PublishOperation(
+            changed,
+            TerrainEditOperation.Circle(
+                TerrainEditOperationKind.DestroyCircle,
+                WorldToPixel(worldCenter),
+                radiusPx,
+                TerrainType.Empty));
         return changed;
     }
 
@@ -509,6 +517,13 @@ public class TerrainManager : MonoBehaviour
 
         bool changed = CreateCircleInternal(worldCenter, radiusPx, terrainType, blockedColliders);
         ApplyTextureAndDirtyChunks(changed);
+        PublishOperation(
+            changed,
+            TerrainEditOperation.Circle(
+                TerrainEditOperationKind.CreateCircle,
+                WorldToPixel(worldCenter),
+                radiusPx,
+                terrainType));
         return changed;
     }
 
@@ -518,14 +533,25 @@ public class TerrainManager : MonoBehaviour
         TerrainType terrainType,
         IEnumerable<Collider2D> blockedColliders)
     {
-        return EnsureInitialized() &&
-               radiusPx > 0 &&
-               CreateEllipseInternal(
-                   worldCenter,
-                   radiusPx,
-                   radiusPx,
-                   terrainType,
-                   blockedColliders);
+        if (!EnsureInitialized() || radiusPx <= 0)
+        {
+            return false;
+        }
+
+        bool changed = CreateEllipseInternal(
+            worldCenter,
+            radiusPx,
+            radiusPx,
+            terrainType,
+            blockedColliders);
+        PublishOperation(
+            changed,
+            TerrainEditOperation.Circle(
+                TerrainEditOperationKind.CreateCircle,
+                WorldToPixel(worldCenter),
+                radiusPx,
+                terrainType));
+        return changed;
     }
 
     public bool CreateEllipseDeferred(
@@ -535,15 +561,26 @@ public class TerrainManager : MonoBehaviour
         TerrainType terrainType,
         IEnumerable<Collider2D> blockedColliders)
     {
-        return EnsureInitialized() &&
-               radiusXPx > 0 &&
-               radiusYPx > 0 &&
-               CreateEllipseInternal(
-                   worldCenter,
-                   radiusXPx,
-                   radiusYPx,
-                   terrainType,
-                   blockedColliders);
+        if (!EnsureInitialized() || radiusXPx <= 0 || radiusYPx <= 0)
+        {
+            return false;
+        }
+
+        bool changed = CreateEllipseInternal(
+            worldCenter,
+            radiusXPx,
+            radiusYPx,
+            terrainType,
+            blockedColliders);
+        PublishOperation(
+            changed,
+            TerrainEditOperation.Ellipse(
+                TerrainEditOperationKind.CreateEllipse,
+                WorldToPixel(worldCenter),
+                radiusXPx,
+                radiusYPx,
+                terrainType));
+        return changed;
     }
 
     public void FlushDeferredTerrainChanges()
@@ -574,6 +611,86 @@ public class TerrainManager : MonoBehaviour
         direction.Normalize();
         int brushRadius = Mathf.Max(1, thicknessPx);
         float length = Mathf.Max(0f, lengthWorldUnits);
+        bool changed = ApplyBridgeInternal(startWorld, direction, length, brushRadius);
+
+        ApplyTextureAndDirtyChunks(changed);
+        PublishOperation(
+            changed,
+            TerrainEditOperation.Bridge(
+                WorldToPixel(startWorld),
+                direction,
+                Mathf.RoundToInt(length * PixelsPerUnit),
+                brushRadius));
+        return changed;
+    }
+
+    public bool ApplyOperation(TerrainEditOperation operation)
+    {
+        if (!EnsureInitialized())
+        {
+            return false;
+        }
+
+        Vector2 centerWorld = PixelToWorld(
+            new Vector2Int(operation.centerPixelX, operation.centerPixelY));
+        bool changed;
+        switch (operation.kind)
+        {
+            case TerrainEditOperationKind.DestroyCircle:
+                changed = operation.radiusXPx > 0 &&
+                          DestroyCircleInternal(centerWorld, operation.radiusXPx);
+                break;
+
+            case TerrainEditOperationKind.CreateCircle:
+                changed = operation.radiusXPx > 0 &&
+                          CreateCircleInternal(
+                              centerWorld,
+                              operation.radiusXPx,
+                              operation.terrainType,
+                              null);
+                break;
+
+            case TerrainEditOperationKind.CreateEllipse:
+                changed = operation.radiusXPx > 0 &&
+                          operation.radiusYPx > 0 &&
+                          CreateEllipseInternal(
+                              centerWorld,
+                              operation.radiusXPx,
+                              operation.radiusYPx,
+                              operation.terrainType,
+                              null);
+                break;
+
+            case TerrainEditOperationKind.CreateBridge:
+                changed = ApplyBridgeInternal(
+                    centerWorld,
+                    new Vector2(operation.directionX, operation.directionY),
+                    operation.lengthPx / (float)PixelsPerUnit,
+                    operation.thicknessPx);
+                break;
+
+            default:
+                return false;
+        }
+
+        ApplyTextureAndDirtyChunks(changed);
+        return changed;
+    }
+
+    private bool ApplyBridgeInternal(
+        Vector2 startWorld,
+        Vector2 direction,
+        float lengthWorldUnits,
+        int thicknessPx)
+    {
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            direction = Vector2.right;
+        }
+
+        direction.Normalize();
+        int brushRadius = Mathf.Max(1, thicknessPx);
+        float length = Mathf.Max(0f, lengthWorldUnits);
         int steps = Mathf.Max(1, Mathf.CeilToInt(length * PixelsPerUnit / brushRadius));
         bool changed = false;
         for (int i = 0; i <= steps; i++)
@@ -582,8 +699,15 @@ public class TerrainManager : MonoBehaviour
             changed |= CreateCircleInternal(point, brushRadius, TerrainType.Created, null);
         }
 
-        ApplyTextureAndDirtyChunks(changed);
         return changed;
+    }
+
+    private void PublishOperation(bool changed, TerrainEditOperation operation)
+    {
+        if (changed)
+        {
+            OperationApplied?.Invoke(operation);
+        }
     }
 
     public void RebuildAllColliders()

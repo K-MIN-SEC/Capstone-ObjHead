@@ -1,0 +1,431 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a45385fa62814741a8327ffe6e13123, type: 3}
+  m_Name: ObjectHeadBalance
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadBalanceTable
+  entries:
+  - key: turn.duration_seconds
+    value: 30
+    unit: "\uCD08"
+    description: "\uAE30\uBCF8 \uD589\uB3D9 \uC2DC\uAC04"
+  - key: turn.residual_movement_seconds
+    value: 5
+    unit: "\uCD08"
+    description: "\uACF5\uACA9 \uD6C4 \uC794\uC5EC \uC774\uB3D9 \uC2DC\uAC04"
+  - key: turn.damage_settlement_seconds
+    value: 1
+    unit: "\uCD08"
+    description: "\uD53C\uD574 \uC815\uC0B0 \uB300\uAE30 \uC2DC\uAC04"
+  - key: charge.duration_seconds
+    value: 1.2
+    unit: "\uCD08"
+    description: "\uCD5C\uB300 \uCC28\uC9D5\uAE4C\uC9C0 \uAC78\uB9AC\uB294 \uC2DC\uAC04"
+  - key: charge.minimum_power
+    value: 0.1
+    unit: 0~1
+    description: "\uCD5C\uC18C \uBC1C\uC0AC \uD30C\uC6CC"
+  - key: throw.max_speed_px_per_second
+    value: 1200
+    unit: px/s
+    description: "\uCD5C\uB300 \uD22C\uCC99 \uC18D\uB3C4 \uAE30\uC900\uAC12"
+  - key: throw.speed_multiplier
+    value: 0.5
+    unit: "\uBC30"
+    description: "\uD22C\uCC99 \uC18D\uB3C4 \uBC30\uC728"
+  - key: throw.fallback_pixels_per_unit
+    value: 100
+    unit: px/unit
+    description: "TerrainManager\uAC00 \uC5C6\uC744 \uB54C \uD658\uC0B0\uAC12"
+  - key: character.move_speed
+    value: 3.5
+    unit: unit/s
+    description: "\uACF5\uD1B5 \uC774\uB3D9 \uC18D\uB3C4"
+  - key: character.jump_force
+    value: 6
+    unit: unit/s
+    description: "\uACF5\uD1B5 \uC810\uD504 \uC18D\uB3C4"
+  - key: character.bulb.max_hp
+    value: 85
+    unit: HP
+    description: "\uC804\uAD6C \uCD5C\uB300 \uCCB4\uB825"
+  - key: character.bulb.throw_power
+    value: 1.15
+    unit: "\uBC30"
+    description: "\uC804\uAD6C \uD22C\uCC99 \uD30C\uC6CC"
+  - key: character.bulb.knockback_resistance
+    value: 0.75
+    unit: "\uBC30"
+    description: "\uC804\uAD6C \uB109\uBC31 \uC800\uD56D"
+  - key: character.seed.max_hp
+    value: 120
+    unit: HP
+    description: "\uC528\uC557 \uCD5C\uB300 \uCCB4\uB825"
+  - key: character.seed.throw_power
+    value: 0.88
+    unit: "\uBC30"
+    description: "\uC528\uC557 \uD22C\uCC99 \uD30C\uC6CC"
+  - key: character.seed.knockback_resistance
+    value: 1.25
+    unit: "\uBC30"
+    description: "\uC528\uC557 \uB109\uBC31 \uC800\uD56D"
+  - key: character.bomb.max_hp
+    value: 100
+    unit: HP
+    description: "\uD3ED\uD0C4 \uCD5C\uB300 \uCCB4\uB825"
+  - key: character.bomb.throw_power
+    value: 1.1
+    unit: "\uBC30"
+    description: "\uD3ED\uD0C4 \uD22C\uCC99 \uD30C\uC6CC"
+  - key: character.bomb.knockback_resistance
+    value: 0.9
+    unit: "\uBC30"
+    description: "\uD3ED\uD0C4 \uB109\uBC31 \uC800\uD56D"
+  - key: skill.cooldown.1
+    value: 0
+    unit: "\uD134"
+    description: "1\uBC88 \uC2A4\uD0AC \uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.cooldown.2
+    value: 2
+    unit: "\uD134"
+    description: "2\uBC88 \uC2A4\uD0AC \uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.cooldown.3
+    value: 3
+    unit: "\uD134"
+    description: "3\uBC88 \uC2A4\uD0AC \uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.bulb.1.max_damage
+    value: 5
+    unit: "\uD53C\uD574"
+    description: "\uCC29\uD0C4 \uD53C\uD574"
+  - key: skill.bulb.1.explosion_radius_world
+    value: 0.7
+    unit: unit
+    description: "\uCC29\uD0C4 \uBC18\uACBD"
+  - key: skill.bulb.1.zone_damage_per_turn
+    value: 8
+    unit: "\uD53C\uD574/\uD134"
+    description: "\uC7A5\uD310 \uD134 \uD53C\uD574"
+  - key: skill.bulb.1.zone_duration_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC7A5\uD310 \uC9C0\uC18D"
+  - key: skill.bulb.1.zone_length_world
+    value: 4.5
+    unit: unit
+    description: "\uC7A5\uD310 \uAE38\uC774"
+  - key: skill.bulb.1.zone_thickness_world
+    value: 0.18
+    unit: unit
+    description: "\uC7A5\uD310 \uB450\uAED8"
+  - key: skill.bulb.2.max_damage
+    value: 15
+    unit: "\uD53C\uD574"
+    description: "\uCC29\uD0C4 \uD53C\uD574"
+  - key: skill.bulb.2.explosion_radius_world
+    value: 1.4
+    unit: unit
+    description: "\uCC29\uD0C4 \uBC18\uACBD"
+  - key: skill.bulb.2.knockback_force
+    value: 2.5
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: skill.bulb.2.zone_damage_per_turn
+    value: 10
+    unit: "\uD53C\uD574/\uD134"
+    description: "\uC7A5\uD310 \uD134 \uD53C\uD574"
+  - key: skill.bulb.2.zone_duration_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC7A5\uD310 \uC9C0\uC18D"
+  - key: skill.bulb.2.zone_length_world
+    value: 6
+    unit: unit
+    description: "\uC7A5\uD310 \uAE38\uC774"
+  - key: skill.bulb.2.zone_thickness_world
+    value: 0.22
+    unit: unit
+    description: "\uC7A5\uD310 \uB450\uAED8"
+  - key: skill.bulb.2.slow_multiplier
+    value: 0.6
+    unit: "\uBC30"
+    description: "\uC774\uB3D9 \uC18D\uB3C4 \uBC30\uC728"
+  - key: skill.bulb.3.max_damage
+    value: 8
+    unit: "\uD53C\uD574/\uD3ED\uBC1C"
+    description: "\uC5F0\uC1C4 \uD3ED\uBC1C 1\uD68C \uD53C\uD574"
+  - key: skill.bulb.3.chain_max_total_damage
+    value: 35
+    unit: "\uD53C\uD574"
+    description: "\uB300\uC0C1\uBCC4 \uCD1D \uD53C\uD574 \uC81C\uD55C"
+  - key: skill.bulb.3.explosion_radius_world
+    value: 0.7
+    unit: unit
+    description: "\uD3ED\uBC1C \uBC18\uACBD"
+  - key: skill.bulb.3.knockback_force
+    value: 4
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: skill.bulb.3.terrain_radius_px
+    value: 17
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.bulb.3.chain_count
+    value: 5
+    unit: "\uD68C"
+    description: "\uC5F0\uC1C4 \uD69F\uC218"
+  - key: skill.bulb.3.chain_spacing_world
+    value: 0.4
+    unit: unit
+    description: "\uC5F0\uC1C4 \uAC04\uACA9"
+  - key: skill.bulb.3.chain_delay_seconds
+    value: 0.1
+    unit: "\uCD08"
+    description: "\uC5F0\uC1C4 \uAC04 \uC2DC\uAC04"
+  - key: skill.bulb.3.blink_seconds
+    value: 0.7
+    unit: "\uCD08"
+    description: "\uC810\uBA78 \uC2DC\uAC04"
+  - key: skill.bulb.3.blink_interval_seconds
+    value: 0.085
+    unit: "\uCD08"
+    description: "\uC810\uBA78 \uAC04\uACA9"
+  - key: skill.seed.1.max_damage
+    value: 5
+    unit: "\uD53C\uD574"
+    description: "\uCC29\uD0C4 \uD53C\uD574"
+  - key: skill.seed.1.explosion_radius_world
+    value: 0.48
+    unit: unit
+    description: "\uCC29\uD0C4 \uBC18\uACBD"
+  - key: skill.seed.1.terrain_radius_px
+    value: 18
+    unit: px
+    description: "\uC911\uC2EC \uC9C0\uD615 \uBC18\uACBD"
+  - key: skill.seed.1.terrain_burst_count
+    value: 12
+    unit: "\uD68C"
+    description: "\uC9C0\uD615 \uC0DD\uC131 \uC2A4\uD0EC\uD504 \uC218"
+  - key: skill.seed.1.terrain_burst_stamp_radius_px
+    value: 9
+    unit: px
+    description: "\uC2A4\uD0EC\uD504 \uBC18\uACBD"
+  - key: skill.seed.1.terrain_burst_interval_seconds
+    value: 0.055
+    unit: "\uCD08"
+    description: "\uC2A4\uD0EC\uD504 \uC0DD\uC131 \uAC04\uACA9"
+  - key: skill.seed.1.terrain_burst_spread_world
+    value: 1.2
+    unit: unit
+    description: "\uAC00\uB85C \uC0DD\uC131 \uBC94\uC704"
+  - key: skill.seed.1.final_radius_y_world
+    value: 0.95
+    unit: unit
+    description: "\uC138\uB85C \uC0DD\uC131 \uBC94\uC704"
+  - key: skill.seed.1.max_build_height_world
+    value: 5
+    unit: unit
+    description: "\uD45C\uBA74 \uC704 \uCD5C\uB300 \uC0DD\uC131 \uB192\uC774"
+  - key: skill.seed.2.max_damage
+    value: 3
+    unit: "\uD53C\uD574"
+    description: "\uCC29\uD0C4 \uD53C\uD574"
+  - key: skill.seed.2.explosion_radius_world
+    value: 0.38
+    unit: unit
+    description: "\uCC29\uD0C4 \uBC18\uACBD"
+  - key: skill.seed.2.bridge_length_world
+    value: 6.5
+    unit: unit
+    description: "\uB2E4\uB9AC \uAE38\uC774"
+  - key: skill.seed.2.bridge_thickness_px
+    value: 9
+    unit: px
+    description: "\uB2E4\uB9AC \uB450\uAED8"
+  - key: skill.seed.3.max_damage
+    value: 10
+    unit: "\uD53C\uD574"
+    description: "\uCC29\uD0C4 \uD53C\uD574"
+  - key: skill.seed.3.explosion_radius_world
+    value: 0.8
+    unit: unit
+    description: "\uCC29\uD0C4 \uBC18\uACBD"
+  - key: skill.seed.3.zone_damage_per_turn
+    value: 12
+    unit: "\uD53C\uD574/\uD134"
+    description: "\uC7A5\uD310 \uD134 \uD53C\uD574"
+  - key: skill.seed.3.zone_duration_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC7A5\uD310 \uC9C0\uC18D"
+  - key: skill.seed.3.zone_length_world
+    value: 5.5
+    unit: unit
+    description: "\uC7A5\uD310 \uAE38\uC774"
+  - key: skill.seed.3.zone_thickness_world
+    value: 0.25
+    unit: unit
+    description: "\uC7A5\uD310 \uB450\uAED8"
+  - key: skill.bomb.1.max_damage
+    value: 15
+    unit: "\uD53C\uD574"
+    description: "\uD3ED\uBC1C \uCD5C\uB300 \uD53C\uD574"
+  - key: skill.bomb.1.explosion_radius_world
+    value: 1.1
+    unit: unit
+    description: "\uD3ED\uBC1C \uBC18\uACBD"
+  - key: skill.bomb.1.terrain_radius_px
+    value: 26
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.bomb.1.knockback_force
+    value: 12
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: skill.bomb.2.max_damage
+    value: 30
+    unit: "\uD53C\uD574"
+    description: "\uD3ED\uBC1C \uCD5C\uB300 \uD53C\uD574"
+  - key: skill.bomb.2.explosion_radius_world
+    value: 1.4
+    unit: unit
+    description: "\uD3ED\uBC1C \uBC18\uACBD"
+  - key: skill.bomb.2.terrain_radius_px
+    value: 40
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.bomb.2.knockback_force
+    value: 7
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: skill.bomb.2.delay_seconds
+    value: 2
+    unit: "\uCD08"
+    description: "\uC9C0\uC5F0 \uD3ED\uBC1C \uC2DC\uAC04"
+  - key: skill.bomb.3.max_damage
+    value: 9
+    unit: "\uD53C\uD574/\uD3ED\uBC1C"
+    description: "\uC5F0\uC1C4 \uD3ED\uBC1C 1\uD68C \uD53C\uD574"
+  - key: skill.bomb.3.chain_max_total_damage
+    value: 45
+    unit: "\uD53C\uD574"
+    description: "\uB300\uC0C1\uBCC4 \uCD1D \uD53C\uD574 \uC81C\uD55C"
+  - key: skill.bomb.3.explosion_radius_world
+    value: 0.9
+    unit: unit
+    description: "\uD3ED\uBC1C \uBC18\uACBD"
+  - key: skill.bomb.3.terrain_radius_px
+    value: 28
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.bomb.3.knockback_force
+    value: 7
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: skill.bomb.3.chain_count
+    value: 6
+    unit: "\uD68C"
+    description: "\uC5F0\uC1C4 \uD69F\uC218"
+  - key: skill.bomb.3.chain_spacing_world
+    value: 0.5
+    unit: unit
+    description: "\uC5F0\uC1C4 \uAC04\uACA9"
+  - key: skill.bomb.3.chain_delay_seconds
+    value: 0.14
+    unit: "\uCD08"
+    description: "\uC5F0\uC1C4 \uAC04 \uC2DC\uAC04"
+  - key: skill.bomb.3.rolling_min_speed
+    value: 3.2
+    unit: unit/s
+    description: "\uAD74\uB7EC\uAC00\uB294 \uCD5C\uC18C \uC18D\uB3C4"
+  - key: skill.bomb.3.rolling_angular_speed
+    value: 720
+    unit: deg/s
+    description: "\uD68C\uC804 \uC18D\uB3C4"
+  - key: common.attack.cluster_count
+    value: 8
+    unit: "\uD68C"
+    description: "\uC5F0\uC1C4 \uD3ED\uBC1C \uC218"
+  - key: common.attack.damage_per_explosion
+    value: 16
+    unit: "\uD53C\uD574/\uD3ED\uBC1C"
+    description: "\uD3ED\uBC1C 1\uD68C \uD53C\uD574"
+  - key: common.attack.max_total_damage
+    value: 72
+    unit: "\uD53C\uD574"
+    description: "\uB300\uC0C1\uBCC4 \uCD1D \uD53C\uD574 \uC81C\uD55C"
+  - key: common.attack.terrain_radius_px
+    value: 40
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: common.attack.explosion_radius_world
+    value: 1.25
+    unit: unit
+    description: "\uD3ED\uBC1C \uBC18\uACBD"
+  - key: common.attack.spread_radius_world
+    value: 2.6
+    unit: unit
+    description: "\uC5F0\uC1C4 \uBC94\uC704"
+  - key: common.attack.delay_seconds
+    value: 0.09
+    unit: "\uCD08"
+    description: "\uC5F0\uC1C4 \uAC04 \uC2DC\uAC04"
+  - key: common.attack.knockback_force
+    value: 9.5
+    unit: "\uD798"
+    description: "\uB109\uBC31"
+  - key: common.terrain.created_radius_px
+    value: 20
+    unit: px
+    description: "\uCC29\uD0C4 \uC911\uC2EC \uBC18\uACBD"
+  - key: common.terrain.burst_count
+    value: 22
+    unit: "\uD68C"
+    description: "\uC9C0\uD615 \uC0DD\uC131 \uC2A4\uD0EC\uD504 \uC218"
+  - key: common.terrain.stamp_radius_px
+    value: 12
+    unit: px
+    description: "\uC2A4\uD0EC\uD504 \uBC18\uACBD"
+  - key: common.terrain.interval_seconds
+    value: 0.045
+    unit: "\uCD08"
+    description: "\uC2A4\uD0EC\uD504 \uC0DD\uC131 \uAC04\uACA9"
+  - key: common.terrain.spread_world
+    value: 2.2
+    unit: unit
+    description: "\uC0DD\uC131 \uBC94\uC704"
+  - key: common.terrain.radius_x_world
+    value: 2.2
+    unit: unit
+    description: "\uCD5C\uC885 \uAC00\uB85C \uBC18\uACBD"
+  - key: common.terrain.radius_y_world
+    value: 1.65
+    unit: unit
+    description: "\uCD5C\uC885 \uC138\uB85C \uBC18\uACBD"
+  - key: common.terrain.max_build_height_world
+    value: 7
+    unit: unit
+    description: "\uD45C\uBA74 \uC704 \uCD5C\uB300 \uC0DD\uC131 \uB192\uC774"
+  - key: common.jet.min_speed
+    value: 7
+    unit: unit/s
+    description: "\uCD5C\uC18C \uC810\uD504 \uC18D\uB3C4"
+  - key: common.jet.max_speed
+    value: 17
+    unit: unit/s
+    description: "\uCD5C\uB300 \uC810\uD504 \uC18D\uB3C4"
+  - key: common.jet.resolve_timeout_seconds
+    value: 5
+    unit: "\uCD08"
+    description: "\uB3D9\uC791 \uC885\uB8CC \uC81C\uD55C"
+  - key: common.jet.landing_stable_seconds
+    value: 0.12
+    unit: "\uCD08"
+    description: "\uCC29\uC9C0 \uD310\uC815 \uC720\uC9C0 \uC2DC\uAC04"

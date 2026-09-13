@@ -18,6 +18,13 @@ public sealed class ObjectHeadServerProfile
     }
 }
 
+[Serializable]
+public sealed class ObjectHeadMapSceneBinding
+{
+    public string mapId = "object_head_demo_01";
+    public string sceneName = "SampleScene";
+}
+
 [CreateAssetMenu(fileName = "ObjectHeadNetworkConfig", menuName = "Object Head/Network Config")]
 public sealed class ObjectHeadNetworkConfig : ScriptableObject
 {
@@ -34,6 +41,13 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
     [SerializeField] private ObjectHeadRoomSettings defaultRoomSettings = new ObjectHeadRoomSettings();
     [SerializeField] private string fallbackMapId = "object_head_demo_01";
 
+    [Header("Scene routing")]
+    [SerializeField] private string titleSceneName = "ObjectHeadTitle";
+    [SerializeField] private ObjectHeadMapSceneBinding[] mapScenes =
+    {
+        new ObjectHeadMapSceneBinding()
+    };
+
     [Header("Temporary demo panel")]
     [SerializeField, Min(0f)] private float panelMargin = 12f;
     [SerializeField, Min(240f)] private float panelWidth = 430f;
@@ -46,6 +60,9 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
     public string FallbackMapId => string.IsNullOrWhiteSpace(fallbackMapId)
         ? "object_head_demo_01"
         : fallbackMapId.Trim();
+    public string TitleSceneName => string.IsNullOrWhiteSpace(titleSceneName)
+        ? "ObjectHeadTitle"
+        : titleSceneName.Trim();
     public float PanelMargin => panelMargin;
     public float PanelWidth => panelWidth;
     public float PanelMaxHeight => panelMaxHeight;
@@ -58,6 +75,23 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
             candidate != null && string.Equals(candidate.id, requested, StringComparison.OrdinalIgnoreCase));
         profile ??= available.FirstOrDefault(candidate => candidate != null);
         return profile != null ? profile.Copy() : new ObjectHeadServerProfile();
+    }
+
+    public string ResolveSceneName(string mapId)
+    {
+        string requested = string.IsNullOrWhiteSpace(mapId) ? FallbackMapId : mapId.Trim();
+        ObjectHeadMapSceneBinding binding = (mapScenes ?? Array.Empty<ObjectHeadMapSceneBinding>())
+            .FirstOrDefault(candidate =>
+                candidate != null &&
+                string.Equals(candidate.mapId, requested, StringComparison.OrdinalIgnoreCase));
+        if (binding != null && !string.IsNullOrWhiteSpace(binding.sceneName))
+        {
+            return binding.sceneName.Trim();
+        }
+
+        binding = (mapScenes ?? Array.Empty<ObjectHeadMapSceneBinding>())
+            .FirstOrDefault(candidate => candidate != null && !string.IsNullOrWhiteSpace(candidate.sceneName));
+        return binding != null ? binding.sceneName.Trim() : "SampleScene";
     }
 
     public static ObjectHeadNetworkConfig LoadOrCreateRuntimeDefault()

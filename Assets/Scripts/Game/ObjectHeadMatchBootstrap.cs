@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.Serialization;
+using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
 public class ObjectHeadMatchBootstrap : MonoBehaviour
@@ -36,6 +37,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     private TerrainManager terrain;
     private TurnManager turnManager;
     private Transform mapRoot;
+    private ObjectHeadBalanceTable balance;
     private bool built;
 
     public static int CurrentMatchSeed { get; private set; } = 6974;
@@ -43,6 +45,12 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreateForPlayableScene()
     {
+        ObjectHeadNetworkConfig networkConfig = ObjectHeadNetworkConfig.LoadOrCreateRuntimeDefault();
+        if (string.Equals(SceneManager.GetActiveScene().name, networkConfig.TitleSceneName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (FindAny<TerrainTestBootstrap>() != null || FindAny<ObjectHeadMatchBootstrap>() != null)
         {
             return;
@@ -64,6 +72,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
         }
 
         built = true;
+        balance = ObjectHeadBalanceTable.Load();
 
         ResolveSceneAuthoring();
 
@@ -483,7 +492,9 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
         visual.ConfigureSpriteFacing(characterSpritesFaceRightByDefault);
         visual.SetFacingRight(playerIndex == 1);
-        controller.ConfigureMovement(characterMoveSpeed, characterJumpForce);
+        controller.ConfigureMovement(
+            BalanceFloat("character.move_speed", characterMoveSpeed),
+            BalanceFloat("character.jump_force", characterJumpForce));
         _ = aim;
         _ = power;
         _ = fire;
@@ -501,15 +512,36 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
         switch (kind)
         {
             case ObjectHeadCharacterKind.Bulb:
-                combat.ConfigureStats(85, 1.15f, 0.75f);
+                combat.ConfigureStats(
+                    BalanceInt("character.bulb.max_hp", 85),
+                    BalanceFloat("character.bulb.throw_power", 1.15f),
+                    BalanceFloat("character.bulb.knockback_resistance", 0.75f));
                 break;
             case ObjectHeadCharacterKind.Seed:
-                combat.ConfigureStats(120, 0.88f, 1.25f);
+                combat.ConfigureStats(
+                    BalanceInt("character.seed.max_hp", 120),
+                    BalanceFloat("character.seed.throw_power", 0.88f),
+                    BalanceFloat("character.seed.knockback_resistance", 1.25f));
                 break;
             case ObjectHeadCharacterKind.Bomb:
-                combat.ConfigureStats(100, 1.1f, 0.9f);
+                combat.ConfigureStats(
+                    BalanceInt("character.bomb.max_hp", 100),
+                    BalanceFloat("character.bomb.throw_power", 1.1f),
+                    BalanceFloat("character.bomb.knockback_resistance", 0.9f));
                 break;
         }
+    }
+
+    private float BalanceFloat(string key, float fallback)
+    {
+        balance ??= ObjectHeadBalanceTable.Load();
+        return balance != null ? balance.GetFloat(key, fallback) : fallback;
+    }
+
+    private int BalanceInt(string key, int fallback)
+    {
+        balance ??= ObjectHeadBalanceTable.Load();
+        return balance != null ? balance.GetInt(key, fallback) : fallback;
     }
 
     private int GetCharactersPerPlayer(int count)

@@ -24,6 +24,13 @@ public class PowerChargeController : MonoBehaviour
 
     private void Awake()
     {
+        ObjectHeadBalanceTable balance = ObjectHeadBalanceTable.Load();
+        if (balance != null)
+        {
+            chargeSeconds = Mathf.Max(0.05f, balance.GetFloat("charge.duration_seconds", chargeSeconds));
+            minimumFirePower = Mathf.Clamp01(balance.GetFloat("charge.minimum_power", minimumFirePower));
+        }
+
         turnCharacter = GetComponent<TurnCharacterController>();
         aimController = GetComponent<AimController>();
         characterVisual = GetComponent<CharacterVisual>();

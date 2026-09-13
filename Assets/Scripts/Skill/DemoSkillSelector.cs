@@ -147,12 +147,14 @@ public class DemoSkillSelector : MonoBehaviour
     private CharacterVisual characterVisual;
     private TurnCharacterController turnCharacter;
     private CommonHeadUseController commonHeadUseController;
+    private ObjectHeadBalanceTable balance;
 
     public ObjectHeadCharacterKind CharacterKind => characterKind;
     public int SelectedSkillIndex => selectedSkillIndex;
 
     private void Awake()
     {
+        balance = ObjectHeadBalanceTable.Load();
         characterVisual = GetComponent<CharacterVisual>();
         turnCharacter = GetComponent<TurnCharacterController>();
         commonHeadUseController = GetComponent<CommonHeadUseController>();
@@ -202,9 +204,8 @@ public class DemoSkillSelector : MonoBehaviour
     public int GetCooldownDuration(int skillIndex)
     {
         skillIndex = Mathf.Clamp(skillIndex, 0, 2);
-        if (skillIndex == 0) return 0;
-        if (skillIndex == 1) return 2;
-        return 3;
+        int fallback = skillIndex == 0 ? 0 : skillIndex == 1 ? 2 : 3;
+        return BalanceInt($"skill.cooldown.{skillIndex + 1}", fallback);
     }
 
     public void NotifyTurnStarted()
@@ -263,13 +264,13 @@ public class DemoSkillSelector : MonoBehaviour
         if (selectedSkillIndex == 0)
         {
             settings.effectType = SkillEffectType.CreateHazardZone;
-            settings.maxDamage = 5;
-            settings.explosionRadiusWorld = 0.7f;
+            settings.maxDamage = SkillInt("max_damage", 5);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.7f);
             settings.knockbackForce = 0f;
-            settings.zoneDamagePerTurn = 8;
-            settings.zoneDurationRounds = 2;
-            settings.zoneLengthWorld = 4.5f;
-            settings.zoneThicknessWorld = 0.18f;
+            settings.zoneDamagePerTurn = SkillInt("zone_damage_per_turn", 8);
+            settings.zoneDurationRounds = SkillInt("zone_duration_rounds", 2);
+            settings.zoneLengthWorld = SkillFloat("zone_length_world", 4.5f);
+            settings.zoneThicknessWorld = SkillFloat("zone_thickness_world", 0.18f);
             settings.slowMultiplier = 1f;
             return;
         }
@@ -277,31 +278,31 @@ public class DemoSkillSelector : MonoBehaviour
         if (selectedSkillIndex == 1)
         {
             settings.effectType = SkillEffectType.CreateSlowZone;
-            settings.maxDamage = 15;
-            settings.explosionRadiusWorld = 1.4f;
-            settings.knockbackForce = 2.5f;
+            settings.maxDamage = SkillInt("max_damage", 15);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 1.4f);
+            settings.knockbackForce = SkillFloat("knockback_force", 2.5f);
             settings.terrainRadiusPx = 0;
-            settings.zoneDamagePerTurn = 10;
-            settings.zoneDurationRounds = 2;
-            settings.zoneLengthWorld = 6f;
-            settings.zoneThicknessWorld = 0.22f;
-            settings.slowMultiplier = 0.6f;
+            settings.zoneDamagePerTurn = SkillInt("zone_damage_per_turn", 10);
+            settings.zoneDurationRounds = SkillInt("zone_duration_rounds", 2);
+            settings.zoneLengthWorld = SkillFloat("zone_length_world", 6f);
+            settings.zoneThicknessWorld = SkillFloat("zone_thickness_world", 0.22f);
+            settings.slowMultiplier = SkillFloat("slow_multiplier", 0.6f);
             settings.impactColor = new Color(1f, 0.9f, 0.15f, 0.48f);
             return;
         }
 
         settings.effectType = SkillEffectType.ChainExplosion;
-        settings.maxDamage = 8;
-        settings.chainMaxTotalDamage = 35;
-        settings.explosionRadiusWorld = 0.7f;
-        settings.knockbackForce = 4f;
-        settings.terrainRadiusPx = 17;
-        settings.chainCount = 5;
-        settings.chainSpacingWorld = 0.4f;
-        settings.chainDelaySeconds = 0.1f;
+        settings.maxDamage = SkillInt("max_damage", 8);
+        settings.chainMaxTotalDamage = SkillInt("chain_max_total_damage", 35);
+        settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.7f);
+        settings.knockbackForce = SkillFloat("knockback_force", 4f);
+        settings.terrainRadiusPx = SkillInt("terrain_radius_px", 17);
+        settings.chainCount = SkillInt("chain_count", 5);
+        settings.chainSpacingWorld = SkillFloat("chain_spacing_world", 0.4f);
+        settings.chainDelaySeconds = SkillFloat("chain_delay_seconds", 0.1f);
         settings.blinkBeforeEffect = true;
-        settings.blinkSeconds = 0.7f;
-        settings.blinkIntervalSeconds = 0.085f;
+        settings.blinkSeconds = SkillFloat("blink_seconds", 0.7f);
+        settings.blinkIntervalSeconds = SkillFloat("blink_interval_seconds", 0.085f);
         settings.blinkSpriteA = Resources.Load<Sprite>("Sprites/Heads/head_bulb_on");
         settings.blinkSpriteB = Resources.Load<Sprite>("Sprites/Heads/head_bulb_off");
     }
@@ -316,40 +317,40 @@ public class DemoSkillSelector : MonoBehaviour
         if (selectedSkillIndex == 0)
         {
             settings.effectType = SkillEffectType.CreateTerrainCircle;
-            settings.maxDamage = 5;
-            settings.explosionRadiusWorld = 0.48f;
-            settings.terrainRadiusPx = 18;
-            settings.terrainBurstCount = seedTerrainBurstCount;
-            settings.terrainBurstStampRadiusPx = seedTerrainBurstStampRadiusPx;
+            settings.maxDamage = SkillInt("max_damage", 5);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.48f);
+            settings.terrainRadiusPx = SkillInt("terrain_radius_px", 18);
+            settings.terrainBurstCount = SkillInt("terrain_burst_count", seedTerrainBurstCount);
+            settings.terrainBurstStampRadiusPx = SkillInt("terrain_burst_stamp_radius_px", seedTerrainBurstStampRadiusPx);
             settings.terrainBurstMaxPlacementAttemptsPerStamp = terrainBurstMaxPlacementAttemptsPerStamp;
-            settings.terrainBurstIntervalSeconds = seedTerrainBurstIntervalSeconds;
-            settings.terrainBurstSpreadWorld = seedTerrainRadiusXWorld;
+            settings.terrainBurstIntervalSeconds = SkillFloat("terrain_burst_interval_seconds", seedTerrainBurstIntervalSeconds);
+            settings.terrainBurstSpreadWorld = SkillFloat("terrain_burst_spread_world", seedTerrainRadiusXWorld);
             settings.terrainBurstVerticalBiasWorld = 0f;
-            settings.finalTerrainRadiusXWorld = seedTerrainRadiusXWorld;
+            settings.finalTerrainRadiusXWorld = SkillFloat("terrain_burst_spread_world", seedTerrainRadiusXWorld);
             settings.finalTerrainRadiusYWorld = Mathf.Max(
                 minimumCreatedTerrainRadiusYWorld,
-                seedTerrainRadiusYWorld);
-            settings.maxBuildHeightAboveSurfaceWorld = maxBuildHeightAboveSurfaceWorld;
+                SkillFloat("final_radius_y_world", seedTerrainRadiusYWorld));
+            settings.maxBuildHeightAboveSurfaceWorld = SkillFloat("max_build_height_world", maxBuildHeightAboveSurfaceWorld);
             return;
         }
 
         if (selectedSkillIndex == 1)
         {
             settings.effectType = SkillEffectType.CreateTerrainBridge;
-            settings.maxDamage = 3;
-            settings.explosionRadiusWorld = 0.38f;
-            settings.bridgeLengthWorld = 6.5f;
-            settings.bridgeThicknessPx = 9;
+            settings.maxDamage = SkillInt("max_damage", 3);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.38f);
+            settings.bridgeLengthWorld = SkillFloat("bridge_length_world", 6.5f);
+            settings.bridgeThicknessPx = SkillInt("bridge_thickness_px", 9);
             return;
         }
 
         settings.effectType = SkillEffectType.CreateHazardZone;
-        settings.maxDamage = 10;
-        settings.explosionRadiusWorld = 0.8f;
-        settings.zoneDamagePerTurn = 12;
-        settings.zoneDurationRounds = 2;
-        settings.zoneLengthWorld = 5.5f;
-        settings.zoneThicknessWorld = 0.25f;
+        settings.maxDamage = SkillInt("max_damage", 10);
+        settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.8f);
+        settings.zoneDamagePerTurn = SkillInt("zone_damage_per_turn", 12);
+        settings.zoneDurationRounds = SkillInt("zone_duration_rounds", 2);
+        settings.zoneLengthWorld = SkillFloat("zone_length_world", 5.5f);
+        settings.zoneThicknessWorld = SkillFloat("zone_thickness_world", 0.25f);
         settings.slowMultiplier = 1f;
         settings.impactColor = new Color(0.24f, 0.78f, 0.24f, 0.48f);
     }
@@ -363,37 +364,37 @@ public class DemoSkillSelector : MonoBehaviour
         if (selectedSkillIndex == 0)
         {
             settings.effectType = SkillEffectType.DamageExplosion;
-            settings.maxDamage = 15;
-            settings.explosionRadiusWorld = 1.1f;
-            settings.terrainRadiusPx = 26;
-            settings.knockbackForce = 12f;
+            settings.maxDamage = SkillInt("max_damage", 15);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 1.1f);
+            settings.terrainRadiusPx = SkillInt("terrain_radius_px", 26);
+            settings.knockbackForce = SkillFloat("knockback_force", 12f);
             return;
         }
 
         if (selectedSkillIndex == 1)
         {
             settings.effectType = SkillEffectType.DelayedExplosion;
-            settings.maxDamage = 30;
-            settings.explosionRadiusWorld = 1.4f;
-            settings.terrainRadiusPx = 40;
-            settings.knockbackForce = 7f;
-            settings.delaySeconds = 2f;
+            settings.maxDamage = SkillInt("max_damage", 30);
+            settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 1.4f);
+            settings.terrainRadiusPx = SkillInt("terrain_radius_px", 40);
+            settings.knockbackForce = SkillFloat("knockback_force", 7f);
+            settings.delaySeconds = SkillFloat("delay_seconds", 2f);
             settings.impactColor = new Color(1f, 0.05f, 0.02f, 0.58f);
             return;
         }
 
         settings.effectType = SkillEffectType.ChainExplosion;
-        settings.maxDamage = 9;
-        settings.chainMaxTotalDamage = 45;
-        settings.explosionRadiusWorld = 0.9f;
-        settings.terrainRadiusPx = 28;
-        settings.knockbackForce = 7f;
-        settings.chainCount = 6;
-        settings.chainSpacingWorld = 0.5f;
-        settings.chainDelaySeconds = 0.14f;
+        settings.maxDamage = SkillInt("max_damage", 9);
+        settings.chainMaxTotalDamage = SkillInt("chain_max_total_damage", 45);
+        settings.explosionRadiusWorld = SkillFloat("explosion_radius_world", 0.9f);
+        settings.terrainRadiusPx = SkillInt("terrain_radius_px", 28);
+        settings.knockbackForce = SkillFloat("knockback_force", 7f);
+        settings.chainCount = SkillInt("chain_count", 6);
+        settings.chainSpacingWorld = SkillFloat("chain_spacing_world", 0.5f);
+        settings.chainDelaySeconds = SkillFloat("chain_delay_seconds", 0.14f);
         settings.useRollingChainPath = true;
-        settings.rollingChainMinSpeed = 3.2f;
-        settings.rollingChainAngularSpeed = 720f;
+        settings.rollingChainMinSpeed = SkillFloat("rolling_min_speed", 3.2f);
+        settings.rollingChainAngularSpeed = SkillFloat("rolling_angular_speed", 720f);
         settings.impactColor = new Color(1f, 0.85f, 0.05f, 0.55f);
     }
 
@@ -411,6 +412,28 @@ public class DemoSkillSelector : MonoBehaviour
             characterVisual.SetCharacterKind(characterKind);
             characterVisual.SetSkillIndex(selectedSkillIndex);
         }
+    }
+
+    private float SkillFloat(string stat, float fallback)
+    {
+        return BalanceFloat($"skill.{characterKind.ToString().ToLowerInvariant()}.{selectedSkillIndex + 1}.{stat}", fallback);
+    }
+
+    private int SkillInt(string stat, int fallback)
+    {
+        return BalanceInt($"skill.{characterKind.ToString().ToLowerInvariant()}.{selectedSkillIndex + 1}.{stat}", fallback);
+    }
+
+    private float BalanceFloat(string key, float fallback)
+    {
+        balance ??= ObjectHeadBalanceTable.Load();
+        return balance != null ? balance.GetFloat(key, fallback) : fallback;
+    }
+
+    private int BalanceInt(string key, int fallback)
+    {
+        balance ??= ObjectHeadBalanceTable.Load();
+        return balance != null ? balance.GetInt(key, fallback) : fallback;
     }
 
     private void SelectFirstReadySkill()

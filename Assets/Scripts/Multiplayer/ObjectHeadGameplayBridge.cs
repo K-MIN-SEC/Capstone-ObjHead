@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -20,6 +21,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private ObjectHeadNetworkManager network;
     private TurnManager turnManager;
+    private TerrainManager terrainManager;
     private GameStartData startData;
     private int localPlayerIndex;
     private float nextSnapshotTime;
@@ -27,8 +29,21 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
     private int endTurnRequestSerial = -1;
     private long localMessageSequence;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void AutoCreateForNetworkMatch()
+    public bool IsReady { get; private set; }
+    public int ReceivedRemoteSnapshotCount { get; private set; }
+    public int ReceivedTurnStateCount { get; private set; }
+    public int ReceivedFireCommandCount { get; private set; }
+    public int ReceivedTerrainOperationCount { get; private set; }
+    public int SentTerrainOperationCount { get; private set; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void InstallSceneHook()
+    {
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private static void HandleSceneLoaded(Scene unused, LoadSceneMode unusedMode)
     {
         if (GameStartData.Instance == null || FindAny<ObjectHeadGameplayBridge>() != null)
         {
@@ -54,6 +69,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         {
             turnManager.TurnStarted -= HandleTurnStateChanged;
             turnManager.TurnPhaseChanged -= HandleTurnPhaseChanged;
+        }
+
+        if (terrainManager != null)
+        {
+            terrainManager.OperationApplied -= HandleAuthoritativeTerrainOperation;
         }
 
         SkillFireController.FireCommitted -= HandleLocalFireCommitted;
@@ -94,17 +114,24 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
         localPlayerIndex = localAssignment.playerIndex;
         IndexCharacters();
+        terrainManager = FindAny<TerrainManager>();
         turnManager.ConfigureNetworkControl(localPlayerIndex, !network.IsHost);
         network.GameplayMessageReceived += HandleGameplayMessage;
         turnManager.TurnStarted += HandleTurnStateChanged;
         turnManager.TurnPhaseChanged += HandleTurnPhaseChanged;
         SkillFireController.FireCommitted += HandleLocalFireCommitted;
 
+        if (network.IsHost && terrainManager != null)
+        {
+            terrainManager.OperationApplied += HandleAuthoritativeTerrainOperation;
+        }
+
         if (network.IsHost)
         {
             SendTurnState();
         }
 
+        IsReady = true;
         Debug.Log($"[ObjectHead Network] Gameplay bridge ready. Local player=P{localPlayerIndex}, host={network.IsHost}.");
     }
 
@@ -218,6 +245,12 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private void HandleGameplayMessage(long opCode, string senderUserId, string json)
     {
+        if (opCode == ObjectHeadNetworkProtocol.TerrainOperation)
+        {
+            ApplyTerrainOperation(senderUserId, json);
+            return;
+        }
+
         ObjectHeadGameplayMessage message = JsonUtility.FromJson<ObjectHeadGameplayMessage>(json);
         if (message == null || message.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion)
         {
@@ -243,6 +276,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             case ObjectHeadGameplayMessageKind.TurnState:
                 if (senderUserId == network.HostUserId && !network.IsHost)
                 {
+                    ReceivedTurnStateCount++;
                     turnManager.ApplyAuthoritativeTurnState(
                         message.currentTurnIndex,
                         message.turnSerial,
@@ -264,6 +298,54 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 }
                 break;
         }
+    }
+
+    private void HandleAuthoritativeTerrainOperation(TerrainEditOperation operation)
+    {
+        if (network == null || turnManager == null || !network.IsHost)
+        {
+            return;
+        }
+
+        Send(new ObjectHeadTerrainOperationMessage
+        {
+            messageId = NextMessageId(),
+            turnSerial = turnManager.TurnSerial,
+            operation = operation
+        }, ObjectHeadNetworkProtocol.TerrainOperation);
+        SentTerrainOperationCount++;
+    }
+
+    private void ApplyTerrainOperation(string senderUserId, string json)
+    {
+        if (network == null || network.IsHost || senderUserId != network.HostUserId)
+        {
+            return;
+        }
+
+        ObjectHeadTerrainOperationMessage message =
+            JsonUtility.FromJson<ObjectHeadTerrainOperationMessage>(json);
+        if (message == null ||
+            message.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion ||
+            string.IsNullOrEmpty(message.messageId) ||
+            !processedMessages.Add(message.messageId))
+        {
+            return;
+        }
+
+        if (terrainManager == null)
+        {
+            terrainManager = FindAny<TerrainManager>();
+        }
+
+        if (terrainManager == null)
+        {
+            Debug.LogWarning("[ObjectHead Network] Terrain operation arrived before TerrainManager was ready.");
+            return;
+        }
+
+        terrainManager.ApplyOperation(message.operation);
+        ReceivedTerrainOperationCount++;
     }
 
     private void ApplyCharacterSnapshot(int senderPlayerIndex, ObjectHeadGameplayMessage message)
@@ -289,6 +371,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         AimController aim = character.GetComponent<AimController>();
         aim?.SetAimDirection(new Vector2(message.aimX, message.aimY));
         character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex);
+        ReceivedRemoteSnapshotCount++;
     }
 
     private void ApplyFireCommand(int senderPlayerIndex, ObjectHeadGameplayMessage message)
@@ -304,7 +387,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
         character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex);
         character.GetComponent<AimController>()?.SetAimDirection(new Vector2(message.aimX, message.aimY));
-        character.GetComponent<SkillFireController>()?.FireReplicated(message.normalizedPower);
+        SkillFireController fire = character.GetComponent<SkillFireController>();
+        if (fire != null && fire.FireReplicated(message.normalizedPower))
+        {
+            ReceivedFireCommandCount++;
+        }
     }
 
     private void HandleTurnStateChanged(TurnCharacterController unused)
@@ -346,7 +433,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         }, ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
-    private async void Send(ObjectHeadGameplayMessage message, long opCode)
+    private async void Send(object message, long opCode)
     {
         try
         {

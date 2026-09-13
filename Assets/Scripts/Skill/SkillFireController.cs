@@ -51,6 +51,14 @@ public class SkillFireController : MonoBehaviour
 
     private void Awake()
     {
+        ObjectHeadBalanceTable balance = ObjectHeadBalanceTable.Load();
+        if (balance != null)
+        {
+            maxThrowSpeedPxPerSecond = Mathf.Max(1f, balance.GetFloat("throw.max_speed_px_per_second", maxThrowSpeedPxPerSecond));
+            throwSpeedMultiplier = Mathf.Max(0f, balance.GetFloat("throw.speed_multiplier", throwSpeedMultiplier));
+            fallbackPixelsPerUnit = Mathf.Max(1f, balance.GetFloat("throw.fallback_pixels_per_unit", fallbackPixelsPerUnit));
+        }
+
         turnCharacter = GetComponent<TurnCharacterController>();
         ownerCombat = GetComponent<CharacterCombat>();
         aimController = GetComponent<AimController>();
@@ -100,16 +108,16 @@ public class SkillFireController : MonoBehaviour
         FireInternal(normalizedPower, true);
     }
 
-    public void FireReplicated(float normalizedPower)
+    public bool FireReplicated(float normalizedPower)
     {
-        FireInternal(normalizedPower, false);
+        return FireInternal(normalizedPower, false);
     }
 
-    private void FireInternal(float normalizedPower, bool publishNetworkEvent)
+    private bool FireInternal(float normalizedPower, bool publishNetworkEvent)
     {
         if (aimController == null)
         {
-            return;
+            return false;
         }
 
         aimController.ConfirmFacingFromAim();
@@ -117,12 +125,15 @@ public class SkillFireController : MonoBehaviour
         if (skillSelector != null && !skillSelector.CanUseSelectedSkill())
         {
             Debug.Log($"{name} cannot fire skill {skillSelector.SelectedSkillIndex + 1}: cooldown {skillSelector.GetRemainingCooldown(skillSelector.SelectedSkillIndex)}.");
-            return;
+            return false;
         }
 
-        if (turnManager == null || !turnManager.TryBeginAction(turnCharacter))
+        bool beganAction = turnManager != null && (publishNetworkEvent
+            ? turnManager.TryBeginAction(turnCharacter)
+            : turnManager.TryBeginReplicatedAction(turnCharacter));
+        if (!beganAction)
         {
-            return;
+            return false;
         }
 
         hasFiredThisTurn = true;
@@ -149,7 +160,7 @@ public class SkillFireController : MonoBehaviour
         {
             skillSelector?.NotifySkillFired();
             StartCoroutine(GrowSeedVineRoutine(direction, normalizedPower, skillSettings));
-            return;
+            return true;
         }
 
         GameObject projectileObject = new GameObject("SkillProjectile");
@@ -183,6 +194,7 @@ public class SkillFireController : MonoBehaviour
         }
 
         skillSelector?.NotifySkillFired();
+        return true;
     }
 
     private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)

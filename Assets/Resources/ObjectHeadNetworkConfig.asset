@@ -29,6 +29,10 @@ MonoBehaviour:
     randomMapPool:
     - object_head_demo_01
   fallbackMapId: object_head_demo_01
+  titleSceneName: ObjectHeadTitle
+  mapScenes:
+  - mapId: object_head_demo_01
+    sceneName: SampleScene
   panelMargin: 12
   panelWidth: 430
   panelMaxHeight: 720

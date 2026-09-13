@@ -47,9 +47,23 @@ public sealed class ObjectHeadLobbyState
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public int revision;
     public string matchId;
+    public string roomCode;
     public string hostUserId;
     public ObjectHeadRoomSettings settings = new ObjectHeadRoomSettings();
     public ObjectHeadLobbyPlayer[] players = Array.Empty<ObjectHeadLobbyPlayer>();
+}
+
+[Serializable]
+public sealed class ObjectHeadRoomCodeRequest
+{
+    public string match_id;
+}
+
+[Serializable]
+public sealed class ObjectHeadRoomCodeResponse
+{
+    public string room_code;
+    public string match_id;
 }
 
 [Serializable]

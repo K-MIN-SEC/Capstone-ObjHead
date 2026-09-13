@@ -33,3 +33,12 @@ public sealed class ObjectHeadGameplayMessage
     public int selectedSkillIndex;
     public float normalizedPower;
 }
+
+[Serializable]
+public sealed class ObjectHeadTerrainOperationMessage
+{
+    public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
+    public string messageId;
+    public int turnSerial;
+    public TerrainEditOperation operation;
+}
