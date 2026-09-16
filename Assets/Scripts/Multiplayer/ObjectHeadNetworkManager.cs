@@ -97,6 +97,20 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         host = defaultProfile.host;
         port = defaultProfile.port;
         serverKey = defaultProfile.serverKey;
+        // Optional deployment overrides. The checked-in profile remains editable in the Inspector.
+        string overrideHost=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_HOST");
+        string overridePort=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_PORT");
+        string overrideScheme=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_SCHEME");
+        string overrideKey=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_KEY");
+        if(!string.IsNullOrEmpty(overrideHost) || !string.IsNullOrEmpty(overridePort) ||
+           !string.IsNullOrEmpty(overrideScheme) || !string.IsNullOrEmpty(overrideKey))
+        {
+            if(!string.IsNullOrEmpty(overridePort) && (!int.TryParse(overridePort,out int candidate) || candidate<1 || candidate>65535))
+                throw new InvalidOperationException("Invalid OBJECT_HEAD_SERVER_PORT");
+            if(!string.IsNullOrEmpty(overrideScheme) && overrideScheme!="http" && overrideScheme!="https")
+                throw new InvalidOperationException("Invalid OBJECT_HEAD_SERVER_SCHEME");
+            ConfigureServer(overrideScheme,overrideHost,string.IsNullOrEmpty(overridePort)?port:int.Parse(overridePort),overrideKey);
+        }
     }
 
     private void Update()

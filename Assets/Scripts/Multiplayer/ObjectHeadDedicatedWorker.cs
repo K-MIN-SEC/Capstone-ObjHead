@@ -24,7 +24,9 @@ public sealed class ObjectHeadDedicatedWorker:MonoBehaviour
             if(string.IsNullOrEmpty(secret)||secret.Length<32)throw new InvalidOperationException("Worker secret missing; refusing startup.");
             string host=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_HOST");
             string port=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_PORT");
-            network.ConfigureServer("http",host,int.TryParse(port,out int n)?n:7350,Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_KEY"));
+            string scheme=Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_SCHEME") ?? "http";
+            if(scheme!="http" && scheme!="https")throw new InvalidOperationException("Worker server scheme must be http or https.");
+            network.ConfigureServer(scheme,host,int.TryParse(port,out int n)?n:7350,Environment.GetEnvironmentVariable("OBJECT_HEAD_SERVER_KEY"));
             await network.ConnectAsync("CombatWorker",Guid.NewGuid().ToString("N"));
             while(!stopping && !network.IsInMatch)
             {

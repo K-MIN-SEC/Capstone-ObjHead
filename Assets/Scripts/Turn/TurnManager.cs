@@ -133,7 +133,7 @@ public class TurnManager : MonoBehaviour
 
     private void Update()
     {
-        if (isMatchOver)
+        if (isMatchOver || networkStartPending)
         {
             return;
         }
@@ -152,6 +152,13 @@ public class TurnManager : MonoBehaviour
     {
         locallyControlledPlayerIndex = Mathf.Clamp(localPlayerIndex, 0, 4);
         useExternalTurnAuthority = externalTurnAuthority;
+        ApplyCharacterControlState();
+    }
+
+    private bool networkStartPending;
+    public void SetNetworkStartPending(bool pending)
+    {
+        networkStartPending=pending;
         ApplyCharacterControlState();
     }
 
@@ -197,7 +204,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanCharacterMove(TurnCharacterController character)
     {
-        if (character == null || character != CurrentCharacter || isMatchOver || settlementTimeActive)
+        if (networkStartPending || character == null || character != CurrentCharacter || isMatchOver || settlementTimeActive)
         {
             return false;
         }
@@ -214,7 +221,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanCharacterFire(TurnCharacterController character)
     {
-        return character != null &&
+        return !networkStartPending && character != null &&
                character == CurrentCharacter &&
                !isMatchOver &&
                !actionUsedThisTurn &&

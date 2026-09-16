@@ -22,6 +22,15 @@ public struct TerrainEditOperation
     public float directionY;
     public int lengthPx;
     public int thicknessPx;
+    // Row-major pixel runs excluded by the authoritative character colliders.
+    // Clients must not recompute these from their interpolated character positions.
+    public int[] excludedPixelRuns;
+
+    public TerrainEditOperation WithExclusions(System.Collections.Generic.List<int> runs)
+    {
+        excludedPixelRuns = runs != null && runs.Count > 0 ? runs.ToArray() : null;
+        return this;
+    }
 
     public static TerrainEditOperation Circle(
         TerrainEditOperationKind operationKind,

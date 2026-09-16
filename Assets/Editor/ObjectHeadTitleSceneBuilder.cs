@@ -49,6 +49,7 @@ public static class ObjectHeadTitleSceneBuilder
     {
         // Data can be regenerated from the spreadsheet, but scene/prefab layout is never rebuilt here.
         ObjectHeadSpreadsheetImporter.ImportAndGetLocalization();
+        ObjectHeadServerCatalogExporter.Export();
         ValidateEditableTitleAssets();
         ObjectHeadReleaseAuthoring.Validate();
         AssetDatabase.SaveAssets();

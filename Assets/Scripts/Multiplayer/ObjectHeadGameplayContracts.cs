@@ -47,6 +47,7 @@ public sealed class ObjectHeadGameplayMessage
     public float normalizedPower;
     public float moveX;
     public bool jumpHeld;
+    public bool jumpPressed;
     public int skillId;
     public float radius;
 }

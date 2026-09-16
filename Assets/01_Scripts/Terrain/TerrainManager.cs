@@ -517,7 +517,8 @@ public class TerrainManager : MonoBehaviour
             return false;
         }
 
-        bool changed = CreateCircleInternal(worldCenter, radiusPx, terrainType, blockedColliders);
+        var exclusions = new List<int>();
+        bool changed = CreateCircleInternal(worldCenter, radiusPx, terrainType, blockedColliders, exclusions);
         ApplyTextureAndDirtyChunks(changed);
         PublishOperation(
             changed,
@@ -525,7 +526,7 @@ public class TerrainManager : MonoBehaviour
                 TerrainEditOperationKind.CreateCircle,
                 WorldToPixel(worldCenter),
                 radiusPx,
-                terrainType));
+                terrainType).WithExclusions(exclusions));
         return changed;
     }
 
@@ -541,19 +542,20 @@ public class TerrainManager : MonoBehaviour
             return false;
         }
 
+        var exclusions = new List<int>();
         bool changed = CreateEllipseInternal(
             worldCenter,
             radiusPx,
             radiusPx,
             terrainType,
-            blockedColliders);
+            blockedColliders, exclusions);
         PublishOperation(
             changed,
             TerrainEditOperation.Circle(
                 TerrainEditOperationKind.CreateCircle,
                 WorldToPixel(worldCenter),
                 radiusPx,
-                terrainType));
+                terrainType).WithExclusions(exclusions));
         return changed;
     }
 
@@ -570,12 +572,13 @@ public class TerrainManager : MonoBehaviour
             return false;
         }
 
+        var exclusions = new List<int>();
         bool changed = CreateEllipseInternal(
             worldCenter,
             radiusXPx,
             radiusYPx,
             terrainType,
-            blockedColliders);
+            blockedColliders, exclusions);
         PublishOperation(
             changed,
             TerrainEditOperation.Ellipse(
@@ -583,7 +586,7 @@ public class TerrainManager : MonoBehaviour
                 WorldToPixel(worldCenter),
                 radiusXPx,
                 radiusYPx,
-                terrainType));
+                terrainType).WithExclusions(exclusions));
         return changed;
     }
 
@@ -636,6 +639,8 @@ public class TerrainManager : MonoBehaviour
             return false;
         }
 
+        if (!ValidExclusions(operation.excludedPixelRuns)) return false;
+
         Vector2 centerWorld = PixelToWorld(
             new Vector2Int(operation.centerPixelX, operation.centerPixelY));
         bool changed;
@@ -652,7 +657,7 @@ public class TerrainManager : MonoBehaviour
                               centerWorld,
                               operation.radiusXPx,
                               operation.terrainType,
-                              null);
+                              null, null, operation.excludedPixelRuns);
                 break;
 
             case TerrainEditOperationKind.CreateEllipse:
@@ -663,7 +668,7 @@ public class TerrainManager : MonoBehaviour
                               operation.radiusXPx,
                               operation.radiusYPx,
                               operation.terrainType,
-                              null);
+                              null, null, operation.excludedPixelRuns);
                 break;
 
             case TerrainEditOperationKind.CreateBridge:
@@ -826,14 +831,16 @@ public class TerrainManager : MonoBehaviour
         Vector2 worldCenter,
         int radiusPx,
         TerrainType terrainType,
-        IEnumerable<Collider2D> blockedColliders)
+        IEnumerable<Collider2D> blockedColliders,
+        List<int> recordedExclusions = null,
+        int[] replayExclusions = null)
     {
         return CreateEllipseInternal(
             worldCenter,
             radiusPx,
             radiusPx,
             terrainType,
-            blockedColliders);
+            blockedColliders, recordedExclusions, replayExclusions);
     }
 
     private bool CreateEllipseInternal(
@@ -841,7 +848,9 @@ public class TerrainManager : MonoBehaviour
         int radiusXPx,
         int radiusYPx,
         TerrainType terrainType,
-        IEnumerable<Collider2D> blockedColliders)
+        IEnumerable<Collider2D> blockedColliders,
+        List<int> recordedExclusions = null,
+        int[] replayExclusions = null)
     {
         Vector2Int center = WorldToPixel(worldCenter);
         int radiusX = Mathf.Max(1, radiusXPx);
@@ -850,6 +859,7 @@ public class TerrainManager : MonoBehaviour
         var art=ObjectHeadPresentation.Load();
         Sprite stamp=terrainType==TerrainType.Cloud?art?.cloudTerrainSprite:terrainType==TerrainType.Created?art?.dirtTerrainSprite:null;
         bool changed = false;
+        int exclusionCursor = 0;
 
         for (int y = center.y - radiusY; y <= center.y + radiusY; y++)
         {
@@ -869,8 +879,18 @@ public class TerrainManager : MonoBehaviour
                 }
 
                 Vector2 worldPoint = PixelToWorld(pixel);
+                int pixelIndex = y * WidthPx + x;
+                if (replayExclusions != null)
+                {
+                    while (exclusionCursor < replayExclusions.Length &&
+                           pixelIndex >= (long)replayExclusions[exclusionCursor] + replayExclusions[exclusionCursor + 1])
+                        exclusionCursor += 2;
+                    if (exclusionCursor < replayExclusions.Length && pixelIndex >= replayExclusions[exclusionCursor])
+                        continue;
+                }
                 if (IsBlockedByCollider(worldPoint, blockedColliders))
                 {
+                    RecordExcludedPixel(recordedExclusions, pixelIndex);
                     continue;
                 }
 
@@ -893,6 +913,28 @@ public class TerrainManager : MonoBehaviour
         }
 
         return changed;
+    }
+
+    private static void RecordExcludedPixel(List<int> runs, int pixel)
+    {
+        if (runs == null) return;
+        int end = runs.Count;
+        if (end > 0 && runs[end - 2] + runs[end - 1] == pixel) runs[end - 1]++;
+        else { runs.Add(pixel); runs.Add(1); }
+    }
+
+    private bool ValidExclusions(int[] runs)
+    {
+        if (runs == null) return true;
+        if (runs.Length % 2 != 0) return false;
+        long previousEnd = 0, total = (long)WidthPx * HeightPx;
+        for (int i = 0; i < runs.Length; i += 2)
+        {
+            long end = (long)runs[i] + runs[i + 1];
+            if (runs[i] < previousEnd || runs[i + 1] <= 0 || end > total) return false;
+            previousEnd = end;
+        }
+        return true;
     }
 
     private bool IsBlockedByCollider(Vector2 worldPoint, IEnumerable<Collider2D> blockedColliders)

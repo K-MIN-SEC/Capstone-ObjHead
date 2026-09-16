@@ -123,7 +123,7 @@ local function start_game(state,dispatcher,presence)
   local seed=tonumber(string.sub(string.gsub(nk.uuid_v4(),"-",""),1,7),16)
   local map=state.settings.fixedMapId
   if state.settings.mapSelectionMode==1 then map=state.settings.randomMapPool[seed % #state.settings.randomMapPool+1] end
-  state.phase="loading";state.last_sequence=0
+  state.phase="loading";state.last_sequence=0;state.loaded={};state.worker_loaded=false;state.loading_started=nk.time()
   state.start={protocolVersion=rules.protocol,matchId=state.id,dedicatedAuthority=true,authorityUserId=state.worker_id,
     rulesetVersion=rules.ruleset,mode=state.settings.mode,playerCount=#players,mapSelectionMode=state.settings.mapSelectionMode,
     mapId=map,mapSeed=seed,characterSpawnSeed=seed,startingPlayerIndex=seed%#players+1,
@@ -131,9 +131,18 @@ local function start_game(state,dispatcher,presence)
   dispatcher.match_label_update(label(state))
   send(dispatcher,5,state.start)
 end
+local function try_begin_battle(state,dispatcher)
+  if state.phase~="loading" or not state.worker_loaded then return end
+  for id in pairs(state.players) do if not state.loaded[id] then return end end
+  state.phase="playing";dispatcher.match_label_update(label(state))
+  send(dispatcher,123,{protocolVersion=rules.protocol})
+end
 local function player_message(state,dispatcher,tick,presence,op,data)
   local player=state.players[presence.user_id]
   if not player then return end
+  if op==121 and state.phase=="loading" then
+    state.loaded[presence.user_id]=true;try_begin_battle(state,dispatcher);return
+  end
   if op==7 and presence.user_id==state.owner and state.phase=="playing" and state.turn and state.turn.matchOver then
     state.phase="lobby";state.turn=nil;state.last_sequence=0
     for _,p in pairs(state.players) do p.ready=false end
@@ -168,11 +177,15 @@ local function player_message(state,dispatcher,tick,presence,op,data)
     if data.kind==5 and (not integer(data.commonSlot) or data.commonSlot<0 or data.commonSlot>2) then return end
   elseif data.kind==7 then
     if not finite(data.moveX) or math.abs(data.moveX)>1 or type(data.jumpHeld)~="boolean" then return end
+    if data.jumpPressed~=nil and type(data.jumpPressed)~="boolean" then return end
   elseif data.kind~=4 then return end
   -- Preserve only the verified sender. Clients never publish snapshots, HP or terrain.
   send(dispatcher,100,data,{state.worker},presence)
 end
 function M.match_loop(ctx,dispatcher,tick,state,messages)
+  if state.phase=="loading" and nk.time()-state.loading_started>rules.loading_timeout_seconds*1000000 then
+    send(dispatcher,9,{reason="loading_timeout"});return nil
+  end
   if #ordered(state)==0 then
     state.empty_since=state.empty_since or tick
     if tick-state.empty_since>rules.empty_timeout_seconds*rules.tick_rate then send(dispatcher,9,{reason="room_empty"});return nil end
@@ -191,7 +204,7 @@ function M.match_loop(ctx,dispatcher,tick,state,messages)
     if data and data.protocolVersion==rules.protocol and (worker or rates[p.session_id]<=rules.commands_per_tick) then
       if worker then
         state.worker_tick=tick
-        if message.op_code==121 and state.phase=="loading" then state.phase="playing";dispatcher.match_label_update(label(state)) end
+        if message.op_code==121 and state.phase=="loading" then state.worker_loaded=true;try_begin_battle(state,dispatcher) end
         if state.phase=="playing" and (message.op_code==101 or message.op_code==110 or message.op_code==120) then
           if message.op_code==120 and data.kind==3 then
             if integer(data.stateSequence) and data.stateSequence>state.last_sequence then

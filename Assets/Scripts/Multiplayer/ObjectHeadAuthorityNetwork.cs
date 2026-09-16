@@ -7,7 +7,7 @@ using UnityEngine;
 
 public sealed partial class ObjectHeadNetworkManager
 {
-    public const string AuthorityRuleset="authority-0916-v1";
+    public const string AuthorityRuleset="authority-0916-v2";
     public bool UseDedicatedAuthority => config.UseDedicatedAuthority || HasCommandLineFlag("-objectHeadAuthority") || IsDedicatedWorker;
     public bool IsDedicatedWorker => HasCommandLineFlag("-objectHeadWorker");
     public bool IsCombatAuthority => UseDedicatedAuthority ? IsDedicatedWorker : IsHost;

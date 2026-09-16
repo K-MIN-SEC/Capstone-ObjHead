@@ -43,15 +43,15 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             character.GetComponent<CharacterCombat>().UseExternalHealth=!Worker;
         }
         turns.ConfigureNetworkControl(localSeat,!Worker);
+        turns.SetNetworkStartPending(true);
         network.GameplayMessageReceived+=Receive;
         if(Worker){terrain.OperationApplied+=TerrainChanged;CommonHeadUseController.UseCommitted+=CommonCommitted;ObjectHeadPresentation.ImpactCommitted+=ImpactCommitted;}
-        IsReady=true;
         if(Worker && Environment.GetCommandLineArgs().Contains("-objectHeadAuthorityTestSupply"))
         {
             foreach(var p in GameStartData.Instance.players)inventories.GetInventory(p.playerIndex).TryAdd(CommonHeadType.IronHelmet,out _);
         }
-        if(Worker)Send(121,new ObjectHeadGameplayMessage());
-        Debug.Log("[Authority] Dedicated gameplay ready, worker="+Worker);
+        Send(121,new ObjectHeadGameplayMessage());
+        Debug.Log("[Authority] Scene loaded, waiting for every participant, worker="+Worker);
     }
     private void OnDestroy()
     {
@@ -66,7 +66,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         if(string.IsNullOrEmpty(id) || id.Length>160 || !seen.Add(id))return false;
         seenOrder.Enqueue(id);while(seenOrder.Count>2048)seen.Remove(seenOrder.Dequeue());return true;
     }
-    private void Update()
+    private void LateUpdate()
     {
 #if ENABLE_INPUT_SYSTEM
         if(IsReady && !Worker && UnityEngine.InputSystem.Keyboard.current?.tabKey.wasPressedThisFrame==true)RequestEndTurn();
@@ -79,6 +79,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         var aim=current.GetComponent<AimController>();
         Send(100,new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.MovementInput,messageId=MessageId(),
             turnSerial=turns.TurnSerial,characterId=Id(current),moveX=current.InputMoveX,jumpHeld=current.InputJumpHeld,
+            jumpPressed=current.ConsumeJumpPress(),
             aimX=aim.AimDirection.x,aimY=aim.AimDirection.y});
     }
     public void RequestFire(SkillFireController fire,float power)
@@ -106,6 +107,11 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
     }
     private void Receive(long op,string sender,string json)
     {
+        if(op==123 && string.IsNullOrEmpty(sender))
+        {
+            turns.SetNetworkStartPending(false);IsReady=true;
+            Debug.Log("[Authority] All participants ready, worker="+Worker);return;
+        }
         if(!IsReady)return;
         if(Worker)
         {
@@ -117,7 +123,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             if(!characters.TryGetValue(message.characterId??"",out var target) || target!=turns.CurrentCharacter)return;
             if(message.kind==ObjectHeadGameplayMessageKind.MovementInput)
             {
-                target.SetNetworkInput(message.moveX,message.jumpHeld);
+                target.SetNetworkInput(message.moveX,message.jumpHeld,message.jumpPressed);
                 if(Finite(message.aimX) && Finite(message.aimY))target.GetComponent<AimController>().SetAimDirection(new Vector2(message.aimX,message.aimY));
                 return;
             }

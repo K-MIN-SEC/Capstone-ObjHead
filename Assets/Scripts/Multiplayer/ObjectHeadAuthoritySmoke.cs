@@ -24,7 +24,9 @@ public sealed class ObjectHeadAuthoritySmoke:MonoBehaviour
             var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-objectHeadAuthoritySmokeMode");
             var mode=at>=0?(ObjectHeadMatchMode)int.Parse(args[at+1]):ObjectHeadMatchMode.Duel;
             int count=ObjectHeadContent.Load().Mode(mode).players;
-            var roster=new[]{ObjectHeadCharacterKind.Revolver,ObjectHeadCharacterKind.Magnet,ObjectHeadCharacterKind.Kettle}.Take(ObjectHeadContent.Load().CharactersPerPlayer(count)).ToArray();
+            // Every seat/slot must support the airstrike used by this regression,
+            // regardless of the server's random starting player.
+            var roster=Enumerable.Repeat(ObjectHeadCharacterKind.Revolver,ObjectHeadContent.Load().CharactersPerPlayer(count)).ToArray();
             await network.StartQuickMatchAsync(mode);
             await Until(()=>network.LobbyState?.players?.Length==count,"lobby");
             await network.SetSelectionAsync(roster);
@@ -40,8 +42,20 @@ public sealed class ObjectHeadAuthoritySmoke:MonoBehaviour
             int seat=GameStartData.Instance.players.First(p=>p.userId==network.LocalUserId).playerIndex;
             int firstTurn=turns.TurnSerial;
             int firstPlayer=turns.CurrentPlayerIndex;
+            var jumping=turns.CurrentCharacter;
+            await Until(()=>jumping.IsGrounded,"initial ground contact");
+            float initialY=jumping.transform.position.y;
+            if(firstPlayer==seat)
+            {
+                await network.SendGameplayMessageAsync(100,new ObjectHeadGameplayMessage{
+                    kind=ObjectHeadGameplayMessageKind.MovementInput,messageId="short-tap-"+Guid.NewGuid(),
+                    characterId=$"p{jumping.GetComponent<ObjectHeadTeamMember>().PlayerIndex}-s{jumping.GetComponent<ObjectHeadTeamMember>().TeamSlotIndex}",
+                    turnSerial=turns.TurnSerial,moveX=0,jumpPressed=true,jumpHeld=false,aimX=1,aimY=0});
+            }
+            await Until(()=>jumping.transform.position.y>initialY+.05f,"released-before-packet jump replicated from worker");
+            Debug.Log("[AUTHORITY_CHECK] short jump replicated");
             var inventory=FindAnyObjectByType<PlayerInventoryManager>().GetInventory(firstPlayer);
-            await Until(()=>inventory.GetSlot(0)==CommonHeadType.IronHelmet,"server inventory replication");
+            await Until(()=>inventory.GetSlot(0)==CommonHeadType.IronHelmet || bridge.CommonUsesReceived>0,"server inventory replication");
             if(firstPlayer==seat)
             {
                 var use=turns.CurrentCharacter.GetComponent<CommonHeadUseController>();

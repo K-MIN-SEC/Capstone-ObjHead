@@ -74,7 +74,54 @@ public sealed class ObjectHeadExpansionSmoke:MonoBehaviour
         }
         var terrain=FindAnyObjectByType<TerrainManager>();var at=center+Vector2.up*3;
         terrain.CreateCircle(at,30,TerrainType.Cloud,null);Check(terrain.IsSolidWorld(at),"cloud creates collidable terrain");terrain.DestroyCircle(at,40);Check(!terrain.IsSolidWorld(at),"cloud remains destructible");
+        CheckTerrainReplay(terrain);
+#if ENABLE_INPUT_SYSTEM
+        var keyboard=UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Keyboard>();
+        var inputTarget=turns.CurrentCharacter;inputTarget.SetControlEnabled(true);
+        UnityEngine.InputSystem.InputSystem.QueueStateEvent(keyboard,new UnityEngine.InputSystem.LowLevel.KeyboardState(UnityEngine.InputSystem.Key.W));
+        UnityEngine.InputSystem.InputSystem.Update();inputTarget.SendMessage("Update");
+        inputTarget.SendMessage("FixedUpdate");
+        UnityEngine.InputSystem.InputSystem.QueueStateEvent(keyboard,new UnityEngine.InputSystem.LowLevel.KeyboardState());
+        UnityEngine.InputSystem.InputSystem.Update();inputTarget.SendMessage("Update");
+        Check(!inputTarget.InputJumpHeld && inputTarget.ConsumeJumpPress(),"short jump retained after release and physics step");
+        Check(!inputTarget.ConsumeJumpPress(),"jump press consumed exactly once");
+        UnityEngine.InputSystem.InputSystem.RemoveDevice(keyboard);
+#endif
         Debug.Log(failed?"[EXPANSION_FAIL] checks failed":"[EXPANSION_PASS] catalog, 18 heads, heal factions, shield, magnet, cloud");
         Application.Quit(failed?2:0);
+    }
+
+    private void CheckTerrainReplay(TerrainManager terrain)
+    {
+        // Reuse the same clean patch, then move the collider before replay. A client
+        // with a different interpolated position must still receive identical pixels.
+        Vector2Int pixel=new Vector2Int(terrain.WidthPx/2,terrain.HeightPx-100);
+        Vector2 point=terrain.PixelToWorld(pixel);
+        var blocker=new GameObject("TerrainReplayBlocker").AddComponent<BoxCollider2D>();
+        blocker.size=new Vector2(.18f,.8f);
+        foreach(var type in new[]{TerrainType.Created,TerrainType.Cloud})
+        {
+            terrain.DestroyCircle(point,85);blocker.transform.position=point;Physics2D.SyncTransforms();
+            TerrainEditOperation operation=default;
+            Action<TerrainEditOperation> capture=op=>operation=op;terrain.OperationApplied+=capture;
+            bool made=terrain.CreateEllipseDeferred(point,60,40,type,new[]{blocker});
+            terrain.FlushDeferredTerrainChanges();terrain.OperationApplied-=capture;
+            var expected=SamplePatch(terrain,pixel,65);
+            Check(made && operation.excludedPixelRuns?.Length>0,type+" captures collider clearance");
+            terrain.DestroyCircle(point,85);blocker.transform.position=point+Vector2.right*10;Physics2D.SyncTransforms();
+            operation=JsonUtility.FromJson<TerrainEditOperation>(JsonUtility.ToJson(operation));
+            terrain.ApplyOperation(operation);
+            Check(expected.SequenceEqual(SamplePatch(terrain,pixel,65)),type+" exact terrain replay with moved blocker");
+            operation.excludedPixelRuns=new[]{-1,5};
+            Check(!terrain.ApplyOperation(operation),"invalid terrain runs rejected");
+        }
+        Destroy(blocker.gameObject);terrain.DestroyCircle(point,85);
+    }
+    private static TerrainType[] SamplePatch(TerrainManager terrain,Vector2Int center,int radius)
+    {
+        var result=new System.Collections.Generic.List<TerrainType>();
+        for(int y=center.y-radius;y<=center.y+radius;y++)for(int x=center.x-radius;x<=center.x+radius;x++)
+            result.Add(terrain.GetTerrainTypeWorld(terrain.PixelToWorld(new Vector2Int(x,y))));
+        return result.ToArray();
     }
 }

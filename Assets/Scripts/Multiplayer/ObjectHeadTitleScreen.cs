@@ -209,6 +209,14 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }, "status_connecting");
     }
 
+    public async Task JoinDiscoveredRoomAsync(string code)
+    {
+        await EnsureConnectedAsync();
+        await network.JoinRoomAsync(code);
+        statusKey = "status_joined_room";
+        if(this != null) RefreshAll();
+    }
+
     private void JoinRoom()
     {
         string code = roomCodeInput != null ? roomCodeInput.text.Trim() : string.Empty;

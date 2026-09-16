@@ -59,13 +59,20 @@ public class TurnCharacterController : MonoBehaviour
     public bool UseNetworkInput {get;set;}
     public float InputMoveX => horizontalInput;
     public bool InputJumpHeld => jumpHeld;
+    private bool unsentJumpPress;
+    public bool ConsumeJumpPress()
+    {
+        bool pressed = unsentJumpPress;
+        unsentJumpPress = false;
+        return pressed;
+    }
     private float networkInputUntil;
-    public void SetNetworkInput(float move,bool held)
+    public void SetNetworkInput(float move,bool held,bool pressed=false)
     {
         if(!UseNetworkInput || !hasControl)return;
         horizontalInput=Mathf.Clamp(move,-1,1);
-        if(held && !jumpHeld)jumpRequested=true;
-        if(!held && jumpHeld)jumpReleased=true;
+        if(pressed || (held && !jumpHeld))jumpRequested=true;
+        if(!held && (jumpHeld || pressed))jumpReleased=true;
         jumpHeld=held;networkInputUntil=Time.unscaledTime+.35f;
         UpdateFacingFromMovement();
     }
@@ -304,6 +311,7 @@ public class TurnCharacterController : MonoBehaviour
             gamepadJumpPressed)
         {
             jumpRequested = true;
+            unsentJumpPress = true;
         }
 
         if (wasJumpHeld && !jumpHeld)
@@ -324,6 +332,7 @@ public class TurnCharacterController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
         {
             jumpRequested = true;
+            unsentJumpPress = true;
         }
 
         if (wasJumpHeld && !jumpHeld)
@@ -347,6 +356,7 @@ public class TurnCharacterController : MonoBehaviour
 
     private void ResetInput()
     {
+        unsentJumpPress = false;
         horizontalInput = 0f;
         jumpRequested = false;
         jumpHeld = false;
