@@ -12,6 +12,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb2dadf9453cdc34d9b6f1e58612c3e4, type: 3}
   m_Name: ObjectHeadContent
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadContent
+  commonHeads:
+  - type: 1
+    nameKey: 
+    sprite: {fileID: 7790682951146924568, guid: f565850f05e365740ab28f7e82e44c4e, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 0}
+    use: 0
+    spawnCount: 2
+    shieldAmount: 25
+  - type: 2
+    nameKey: 
+    sprite: {fileID: -2760808134284550240, guid: f565850f05e365740ab28f7e82e44c4e, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 0}
+    use: 0
+    spawnCount: 2
+    shieldAmount: 25
+  - type: 3
+    nameKey: 
+    sprite: {fileID: 572652655752172784, guid: f565850f05e365740ab28f7e82e44c4e, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 0}
+    use: 0
+    spawnCount: 2
+    shieldAmount: 25
+  - type: 4
+    nameKey: common_potion
+    sprite: {fileID: -1333086307896101198, guid: bf112838ab5eee042b3b82ce78606cd6, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 11400000, guid: 711059c1addc0b8468b893ed36c7f131, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+  - type: 5
+    nameKey: common_ice
+    sprite: {fileID: 3805117481210420795, guid: 5e11d2be9ec608f4f8a830a9f0a12501, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 11400000, guid: 6905a894f87c2404ca2bcb39283f2216, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+  - type: 6
+    nameKey: common_helmet
+    sprite: {fileID: 2898349426171307124, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 0}
+    use: 1
+    spawnCount: 1
+    shieldAmount: 25
+  - type: 7
+    nameKey: common_smoke
+    sprite: {fileID: 282491178868520942, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 11400000, guid: a1e9d020d944dd040b08fc500a2c776a, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
   uiFont: {fileID: 12800000, guid: 69bd4b4291fbced4b90a71350969cb08, type: 3}
   allianceColors:
   - {r: 0.8901961, g: 0.40784314, b: 0.3529412, a: 1}
@@ -35,24 +92,66 @@ MonoBehaviour:
     alliances: 01000000020000000100000002000000
     spawnSeats: 00000000030000000100000002000000
   characters:
-  - kind: 0
+  - roleKey: role_control
+    kind: 0
     nameKey: bulb_name
     descriptionKey: bulb_description
-    portrait: {fileID: 21300000, guid: 753b187146c745a8b55036875a97e937, type: 3}
+    portrait: {fileID: -110258970571113688, guid: ea9a74c871406ab43bb524e49e413dd3, type: 3}
     prefab: {fileID: 5296207041767640638, guid: b3609f2c33f1a9e49a47781bd02af407, type: 3}
-    accent: {r: 0.9882353, g: 0.8, b: 0.27450982, a: 1}
-  - kind: 1
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 85
+    throwPower: 1.15
+    knockbackResistance: 0.75
+  - roleKey: role_control
+    kind: 1
     nameKey: seed_name
     descriptionKey: seed_description
-    portrait: {fileID: 21300000, guid: dadfcfa12c9a4f55aa7bbb7a8bc3e4be, type: 3}
+    portrait: {fileID: 5285890004340435805, guid: ea9a74c871406ab43bb524e49e413dd3, type: 3}
     prefab: {fileID: 731992941968848513, guid: b84bf827627757f469806217717eeafe, type: 3}
-    accent: {r: 0.45490196, g: 0.827451, b: 0.5686275, a: 1}
-  - kind: 2
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 120
+    throwPower: 0.88
+    knockbackResistance: 1.25
+  - roleKey: role_damage
+    kind: 2
     nameKey: bomb_name
     descriptionKey: bomb_description
-    portrait: {fileID: 21300000, guid: 8897ef2e4edb452e8d4dfae68dd5d5f0, type: 3}
+    portrait: {fileID: -7769939615417320367, guid: ea9a74c871406ab43bb524e49e413dd3, type: 3}
     prefab: {fileID: 906111141468973630, guid: 85ea1caae00623d4096c3c63929e1c80, type: 3}
-    accent: {r: 0.94509804, g: 0.45882353, b: 0.34509805, a: 1}
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 100
+    throwPower: 1.1
+    knockbackResistance: 0.9
+  - roleKey: role_support
+    kind: 3
+    nameKey: revolver_name
+    descriptionKey: revolver_description
+    portrait: {fileID: -3317204714931552649, guid: 1a8dcc397eb235848baa318c14431fdb, type: 3}
+    prefab: {fileID: 2210553478456980136, guid: e79d2a7caee1c2d4bb96061ee6f1dab2, type: 3}
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 95
+    throwPower: 1
+    knockbackResistance: 1
+  - roleKey: role_control
+    kind: 4
+    nameKey: magnet_name
+    descriptionKey: magnet_description
+    portrait: {fileID: -2465167129557535653, guid: 9558b31fda08a9243af292258add5e39, type: 3}
+    prefab: {fileID: 1407408590528247898, guid: 7eb32a132651ba24ea04b940aa195132, type: 3}
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 110
+    throwPower: 1
+    knockbackResistance: 1.15
+  - roleKey: role_support
+    kind: 5
+    nameKey: kettle_name
+    descriptionKey: kettle_description
+    portrait: {fileID: -3848456670787065621, guid: 1fa478e4191838145bb0243766e3dea6, type: 3}
+    prefab: {fileID: 5353200833313586072, guid: e6333acaf98de154a81a8d082044f2aa, type: 3}
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 105
+    throwPower: 1
+    knockbackResistance: 1
   teamRules:
   - players: 2
     charactersPerPlayer: 3

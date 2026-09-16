@@ -144,6 +144,8 @@ public class CharacterCombat : MonoBehaviour
             return;
         }
 
+        if(shieldAbsorption>0){damage=Mathf.Max(0,damage-shieldAbsorption);shieldAbsorption=0;}
+        if(damage==0)return;
         if (ShouldDeferDamage())
         {
             pendingDamage += damage;
@@ -154,6 +156,20 @@ public class CharacterCombat : MonoBehaviour
 
         ApplyDamageNow(damage);
     }
+
+    public int Heal(int amount)
+    {
+        // Clients receive HP from the host. Healing never revives eliminated characters.
+        if (UseExternalHealth || isDead || amount <= 0) return 0;
+        int restored = Mathf.Min(amount, maxHp-currentHp);
+        currentHp += restored;
+        AnimateHealthLabelTo(currentHp);
+        return restored;
+    }
+
+    private int shieldAbsorption;
+    public int ShieldAbsorption=>shieldAbsorption;
+    public void GrantShield(int amount){if(!UseExternalHealth && !isDead)shieldAbsorption=Mathf.Max(shieldAbsorption,Mathf.Max(0,amount));}
 
     public int ApplyPendingDamage()
     {

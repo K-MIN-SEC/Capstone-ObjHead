@@ -431,3 +431,142 @@ MonoBehaviour:
     korean: "2\uB3002: P1\xB7P3 / P2\xB7P4\uAC00 \uD55C \uD300\uC774\uBA70, \uC544\uAD70
       \uD53C\uD574\uAC00 \uC801\uC6A9\uB429\uB2C8\uB2E4."
     english: '2v2: P1 & P3 vs P2 & P4. Friendly fire is enabled.'
+  - key: menu_play
+    korean: "\uAC8C\uC784 \uC2DC\uC791"
+    english: Play
+  - key: menu_settings
+    korean: "\uC124\uC815"
+    english: Settings
+  - key: find_room
+    korean: "\uBC29 \uCC3E\uAE30"
+    english: Find a room
+  - key: training
+    korean: "\uD6C8\uB828\uC7A5"
+    english: Training
+  - key: back
+    korean: "\uB4A4\uB85C"
+    english: Back
+  - key: confirm
+    korean: "\uD655\uC778"
+    english: Confirm
+  - key: join_code_hint
+    korean: "\uCE5C\uAD6C\uC5D0\uAC8C \uBC1B\uC740 6\uC790\uB9AC \uBC29 \uCF54\uB4DC\uB97C
+      \uC785\uB825\uD558\uC138\uC694."
+    english: Enter the six-character room code from your friend.
+  - key: resolution
+    korean: "\uD574\uC0C1\uB3C4"
+    english: Resolution
+  - key: window_mode
+    korean: "\uD654\uBA74 \uBAA8\uB4DC"
+    english: Display mode
+  - key: language
+    korean: "\uC5B8\uC5B4"
+    english: Language
+  - key: volume_bgm
+    korean: "\uBC30\uACBD\uC74C\uC545"
+    english: Music
+  - key: volume_sfx
+    korean: "\uD6A8\uACFC\uC74C"
+    english: Sound effects
+  - key: windowed
+    korean: "\uCC3D \uBAA8\uB4DC"
+    english: Windowed
+  - key: borderless
+    korean: "\uD14C\uB450\uB9AC \uC5C6\uB294 \uCC3D"
+    english: Borderless
+  - key: fullscreen
+    korean: "\uC804\uCCB4 \uD654\uBA74"
+    english: Fullscreen
+  - key: confirm_display
+    korean: "\uC774 \uC124\uC815\uC744 \uC720\uC9C0\uD560\uAE4C\uC694? {0}\uCD08
+      \uB4A4 \uC6D0\uB798\uB300\uB85C \uB3CC\uC544\uAC11\uB2C8\uB2E4."
+    english: Keep these settings? Reverting in {0}s.
+  - key: settings_saved
+    korean: "\uC124\uC815\uC744 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4."
+    english: Settings saved.
+  - key: role_all
+    korean: "\uC804\uCCB4 \uC5ED\uD560"
+    english: All roles
+  - key: role_damage
+    korean: "\uACF5\uACA9"
+    english: Damage
+  - key: role_control
+    korean: "\uC9C0\uC5ED\xB7\uC704\uCE58 \uC81C\uC5B4"
+    english: Control
+  - key: role_support
+    korean: "\uACF5\uACA9\xB7\uC9C0\uC6D0"
+    english: Support
+  - key: roster_count
+    korean: "{0} / {1}\uC885"
+    english: '{0} / {1}'
+  - key: search_character
+    korean: "\uCE90\uB9AD\uD130 \uC774\uB984 \uAC80\uC0C9"
+    english: Search characters
+  - key: revolver_name
+    korean: "\uB9AC\uBCFC\uBC84"
+    english: Revolver
+  - key: revolver_description
+    korean: "\uC9C1\uC120 \uC0AC\uACA9, \uC801\uB3C4 \uCE58\uC720\uD558\uB294 \uB179\uC0C9
+      \uD50C\uB808\uC5B4, \uC544\uAD70\uB3C4 \uB9DE\uB294 \uACF5\uC2B5\uC73C\uB85C
+      \uC804\uC7A5\uC744 \uC9C0\uC6D0\uD569\uB2C8\uB2E4."
+    english: Straight shots, an all-team healing flare, and friendly-fire airstrikes.
+  - key: magnet_name
+    korean: "\uC790\uC11D"
+    english: Magnet
+  - key: magnet_description
+    korean: "\uC778\uB825\uC73C\uB85C \uBAA8\uC73C\uACE0 \uCC99\uB825\uC73C\uB85C
+      \uBC00\uC5B4\uB0C5\uB2C8\uB2E4. \uC544\uAD70\uB3C4 \uC601\uD5A5\uBC1B\uC73C\uB2C8
+      \uC704\uCE58\uB97C \uC8FC\uC758\uD558\uC138\uC694."
+    english: Gather with attraction and scatter with repulsion. Allies are affected
+      too.
+  - key: kettle_name
+    korean: "\uC8FC\uC804\uC790"
+    english: Kettle
+  - key: kettle_description
+    korean: "\uC628\uC218\uB85C \uC8FC\uBCC0\uC744 \uCE58\uC720\uD558\uACE0, \uC99D\uAE30\uB85C
+      \uAE38\uC744 \uB9C9\uACE0, \uC555\uB825 \uD3ED\uBC1C\uB85C \uC9C0\uD615\uC744
+      \uBD80\uC229\uB2C8\uB2E4."
+    english: Heal with warm water, control paths with steam, and break terrain with
+      pressure.
+  - key: common_potion
+    korean: "\uCE58\uC720 \uD3EC\uC158"
+    english: Healing potion
+  - key: common_ice
+    korean: "\uC5BC\uC74C \uBA38\uB9AC"
+    english: Ice head
+  - key: common_helmet
+    korean: "\uCCA0\uC81C \uD5EC\uBA67"
+    english: Iron helmet
+  - key: common_smoke
+    korean: "\uC5F0\uB9C9 \uBA38\uB9AC"
+    english: Smoke head
+  - key: revolver_skill_1
+    korean: "\uC9C1\uC120 \uC0AC\uACA9"
+    english: Straight shot
+  - key: revolver_skill_2
+    korean: "\uAD6C\uD638 \uD50C\uB808\uC5B4"
+    english: Relief flare
+  - key: revolver_skill_3
+    korean: "\uACF5\uC2B5 \uC2E0\uD638"
+    english: Airstrike signal
+  - key: magnet_skill_1
+    korean: "\uC778\uB825\uD0C4"
+    english: Attraction
+  - key: magnet_skill_2
+    korean: "\uCC99\uB825\uD0C4"
+    english: Repulsion
+  - key: magnet_skill_3
+    korean: "\uC804\uC790\uC11D \uD384\uC2A4"
+    english: Electromagnetic pulse
+  - key: kettle_skill_1
+    korean: "\uB530\uB73B\uD55C \uD55C \uC794"
+    english: Warm water
+  - key: kettle_skill_2
+    korean: "\uC99D\uAE30 \uC9C0\uB300"
+    english: Steam zone
+  - key: kettle_skill_3
+    korean: "\uC555\uB825 \uD3ED\uBC1C"
+    english: Pressure burst
+  - key: reset_training
+    korean: "\uD6C8\uB828\uC7A5 \uCD08\uAE30\uD654"
+    english: Reset training

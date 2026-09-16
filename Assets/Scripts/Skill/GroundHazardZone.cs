@@ -8,6 +8,8 @@ public class GroundHazardZone : MonoBehaviour
     private const float SurfaceOffset = 0.05f;
     private const float MaxRunHeightDifference = 0.35f;
     private static Sprite whiteSprite;
+    private Sprite artwork;
+    public void SetArtwork(Sprite sprite){artwork=sprite;RebuildSegments();}
 
     private readonly Dictionary<CharacterCombat, int> overlapCounts = new Dictionary<CharacterCombat, int>();
     private readonly Dictionary<CharacterCombat, int> lastDamagedTurn = new Dictionary<CharacterCombat, int>();
@@ -310,6 +312,14 @@ public class GroundHazardZone : MonoBehaviour
         renderer.color = color;
         renderer.sortingOrder = 20;
         segmentObject.transform.localScale = new Vector3(width, thicknessWorld, 1f);
+        if(artwork!=null)
+        {
+            renderer.enabled=false;
+            var artObject=new GameObject("ZoneArtwork",typeof(SpriteRenderer));artObject.transform.SetParent(segmentObject.transform,false);
+            var art=artObject.GetComponent<SpriteRenderer>();art.sprite=artwork;art.sortingOrder=21;
+            artObject.transform.localScale=new Vector3(1f/artwork.bounds.size.x,Mathf.Max(thicknessWorld,.45f)/(thicknessWorld*artwork.bounds.size.y),1);
+            artObject.transform.localPosition=new Vector3(0,.5f,0);
+        }
 
         BoxCollider2D box = segmentObject.AddComponent<BoxCollider2D>();
         box.isTrigger = true;

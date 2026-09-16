@@ -8,6 +8,9 @@ using UnityEngine.SceneManagement;
 public sealed class ObjectHeadReleaseSmoke : MonoBehaviour
 {
     private bool failed;
+    private float deadline;
+    private void Awake(){deadline=Time.realtimeSinceStartup+90;}
+    private void Update(){if(Time.realtimeSinceStartup>deadline){Debug.LogError("[RELEASE_FAIL] Timeout");Application.Quit(2);}}
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Launch()
     {
@@ -86,6 +89,8 @@ public sealed class ObjectHeadReleaseSmoke : MonoBehaviour
             if(turns==null)continue;
             int expected=mode.players*catalog.CharactersPerPlayer(mode.players);
             Check(turns.Characters.Length==expected,"roster count "+mode.mode);
+            // A broken scene must fail the suite, not leave an unattended player running forever.
+            if(turns.Characters.Length!=expected){Application.Quit(2);yield break;}
             Check(turns.Characters.All(c=>c!=null && c.gameObject.activeInHierarchy),"active spawns "+map.id);
             Check(turns.Characters.All(c=>!c.GetComponent<CharacterCombat>().IsDead),"living spawns "+map.id);
             float[] heights=turns.Characters.Select(c=>c.transform.position.y).ToArray();

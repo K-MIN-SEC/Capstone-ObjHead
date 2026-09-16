@@ -9,7 +9,7 @@ public enum ObjectHeadMapSelectionMode
 [Serializable]
 public sealed class ObjectHeadRoomSettings
 {
-    public const string CurrentRulesetVersion = "alpha-2026-09-16-islands-v2";
+    public const string CurrentRulesetVersion = "alpha-2026-09-16-six-heads-v3";
     public ObjectHeadMatchMode mode;
 
     public string rulesetVersion = CurrentRulesetVersion;

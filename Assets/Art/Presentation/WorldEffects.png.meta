@@ -1,0 +1,344 @@
+fileFormatVersion: 2
+guid: 2d675f8f6785353419cce84ab84519f0
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -1468406432133682947
+    second: WorldEffects_0
+  - first:
+      213: 8187649785660504512
+    second: WorldEffects_1
+  - first:
+      213: 5487367070931064068
+    second: WorldEffects_2
+  - first:
+      213: -1695620776849007373
+    second: WorldEffects_3
+  - first:
+      213: -6495060705504643031
+    second: WorldEffects_4
+  - first:
+      213: -8310400477033871885
+    second: WorldEffects_5
+  - first:
+      213: -695874501793014322
+    second: WorldEffects_6
+  - first:
+      213: -7616146595980317095
+    second: WorldEffects_7
+  - first:
+      213: 9149980594025546367
+    second: WorldEffects_8
+  - first:
+      213: 893176285430138713
+    second: WorldEffects_9
+  - first:
+      213: 1632474238796407438
+    second: WorldEffects_10
+  - first:
+      213: -556623010920385421
+    second: WorldEffects_11
+  - first:
+      213: -7133633350962601327
+    second: WorldEffects_12
+  - first:
+      213: 6059047845038093289
+    second: WorldEffects_13
+  - first:
+      213: -7635649272000231613
+    second: WorldEffects_14
+  - first:
+      213: -4313359939923546238
+    second: WorldEffects_15
+  - first:
+      213: -2300066613808845562
+    second: WorldEffects_16
+  - first:
+      213: -2676748798198190241
+    second: WorldEffects_17
+  - first:
+      213: -3822286734591882606
+    second: WorldEffects_18
+  - first:
+      213: 4108939775626112607
+    second: WorldEffects_19
+  - first:
+      213: 6569666324342243795
+    second: WorldEffects_20
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 1
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: WorldEffects_0
+      rect:
+        serializedVersion: 2
+        x: 19
+        y: 601
+        width: 491
+        height: 179
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: df8e5c2412c2f9be0800000000000000
+      internalID: -1468406432133682947
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: WorldEffects_1
+      rect:
+        serializedVersion: 2
+        x: 552
+        y: 603
+        width: 443
+        height: 207
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0c9f89b991060a170800000000000000
+      internalID: 8187649785660504512
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: WorldEffects_2
+      rect:
+        serializedVersion: 2
+        x: 1032
+        y: 593
+        width: 491
+        height: 224
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4059507174b072c40800000000000000
+      internalID: 5487367070931064068
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: WorldEffects_3
+      rect:
+        serializedVersion: 2
+        x: 57
+        y: 93
+        width: 386
+        height: 352
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3fc942223e1f778e0800000000000000
+      internalID: -1695620776849007373
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: WorldEffects_4
+      rect:
+        serializedVersion: 2
+        x: 522
+        y: 128
+        width: 502
+        height: 250
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9283ccd53b8ecd5a0800000000000000
+      internalID: -6495060705504643031
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: WorldEffects_5
+      rect:
+        serializedVersion: 2
+        x: 1024
+        y: 106
+        width: 358
+        height: 389
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3f5c829ebc68bac80800000000000000
+      internalID: -8310400477033871885
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: a21d11514b745694a80b75b56cbeae6d
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      WorldEffects_0: -1468406432133682947
+      WorldEffects_1: 8187649785660504512
+      WorldEffects_2: 5487367070931064068
+      WorldEffects_3: -1695620776849007373
+      WorldEffects_4: -6495060705504643031
+      WorldEffects_5: -8310400477033871885
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -155,6 +155,8 @@ public class SkillFireController : MonoBehaviour
             : ObjectHeadSkillSettings.CreateDefault(null, projectileColor, explosionColor, maxDamage, projectileRadius * explosionRadiusMultiplier, knockbackForce);
 
         characterVisual?.PlayThrowPose(0.25f);
+        if (skillSettings.straightShot)
+            launchVelocity=direction.normalized*Mathf.Max(1f,skillSettings.straightSpeed);
 
         if (skillSettings.effectType == SkillEffectType.CreateTerrainBridge)
         {
@@ -170,7 +172,7 @@ public class SkillFireController : MonoBehaviour
         projectile.Initialize(
             launchVelocity,
             projectileRadius,
-            projectileGravityScale,
+            skillSettings.straightShot ? 0f : projectileGravityScale,
             projectileLifetime,
             projectileColor,
             ownerCombat,

@@ -3,5 +3,9 @@ public enum CommonHeadType
     None,
     Attack,
     Mobility,
-    TerrainCreation
+    TerrainCreation,
+    HealingPotion,
+    Ice,
+    IronHelmet,
+    Smoke
 }

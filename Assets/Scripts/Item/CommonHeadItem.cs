@@ -55,6 +55,12 @@ public class CommonHeadItem : MonoBehaviour
         renderer.sprite = sprite != null ? sprite : GetDefaultSprite(type);
         renderer.color = ColorForType(type);
         renderer.sortingOrder = 24;
+        var definition = ObjectHeadContent.Load()?.Common(type);
+        float visualScale = ItemVisualScale;
+        if (definition != null && renderer.sprite != null)
+            visualScale = Mathf.Max(.1f, definition.worldVisualSize)
+                / Mathf.Max(.001f, Mathf.Max(renderer.sprite.bounds.size.x, renderer.sprite.bounds.size.y));
+        itemObject.transform.localScale = Vector3.one * visualScale;
 
         Rigidbody2D body = itemObject.AddComponent<Rigidbody2D>();
         body.gravityScale = 1.5f;
@@ -67,12 +73,12 @@ public class CommonHeadItem : MonoBehaviour
 
         CircleCollider2D groundCollider = itemObject.AddComponent<CircleCollider2D>();
         groundCollider.isTrigger = false;
-        groundCollider.radius = 0.42f;
+        groundCollider.radius = 0.42f * ItemVisualScale / visualScale;
         groundCollider.sharedMaterial = GetItemPhysicsMaterial();
 
         CircleCollider2D pickupTrigger = itemObject.AddComponent<CircleCollider2D>();
         pickupTrigger.isTrigger = true;
-        pickupTrigger.radius = 0.62f;
+        pickupTrigger.radius = 0.62f * ItemVisualScale / visualScale;
 
         CommonHeadItem item = itemObject.AddComponent<CommonHeadItem>();
         item.itemType = type;
@@ -237,6 +243,8 @@ public class CommonHeadItem : MonoBehaviour
 
     public static Sprite GetDefaultSprite(CommonHeadType type)
     {
+        var definition=ObjectHeadContent.Load()?.Common(type);
+        if(definition?.sprite!=null)return definition.sprite;
         switch (type)
         {
             case CommonHeadType.Attack:

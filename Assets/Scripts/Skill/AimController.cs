@@ -392,6 +392,7 @@ public class AimController : MonoBehaviour
 
     private void UpdateVisuals(bool visible)
     {
+        visible &= !ObjectHeadSmokeZone.Contains(transform.position);
         if (targetingRoot == null || chargingRoot == null)
         {
             return;

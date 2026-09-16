@@ -5,12 +5,16 @@ using UnityEngine;
 [Serializable]
 public sealed class ObjectHeadCharacterDefinition
 {
+    public string roleKey = "role_damage";
     public ObjectHeadCharacterKind kind;
     public string nameKey;
     public string descriptionKey;
     public Sprite portrait;
     public GameObject prefab;
     public Color accent = Color.white;
+    public int maxHp = 100;
+    public float throwPower = 1;
+    public float knockbackResistance = 1;
 }
 
 [Serializable]
@@ -33,6 +37,8 @@ public sealed class ObjectHeadMapDefinition
 [CreateAssetMenu(menuName = "Object Head/Content Catalog")]
 public sealed class ObjectHeadContent : ScriptableObject
 {
+    public ObjectHeadCommonDefinition[] commonHeads=Array.Empty<ObjectHeadCommonDefinition>();
+    public ObjectHeadCommonDefinition Common(CommonHeadType type)=>commonHeads.FirstOrDefault(c=>c.type==type);
     public Font uiFont;
     public Color[] allianceColors;
     public ObjectHeadModeDefinition[] modes = Array.Empty<ObjectHeadModeDefinition>();

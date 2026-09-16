@@ -6,7 +6,10 @@ public enum ObjectHeadCharacterKind
 {
     Bulb,
     Seed,
-    Bomb
+    Bomb,
+    Revolver,
+    Magnet,
+    Kettle
 }
 
 [DisallowMultipleComponent]
@@ -31,6 +34,12 @@ public class CharacterVisual : MonoBehaviour
     [SerializeField] private Sprite bodyIdle;
     [SerializeField] private Sprite bodyThrow;
     [SerializeField] private Sprite bodyHit;
+    [Header("Authored motion frames")]
+    [SerializeField] private Sprite[] walkFrames;
+    [SerializeField] private Sprite jumpTakeoff,jumpRise,jumpFall,jumpLand,bodyCharge;
+    [SerializeField,Min(1)] private float walkFramesPerSecond=9;
+    private bool wasGrounded=true;
+    private float landUntil,takeoffUntil;
     [SerializeField] private Sprite[] authoredSkillHeads;
     [SerializeField] private bool preserveAuthoredTransforms;
     private Vector3 authoredHeadScale = Vector3.one;
@@ -52,12 +61,14 @@ public class CharacterVisual : MonoBehaviour
 
     public Sprite GetSkillHeadSprite(int skillIndex)
     {
+        if (authoredSkillHeads != null && authoredSkillHeads.Length > skillIndex && skillIndex >= 0)
+            return authoredSkillHeads[skillIndex];
         if (headSprites == null)
         {
             LoadSprites();
         }
 
-        return headSprites != null
+        return headSprites != null && (int)characterKind < headSprites.GetLength(0)
             ? headSprites[(int)characterKind, Mathf.Clamp(skillIndex, 0, 2)]
             : null;
     }
@@ -70,11 +81,29 @@ public class CharacterVisual : MonoBehaviour
         ApplyVisualState();
     }
 
+    private void LateUpdate()
+    {
+        var controller=GetComponent<TurnCharacterController>();var rigid=GetComponent<Rigidbody2D>();
+        if(controller==null || rigid==null || isDead || temporaryStateRoutine!=null)return;
+        bool grounded=controller.IsGrounded;
+        if(wasGrounded && !grounded)takeoffUntil=Time.time+.08f;
+        if(!wasGrounded && grounded)landUntil=Time.time+.12f;
+        wasGrounded=grounded;
+        Sprite sprite=bodyIdle;
+        if(GetComponent<PowerChargeController>()?.IsCharging==true && bodyCharge!=null)sprite=bodyCharge;
+        else if(!grounded)sprite=Time.time<takeoffUntil?jumpTakeoff:rigid.linearVelocity.y>0?jumpRise:jumpFall;
+        else if(Time.time<landUntil)sprite=jumpLand;
+        else if(Mathf.Abs(rigid.linearVelocity.x)>.1f && walkFrames!=null && walkFrames.Length>0)sprite=walkFrames[(int)(Time.time*walkFramesPerSecond)%walkFrames.Length];
+        if(sprite!=null)SetBodySprite(sprite);
+    }
+
     private void OnValidate()
     {
         bodyScale = Mathf.Max(0.01f, bodyScale);
         headScale = Mathf.Max(0.01f, headScale);
         selectedSkillIndex = Mathf.Clamp(selectedSkillIndex, 0, 2);
+        // Inspector edits own the authored transforms; the runtime cache is initialized in Awake.
+        if (preserveAuthoredTransforms && !Application.isPlaying) return;
         if (bodyRenderer != null || headRenderer != null)
         {
             ApplyVisualState();
@@ -257,8 +286,6 @@ public class CharacterVisual : MonoBehaviour
     {
         if (authoredSkillHeads != null && authoredSkillHeads.Length >= 3)
         {
-            headSprites = new Sprite[3, 3];
-            for (int i = 0; i < 3; i++) headSprites[(int)characterKind, i] = authoredSkillHeads[i];
             return;
         }
         bodyIdle = Resources.Load<Sprite>("Sprites/Body/body_idle");
@@ -319,9 +346,7 @@ public class CharacterVisual : MonoBehaviour
 
     private Sprite GetSelectedHeadSprite()
     {
-        return headSprites != null
-            ? headSprites[(int)characterKind, Mathf.Clamp(selectedSkillIndex, 0, 2)]
-            : null;
+        return GetSkillHeadSprite(Mathf.Clamp(selectedSkillIndex, 0, 2));
     }
 
     private void RefreshHeadSprite()
@@ -351,6 +376,9 @@ public class CharacterVisual : MonoBehaviour
         float scaleMultiplier = temporaryCommonHeadSprite != null
             ? TemporaryCommonHeadScaleMultiplier
             : 1f;
+        if (temporaryCommonHeadSprite != null && uniqueHeadSprite != null)
+            scaleMultiplier *= Mathf.Max(uniqueHeadSprite.bounds.size.x, uniqueHeadSprite.bounds.size.y)
+                / Mathf.Max(.001f, Mathf.Max(temporaryCommonHeadSprite.bounds.size.x, temporaryCommonHeadSprite.bounds.size.y));
         headRenderer.transform.localScale = (preserveAuthoredTransforms ? authoredHeadScale : Vector3.one * headScale) * scaleMultiplier;
     }
 

@@ -71,12 +71,12 @@ public class SkillProjectile : MonoBehaviour
             skillSettings.explosionRadiusWorld = impactRadius;
         }
 
-        if (skillSettings.maxDamage <= 0)
+        if (skillSettings.skillId == 0 && skillSettings.maxDamage <= 0)
         {
             skillSettings.maxDamage = damage;
         }
 
-        if (skillSettings.knockbackForce <= 0f)
+        if (skillSettings.skillId == 0 && skillSettings.knockbackForce <= 0f)
         {
             skillSettings.knockbackForce = knockback;
         }
@@ -105,7 +105,8 @@ public class SkillProjectile : MonoBehaviour
         body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.linearVelocity = velocity;
-        body.angularVelocity = CalculateFlightSpinVelocity(velocity);
+        body.angularVelocity = skillSettings.straightShot ? 0 : CalculateFlightSpinVelocity(velocity);
+        if(skillSettings.straightShot)transform.rotation=Quaternion.Euler(0,0,Mathf.Atan2(velocity.y,velocity.x)*Mathf.Rad2Deg);
         ObjectHeadPresentation.Launch(skillSettings.skillId, transform);
     }
 
@@ -252,7 +253,11 @@ public class SkillProjectile : MonoBehaviour
     {
         Vector2 fadePoint = impactPoint;
 
-        if (skillSettings.effectType == SkillEffectType.ChainExplosion)
+        if (skillSettings.effectType == SkillEffectType.Airstrike)
+        {
+            yield return ApplyAirstrikeRoutine(impactPoint);
+        }
+        else if (skillSettings.effectType == SkillEffectType.ChainExplosion)
         {
             if (UsesRollingChainPath())
             {
@@ -283,6 +288,16 @@ public class SkillProjectile : MonoBehaviour
 
         switch (skillSettings.effectType)
         {
+            case SkillEffectType.SmokeZone:
+                ObjectHeadSmokeZone.Create(impactPoint,skillSettings.explosionRadiusWorld,skillSettings.zoneDurationRounds,turnManager);
+                break;
+            case SkillEffectType.MagneticPulse:
+                ObjectHeadMagneticPulse.Apply(impactPoint,skillSettings.explosionRadiusWorld,
+                    skillSettings.maxDamage,skillSettings.knockbackForce,skillSettings.pullsTargets);
+                break;
+            case SkillEffectType.HealBurst:
+                ObjectHeadAreaHealing.Apply(impactPoint,skillSettings.explosionRadiusWorld,skillSettings.healing);
+                break;
             case SkillEffectType.CreateTerrainCircle:
                 break;
             case SkillEffectType.CreateTerrainBridge:
@@ -312,6 +327,36 @@ public class SkillProjectile : MonoBehaviour
             skillSettings.maxDamage,
             skillSettings.knockbackForce,
             fallbackHorizontalSign);
+    }
+
+    private IEnumerator ApplyAirstrikeRoutine(Vector2 target)
+    {
+        ObjectHeadPresentation.Impact(skillSettings.skillId,target,skillSettings.explosionRadiusWorld);
+        yield return new WaitForSeconds(Mathf.Max(.1f,skillSettings.delaySeconds));
+        int count=Mathf.Clamp(skillSettings.chainCount,1,12);
+        for(int i=0;i<count;i++)
+        {
+            Vector2 point=target+Vector2.right*((i-(count-1)*.5f)*skillSettings.chainSpacingWorld);
+            var art=ObjectHeadPresentation.Load();
+            float height=art!=null?art.airstrikeDropHeight:8;
+            var from=point+Vector2.up*height;
+            if(terrain!=null && terrain.TryCheckTerrainHit(from,point-Vector2.up*height,out TerrainHit ground))point=ground.point;
+            if(art?.airstrikeBombSprite!=null)
+            {
+                var bomb=new GameObject("AirstrikeBomb",typeof(SpriteRenderer));var renderer=bomb.GetComponent<SpriteRenderer>();
+                renderer.sprite=art.airstrikeBombSprite;renderer.sortingOrder=32;
+                bomb.transform.localScale=Vector3.one*(.7f/renderer.sprite.bounds.size.y);
+                float duration=Mathf.Max(.1f,art.airstrikeFallSeconds);
+                for(float elapsed=0;elapsed<duration;elapsed+=Time.deltaTime){bomb.transform.position=Vector2.Lerp(from,point,elapsed/duration);yield return null;}
+                Destroy(bomb);
+            }
+            // All targets, including the owner and allies, share the existing explosion rules.
+            DestroyTerrainAtImpact(point);
+            DamageSystem.ApplyExplosion(point,owner,skillSettings.explosionRadiusWorld,
+                skillSettings.maxDamage,skillSettings.knockbackForce);
+            ObjectHeadPresentation.Impact(skillSettings.skillId,point,skillSettings.explosionRadiusWorld);
+            yield return new WaitForSeconds(Mathf.Max(.05f,skillSettings.chainDelaySeconds));
+        }
     }
 
     private IEnumerator ApplyChainExplosionRoutine(Vector2 impactPoint)
@@ -517,7 +562,7 @@ public class SkillProjectile : MonoBehaviour
         int radiusPx = skillSettings.terrainRadiusPx > 0
             ? skillSettings.terrainRadiusPx
             : Mathf.Max(1, Mathf.RoundToInt(skillSettings.explosionRadiusWorld * terrainManager.PixelsPerUnit));
-        terrainManager.CreateCircle(impactPoint, radiusPx, TerrainType.Created, FindBlockedCharacterColliders());
+        terrainManager.CreateCircle(impactPoint, radiusPx, CreatedTerrainType, FindBlockedCharacterColliders());
     }
 
     private IEnumerator CreateTerrainBurstRoutine(Vector2 impactPoint)
@@ -590,7 +635,7 @@ public class SkillProjectile : MonoBehaviour
                 if (terrainManager.CreateCircleDeferred(
                     point,
                     stampRadiusPx,
-                    TerrainType.Created,
+                    CreatedTerrainType,
                     blockedColliders))
                 {
                     placed = true;
@@ -700,12 +745,12 @@ public class SkillProjectile : MonoBehaviour
     {
         if (skillSettings.zoneDurationRounds <= 0 ||
             skillSettings.zoneLengthWorld <= 0f ||
-            skillSettings.zoneDamagePerTurn <= 0)
+            (skillSettings.zoneDamagePerTurn <= 0 && skillSettings.slowMultiplier >= 1f))
         {
             return;
         }
 
-        GroundHazardZone.Create(
+        var zone=GroundHazardZone.Create(
             impactPoint,
             skillSettings.zoneLengthWorld,
             skillSettings.zoneThicknessWorld,
@@ -715,7 +760,10 @@ public class SkillProjectile : MonoBehaviour
             skillSettings.impactColor,
             owner,
             turnManager);
+        zone.SetArtwork(ObjectHeadPresentation.Load()?.Find(skillSettings.skillId)?.zoneSprite);
     }
+
+    private TerrainType CreatedTerrainType=>skillSettings.commonHeadTypeId==(int)CommonHeadType.TerrainCreation?TerrainType.Cloud:TerrainType.Created;
 
     private Collider2D[] FindBlockedCharacterColliders()
     {

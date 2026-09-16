@@ -61,6 +61,7 @@ public class TurnManager : MonoBehaviour
     public bool IsMatchOver => isMatchOver;
     public int WinningPlayerIndex => winningPlayerIndex;
     public float TurnDurationSeconds => turnDurationSeconds;
+    public void ConfigureTraining(float duration){turnDurationSeconds=Mathf.Max(30,duration);remainingTurnSeconds=turnDurationSeconds;}
     public float RemainingTurnSeconds => remainingTurnSeconds;
     public float TurnTime01 => turnDurationSeconds > 0f ? Mathf.Clamp01(remainingTurnSeconds / turnDurationSeconds) : 0f;
     public float ResidualMovementSeconds => residualMovementSeconds;

@@ -25,7 +25,11 @@ public class CommonHeadItemSpawner : MonoBehaviour
     private int turnsObserved;
     private System.Random random;
 
-    public int TargetTotalItems => targetCountPerType * 3;
+    public int TargetTotalItems
+    {
+        get {var entries=ObjectHeadContent.Load()?.commonHeads;if(entries==null || entries.Length==0)return targetCountPerType*3;
+            int total=0;foreach(var entry in entries)total+=entry.spawnCount;return total;}
+    }
 
     public void Configure(TurnManager manager, TerrainManager terrainManager, int seed)
     {
@@ -89,6 +93,8 @@ public class CommonHeadItemSpawner : MonoBehaviour
 
     public void RefillMissingItems()
     {
+        var entries=ObjectHeadContent.Load()?.commonHeads;
+        if(entries!=null && entries.Length>0){foreach(var entry in entries)SpawnMissingType(entry.type);return;}
         SpawnMissingType(CommonHeadType.Attack);
         SpawnMissingType(CommonHeadType.Mobility);
         SpawnMissingType(CommonHeadType.TerrainCreation);
@@ -96,7 +102,8 @@ public class CommonHeadItemSpawner : MonoBehaviour
 
     private void SpawnMissingType(CommonHeadType type)
     {
-        int missing = Mathf.Max(0, targetCountPerType - CommonHeadItem.GetActiveCount(type));
+        int desired=ObjectHeadContent.Load()?.Common(type)?.spawnCount ?? targetCountPerType;
+        int missing = Mathf.Max(0, desired - CommonHeadItem.GetActiveCount(type));
         for (int i = 0; i < missing; i++)
         {
             if (!TrySpawn(type))
@@ -213,6 +220,8 @@ public class CommonHeadItemSpawner : MonoBehaviour
 
     private Sprite GetSprite(CommonHeadType type)
     {
+        var definition=ObjectHeadContent.Load()?.Common(type);
+        if(definition?.sprite!=null)return definition.sprite;
         switch (type)
         {
             case CommonHeadType.Attack: return attackSprite;

@@ -5,6 +5,7 @@ using UnityEngine;
 public sealed class ObjectHeadSkillPresentation
 {
     public int skillId;
+    public Sprite zoneSprite;
     public GameObject launchPrefab;
     public GameObject flightPrefab;
     public GameObject impactPrefab;
@@ -15,6 +16,9 @@ public sealed class ObjectHeadSkillPresentation
 [CreateAssetMenu(menuName="Object Head/Skill Presentation")]
 public sealed class ObjectHeadPresentation : ScriptableObject
 {
+    public Sprite smokeSprite,cloudTerrainSprite,dirtTerrainSprite,airstrikeBombSprite;
+    [Min(1)]public float airstrikeDropHeight=8;
+    [Min(.1f)]public float airstrikeFallSeconds=.45f;
     public ObjectHeadSkillPresentation[] skills;
     [Min(1)] public int maximumEffects = 48;
     private static ObjectHeadPresentation loaded;

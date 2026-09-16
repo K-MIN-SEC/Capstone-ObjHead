@@ -547,6 +547,15 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
             return;
         }
 
+        var definition=content?.Character(kind);
+        if(definition!=null)
+        {
+            string prefix="character."+kind.ToString().ToLowerInvariant();
+            combat.ConfigureStats(BalanceInt(prefix+".max_hp",definition.maxHp),
+                BalanceFloat(prefix+".throw_power",definition.throwPower),
+                BalanceFloat(prefix+".knockback_resistance",definition.knockbackResistance));
+            return;
+        }
         switch (kind)
         {
             case ObjectHeadCharacterKind.Bulb:

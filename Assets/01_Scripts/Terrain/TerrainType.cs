@@ -3,5 +3,6 @@ public enum TerrainType
     Empty,
     Base,
     Created,
-    Indestructible
+    Indestructible,
+    Cloud
 }

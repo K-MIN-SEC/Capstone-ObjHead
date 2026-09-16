@@ -1,0 +1,512 @@
+fileFormatVersion: 2
+guid: 97b6cd59389b79e488512a45ec611e4b
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -8290818683585910004
+    second: BodyMotion_0
+  - first:
+      213: 517987776469417166
+    second: BodyMotion_1
+  - first:
+      213: -8203167481429553414
+    second: BodyMotion_2
+  - first:
+      213: -7523105393591503647
+    second: BodyMotion_3
+  - first:
+      213: 3701802443277691370
+    second: BodyMotion_4
+  - first:
+      213: 3879843724843913229
+    second: BodyMotion_5
+  - first:
+      213: -8708394493212261997
+    second: BodyMotion_6
+  - first:
+      213: -2266247644667997640
+    second: BodyMotion_7
+  - first:
+      213: 959718950563119341
+    second: BodyMotion_8
+  - first:
+      213: -7129812280850161401
+    second: BodyMotion_9
+  - first:
+      213: -998931122380060644
+    second: BodyMotion_10
+  - first:
+      213: 6381737355608897979
+    second: BodyMotion_11
+  - first:
+      213: -6660708429638653494
+    second: BodyMotion_12
+  - first:
+      213: -2429792080087342294
+    second: BodyMotion_13
+  - first:
+      213: -6567094035268132610
+    second: BodyMotion_14
+  - first:
+      213: 2103724393826544166
+    second: BodyMotion_15
+  - first:
+      213: 8076939365140560496
+    second: BodyMotion_16
+  - first:
+      213: 2789611773820537025
+    second: BodyMotion_17
+  - first:
+      213: -2670438851835303775
+    second: BodyMotion_18
+  - first:
+      213: -9085407937574976850
+    second: BodyMotion_19
+  - first:
+      213: -2192960152943205262
+    second: BodyMotion_20
+  - first:
+      213: -6833011151696931643
+    second: BodyMotion_21
+  - first:
+      213: 254814559265468663
+    second: BodyMotion_22
+  - first:
+      213: -8597631626142189308
+    second: BodyMotion_23
+  - first:
+      213: -8175526177621622904
+    second: BodyMotion_24
+  - first:
+      213: -6459221442751039450
+    second: BodyMotion_25
+  - first:
+      213: 9117999193219507101
+    second: BodyMotion_26
+  - first:
+      213: 3922344516603191067
+    second: BodyMotion_27
+  - first:
+      213: 1480205707712951561
+    second: BodyMotion_28
+  - first:
+      213: -6143303882440808150
+    second: BodyMotion_29
+  - first:
+      213: 6349616999921186595
+    second: BodyMotion_30
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 1
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: BodyMotion_0
+      rect:
+        serializedVersion: 2
+        x: 81
+        y: 769
+        width: 220
+        height: 251
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c0ba0bb755811fc80800000000000000
+      internalID: -8290818683585910004
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_1
+      rect:
+        serializedVersion: 2
+        x: 434
+        y: 769
+        width: 230
+        height: 255
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ecc34766323403700800000000000000
+      internalID: 517987776469417166
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_2
+      rect:
+        serializedVersion: 2
+        x: 796
+        y: 769
+        width: 225
+        height: 254
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: afe0b5c43ae782e80800000000000000
+      internalID: -8203167481429553414
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_3
+      rect:
+        serializedVersion: 2
+        x: 1172
+        y: 770
+        width: 207
+        height: 254
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1e4372fe08f889790800000000000000
+      internalID: -7523105393591503647
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_4
+      rect:
+        serializedVersion: 2
+        x: 73
+        y: 426
+        width: 229
+        height: 245
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ae96d3c85b17f5330800000000000000
+      internalID: 3701802443277691370
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_5
+      rect:
+        serializedVersion: 2
+        x: 420
+        y: 426
+        width: 271
+        height: 246
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d00995bbf49f7d530800000000000000
+      internalID: 3879843724843913229
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_6
+      rect:
+        serializedVersion: 2
+        x: 785
+        y: 424
+        width: 297
+        height: 247
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3918d14f851952780800000000000000
+      internalID: -8708394493212261997
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_7
+      rect:
+        serializedVersion: 2
+        x: 1180
+        y: 427
+        width: 230
+        height: 236
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8329f7636cbac80e0800000000000000
+      internalID: -2266247644667997640
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_8
+      rect:
+        serializedVersion: 2
+        x: 75
+        y: 74
+        width: 220
+        height: 223
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: de0868cfc4b915d00800000000000000
+      internalID: 959718950563119341
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_9
+      rect:
+        serializedVersion: 2
+        x: 408
+        y: 142
+        width: 282
+        height: 220
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 70165b48181dd0d90800000000000000
+      internalID: -7129812280850161401
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_10
+      rect:
+        serializedVersion: 2
+        x: 774
+        y: 91
+        width: 290
+        height: 263
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c18447fcf651322f0800000000000000
+      internalID: -998931122380060644
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: BodyMotion_11
+      rect:
+        serializedVersion: 2
+        x: 1192
+        y: 73
+        width: 206
+        height: 222
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bb9b8e2205c709850800000000000000
+      internalID: 6381737355608897979
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: c052eb7f23ee190479a99f64d11400a2
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      BodyMotion_0: -8290818683585910004
+      BodyMotion_1: 517987776469417166
+      BodyMotion_10: -998931122380060644
+      BodyMotion_11: 6381737355608897979
+      BodyMotion_2: -8203167481429553414
+      BodyMotion_3: -7523105393591503647
+      BodyMotion_4: 3701802443277691370
+      BodyMotion_5: 3879843724843913229
+      BodyMotion_6: -8708394493212261997
+      BodyMotion_7: -2266247644667997640
+      BodyMotion_8: 959718950563119341
+      BodyMotion_9: -7129812280850161401
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -32,6 +32,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public Button closeHelpButton;
     public Button quitButton;
     public Text localPlayerLabel;
+    public ObjectHeadCharacterBrowser characterBrowser;
+    public ObjectHeadFrontEnd frontEnd;
+    public bool InLobby => localLobby || (network != null && network.IsInMatch);
+    public ObjectHeadLanguage Language => language;
+    public string Translate(string key) => L(key);
 
     private ObjectHeadCharacterKind[] selection = Array.Empty<ObjectHeadCharacterKind>();
     private int selectedSlot;
@@ -176,7 +181,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }
     }
 
-    private void SetLanguage(ObjectHeadLanguage nextLanguage)
+    public void SetLanguage(ObjectHeadLanguage nextLanguage)
     {
         language = nextLanguage;
         PlayerPrefs.SetInt(LanguagePreferenceKey, (int)language);
@@ -292,6 +297,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void LeaveRoom()
     {
+        ObjectHeadTraining.Pending = false;
         if (localLobby) { localLobby = false; RefreshAll(); return; }
         Run(async () =>
         {
@@ -300,7 +306,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }, "status_leaving_room");
     }
 
-    private async Task EnsureConnectedAsync()
+    public async Task EnsureConnectedAsync()
     {
         if (network.IsConnected)
         {
@@ -404,6 +410,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         bool inMatch = localLobby || (network != null && network.IsInMatch);
         mainMenuPanel?.SetActive(!inMatch);
         lobbyPanel?.SetActive(inMatch);
+        frontEnd?.Sync(inMatch);
         cancelMatchmakingButton?.gameObject.SetActive(network != null && network.IsMatchmaking);
 
         if (roomSizeValueText != null)
@@ -589,7 +596,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }
     }
 
-    private void SelectCharacter(ObjectHeadCharacterKind kind)
+    public void SelectCharacter(ObjectHeadCharacterKind kind)
     {
         EnsureSelection();
         selection[selectedSlot] = kind;
@@ -613,6 +620,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
             if (outline != null) outline.enabled = i == selectedSlot;
         }
         foreach (Button button in characterButtons) button.interactable = !busy;
+        characterBrowser?.Refresh(!busy);
         selectionHint.text = string.Format(L("selection_hint"), selection.Length);
         characterDescription.text = selection.Length > 0 ? L(content.Character(selection[selectedSlot]).descriptionKey) : string.Empty;
         mapPreview.sprite = content.maps[selectedMap].preview;
@@ -622,12 +630,20 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void EnterLocalLobby()
     {
+        ObjectHeadTraining.Pending = false;
         localLobby = true;
         localSelectionPlayer = 0;
         localPlayers = Enumerable.Range(1, roomSize).Select(i => new ObjectHeadPlayerAssignment { playerIndex = i, allianceId = content.Mode(selectedMode).Alliance(i), username = "P" + i }).ToArray();
         selection = content.DefaultSelection(roomSize);
         statusKey = "local_instructions";
         RefreshAll();
+    }
+
+    public void StartTraining()
+    {
+        selectedMode=ObjectHeadMatchMode.Duel;roomSize=2;
+        EnterLocalLobby();
+        ObjectHeadTraining.Pending=true;
     }
 
     private void ConfirmLocalTeam()

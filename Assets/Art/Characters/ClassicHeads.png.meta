@@ -1,0 +1,404 @@
+fileFormatVersion: 2
+guid: ea9a74c871406ab43bb524e49e413dd3
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -110258970571113688
+    second: ClassicHeads_0
+  - first:
+      213: 8365156493578970679
+    second: ClassicHeads_1
+  - first:
+      213: 642645614954376964
+    second: ClassicHeads_2
+  - first:
+      213: 5285890004340435805
+    second: ClassicHeads_3
+  - first:
+      213: 6581382178799970928
+    second: ClassicHeads_4
+  - first:
+      213: 8168882847485076913
+    second: ClassicHeads_5
+  - first:
+      213: -16661073620851089
+    second: ClassicHeads_6
+  - first:
+      213: -7769939615417320367
+    second: ClassicHeads_7
+  - first:
+      213: 2290532884946339693
+    second: ClassicHeads_8
+  - first:
+      213: -5730775574625217481
+    second: ClassicHeads_9
+  - first:
+      213: -2449030956592717343
+    second: ClassicHeads_10
+  - first:
+      213: -8702487873959883453
+    second: ClassicHeads_11
+  - first:
+      213: 5399631088191530956
+    second: ClassicHeads_12
+  - first:
+      213: 5802902300751333205
+    second: ClassicHeads_13
+  - first:
+      213: 6239496018660696914
+    second: ClassicHeads_14
+  - first:
+      213: -1365377871351267620
+    second: ClassicHeads_15
+  - first:
+      213: -5451614463255533587
+    second: ClassicHeads_16
+  - first:
+      213: 3819289325824875362
+    second: ClassicHeads_17
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 1
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: ClassicHeads_0
+      rect:
+        serializedVersion: 2
+        x: 109
+        y: 838
+        width: 233
+        height: 324
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 82bfec9ec08487ef0800000000000000
+      internalID: -110258970571113688
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_1
+      rect:
+        serializedVersion: 2
+        x: 444
+        y: 838
+        width: 363
+        height: 385
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 736a35aa281071470800000000000000
+      internalID: 8365156493578970679
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_2
+      rect:
+        serializedVersion: 2
+        x: 913
+        y: 838
+        width: 231
+        height: 326
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 40f61db28c22be800800000000000000
+      internalID: 642645614954376964
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_3
+      rect:
+        serializedVersion: 2
+        x: 113
+        y: 418
+        width: 238
+        height: 359
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d5bef7ef3f04b5940800000000000000
+      internalID: 5285890004340435805
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_4
+      rect:
+        serializedVersion: 2
+        x: 467
+        y: 418
+        width: 319
+        height: 354
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 07a6572d834c55b50800000000000000
+      internalID: 6581382178799970928
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_5
+      rect:
+        serializedVersion: 2
+        x: 873
+        y: 418
+        width: 327
+        height: 362
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1b521205ba3bd5170800000000000000
+      internalID: 8168882847485076913
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_6
+      rect:
+        serializedVersion: 2
+        x: 83
+        y: 54
+        width: 288
+        height: 364
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f66a04187dec4cff0800000000000000
+      internalID: -16661073620851089
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_7
+      rect:
+        serializedVersion: 2
+        x: 481
+        y: 53
+        width: 290
+        height: 365
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 15cb0d03611ab2490800000000000000
+      internalID: -7769939615417320367
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: ClassicHeads_8
+      rect:
+        serializedVersion: 2
+        x: 881
+        y: 53
+        width: 287
+        height: 365
+      alignment: 9
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d67c399e58b99cf10800000000000000
+      internalID: 2290532884946339693
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 9e228f57331c8f04e840d1eaaaedf0c3
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      ClassicHeads_0: -110258970571113688
+      ClassicHeads_1: 8365156493578970679
+      ClassicHeads_2: 642645614954376964
+      ClassicHeads_3: 5285890004340435805
+      ClassicHeads_4: 6581382178799970928
+      ClassicHeads_5: 8168882847485076913
+      ClassicHeads_6: -16661073620851089
+      ClassicHeads_7: -7769939615417320367
+      ClassicHeads_8: 2290532884946339693
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

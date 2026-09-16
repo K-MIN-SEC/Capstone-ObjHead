@@ -11,11 +11,21 @@ public enum SkillEffectType
     CreateTerrainCircle,
     CreateTerrainBridge,
     CreateHazardZone,
-    CreateSlowZone
+    CreateSlowZone,
+    HealBurst,
+    Airstrike,
+    MagneticPulse,
+    SmokeZone
 }
 
+[System.Serializable]
 public struct ObjectHeadSkillSettings
 {
+    public bool straightShot;
+    public float straightSpeed;
+    public int healing;
+    public bool pullsTargets;
+    public Sprite projectileSprite;
     public SkillEffectType effectType;
     public Sprite headSprite;
     public Color projectileColor;
@@ -125,6 +135,7 @@ public struct ObjectHeadSkillSettings
 [RequireComponent(typeof(CharacterVisual))]
 public class DemoSkillSelector : MonoBehaviour
 {
+    [SerializeField] private ObjectHeadSkillDefinition[] authoredSkills;
     private const int BasicSlotCount = 3;
     private const int CommonSlotCount = 3;
     private const int TotalLoadoutSlotCount = BasicSlotCount + CommonSlotCount;
@@ -204,6 +215,8 @@ public class DemoSkillSelector : MonoBehaviour
     public int GetCooldownDuration(int skillIndex)
     {
         skillIndex = Mathf.Clamp(skillIndex, 0, 2);
+        if (authoredSkills != null && skillIndex < authoredSkills.Length && authoredSkills[skillIndex] != null)
+            return authoredSkills[skillIndex].Cooldown;
         int fallback = skillIndex == 0 ? 0 : skillIndex == 1 ? 2 : 3;
         return BalanceInt($"skill.cooldown.{skillIndex + 1}", fallback);
     }
@@ -228,6 +241,8 @@ public class DemoSkillSelector : MonoBehaviour
 
     public ObjectHeadSkillSettings GetCurrentSkillSettings()
     {
+        if (authoredSkills != null && selectedSkillIndex < authoredSkills.Length && authoredSkills[selectedSkillIndex] != null)
+            return authoredSkills[selectedSkillIndex].Resolve(characterVisual);
         Sprite headSprite = characterVisual != null ? characterVisual.CurrentHeadSprite : null;
         ObjectHeadSkillSettings settings = ObjectHeadSkillSettings.CreateDefault(
             headSprite,
@@ -303,8 +318,8 @@ public class DemoSkillSelector : MonoBehaviour
         settings.blinkBeforeEffect = true;
         settings.blinkSeconds = SkillFloat("blink_seconds", 0.7f);
         settings.blinkIntervalSeconds = SkillFloat("blink_interval_seconds", 0.085f);
-        settings.blinkSpriteA = Resources.Load<Sprite>("Sprites/Heads/head_bulb_on");
-        settings.blinkSpriteB = Resources.Load<Sprite>("Sprites/Heads/head_bulb_off");
+        settings.blinkSpriteA = GetComponent<CharacterVisual>()?.GetSkillHeadSprite(1);
+        settings.blinkSpriteB = GetComponent<CharacterVisual>()?.GetSkillHeadSprite(2);
     }
 
     private void ConfigureSeedSkill(ref ObjectHeadSkillSettings settings)
@@ -413,6 +428,7 @@ public class DemoSkillSelector : MonoBehaviour
             characterVisual.SetSkillIndex(selectedSkillIndex);
         }
     }
+    public void ResetCooldowns(){System.Array.Clear(remainingCooldowns,0,remainingCooldowns.Length);}
 
     private float SkillFloat(string stat, float fallback)
     {

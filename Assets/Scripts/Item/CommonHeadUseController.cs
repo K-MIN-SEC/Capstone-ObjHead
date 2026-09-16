@@ -276,6 +276,17 @@ public class CommonHeadUseController : MonoBehaviour
         characterVisual?.HideHeadForThrow();
         Debug.Log($"{name} used {consumedType} common head from slot {slotIndex + 6} at power {normalizedPower:0.00}.");
 
+        var definition=ObjectHeadContent.Load()?.Common(consumedType);
+        if(definition!=null && definition.use==ObjectHeadCommonUse.SelfShield)
+        {
+            combat.GrantShield(ObjectHeadBalanceTable.Load()?.GetInt("common.helmet.absorption",definition.shieldAmount) ?? definition.shieldAmount);
+            CompleteCommonAction();turnManager.NotifyActionResolved();return;
+        }
+        if(definition?.skill!=null)
+        {
+            var settings=definition.skill.Resolve(null);settings.headSprite=sprite;settings.commonHeadTypeId=(int)consumedType;
+            FireProjectile(settings,normalizedPower,"CommonHeadProjectile");return;
+        }
         switch (consumedType)
         {
             case CommonHeadType.Attack:

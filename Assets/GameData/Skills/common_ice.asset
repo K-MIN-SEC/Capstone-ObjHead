@@ -1,0 +1,69 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab4af5e3143a4fb4d9e8569ecd87fd46, type: 3}
+  m_Name: common_ice
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadSkillDefinition
+  balancePrefix: common.ice
+  nameKey: common_ice
+  descriptionKey: 
+  cooldown: 0
+  settings:
+    straightShot: 0
+    straightSpeed: 0
+    healing: 0
+    pullsTargets: 0
+    projectileSprite: {fileID: 0}
+    effectType: 6
+    headSprite: {fileID: 3805117481210420795, guid: 5e11d2be9ec608f4f8a830a9f0a12501, type: 3}
+    projectileColor: {r: 1, g: 1, b: 1, a: 1}
+    impactColor: {r: 1, g: 1, b: 1, a: 1}
+    maxDamage: 0
+    explosionRadiusWorld: 1.8
+    knockbackForce: 0
+    terrainRadiusPx: 0
+    bridgeLengthWorld: 0
+    bridgeThicknessPx: 8
+    chainCount: 1
+    chainSpacingWorld: 0.25
+    chainDelaySeconds: 0.1
+    chainMaxTotalDamage: 0
+    chainSpreadRadiusWorld: 0
+    useWideClusterPattern: 0
+    useRollingChainPath: 0
+    rollingChainMinSpeed: 0
+    rollingChainAngularSpeed: 0
+    delaySeconds: 0
+    zoneDurationTurns: 0
+    zoneDamagePerTick: 0
+    zoneTickSeconds: 1
+    zoneDurationRounds: 2
+    zoneDamagePerTurn: 0
+    zoneLengthWorld: 3.5
+    zoneThicknessWorld: 0.2
+    slowMultiplier: 0.45
+    projectileVisualDiameter: 0.58
+    blinkBeforeEffect: 0
+    blinkSeconds: 0.45
+    blinkIntervalSeconds: 0.08
+    blinkSpriteA: {fileID: 0}
+    blinkSpriteB: {fileID: 0}
+    skillId: 105
+    commonHeadTypeId: 0
+    terrainBurstCount: 0
+    terrainBurstStampRadiusPx: 0
+    terrainBurstMaxPlacementAttemptsPerStamp: 4
+    terrainBurstIntervalSeconds: 0.06
+    terrainBurstSpreadWorld: 1
+    terrainBurstVerticalBiasWorld: 0
+    finalTerrainRadiusXWorld: 1
+    finalTerrainRadiusYWorld: 0.8
+    maxBuildHeightAboveSurfaceWorld: 5

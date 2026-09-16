@@ -24,6 +24,7 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
     public GameObject menuPanel;
     public Button resumeButton;
     public Button exitButton;
+    public Button trainingResetButton;
     public GameObject resultPanel;
     public Text resultTitle;
     public Text resultDetail;
@@ -48,6 +49,7 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
         menuButton.onClick.AddListener(() => menuPanel.SetActive(true));
         resumeButton.onClick.AddListener(() => menuPanel.SetActive(false));
         exitButton.onClick.AddListener(Exit);
+        if(trainingResetButton!=null){trainingResetButton.gameObject.SetActive(FindAnyObjectByType<ObjectHeadTraining>()!=null);trainingResetButton.onClick.AddListener(ObjectHeadTraining.ResetArena);}
         resultExitButton.onClick.AddListener(Exit);
         replayButton.onClick.AddListener(Replay);
         endTurnButton.onClick.AddListener(EndTurn);

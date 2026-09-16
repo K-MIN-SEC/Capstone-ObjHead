@@ -429,3 +429,259 @@ MonoBehaviour:
     value: 0.12
     unit: "\uCD08"
     description: "\uCC29\uC9C0 \uD310\uC815 \uC720\uC9C0 \uC2DC\uAC04"
+  - key: character.revolver.max_hp
+    value: 95
+    unit: HP
+    description: "\uCD5C\uB300 \uCCB4\uB825"
+  - key: character.revolver.throw_power
+    value: 1
+    unit: "\uBC30\uC728"
+    description: "\uD22C\uCC99\uB825"
+  - key: character.revolver.knockback_resistance
+    value: 1
+    unit: "\uBC30\uC728"
+    description: "\uB109\uBC31 \uC800\uD56D"
+  - key: character.magnet.max_hp
+    value: 110
+    unit: HP
+    description: "\uCD5C\uB300 \uCCB4\uB825"
+  - key: character.magnet.throw_power
+    value: 1
+    unit: "\uBC30\uC728"
+    description: "\uD22C\uCC99\uB825"
+  - key: character.magnet.knockback_resistance
+    value: 1.15
+    unit: "\uBC30\uC728"
+    description: "\uB109\uBC31 \uC800\uD56D"
+  - key: character.kettle.max_hp
+    value: 105
+    unit: HP
+    description: "\uCD5C\uB300 \uCCB4\uB825"
+  - key: character.kettle.throw_power
+    value: 1
+    unit: "\uBC30\uC728"
+    description: "\uD22C\uCC99\uB825"
+  - key: character.kettle.knockback_resistance
+    value: 1
+    unit: "\uBC30\uC728"
+    description: "\uB109\uBC31 \uC800\uD56D"
+  - key: skill.revolver.1.max_damage
+    value: 30
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.revolver.1.radius
+    value: 0.5
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.revolver.1.speed
+    value: 28
+    unit: "\uC6D4\uB4DC \uB2E8\uC704/\uCD08"
+    description: "\uC9C1\uC120 \uD0C4\uC18D"
+  - key: skill.revolver.1.cooldown
+    value: 0
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.revolver.1.terrain_radius_px
+    value: 5
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.revolver.2.max_damage
+    value: 0
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.revolver.2.healing
+    value: 28
+    unit: HP
+    description: "\uBAA8\uB4E0 \uC9C4\uC601 \uD68C\uBCF5\uB7C9"
+  - key: skill.revolver.2.radius
+    value: 2.1
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.revolver.2.cooldown
+    value: 2
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.revolver.2.force
+    value: 0
+    unit: "\uD798"
+    description: "\uC790\uC11D \uC774\uB3D9 \uD798"
+  - key: skill.revolver.3.max_damage
+    value: 18
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.revolver.3.radius
+    value: 1.35
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.revolver.3.count
+    value: 3
+    unit: "\uAC1C"
+    description: "\uACF5\uC2B5 \uD3ED\uD0C4 \uC218"
+  - key: skill.revolver.3.spacing
+    value: 1.1
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uACF5\uC2B5 \uAC04\uACA9"
+  - key: skill.revolver.3.delay
+    value: 0.8
+    unit: "\uCD08"
+    description: "\uBC1C\uB3D9 \uB300\uAE30"
+  - key: skill.revolver.3.cooldown
+    value: 3
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.revolver.3.terrain_radius_px
+    value: 24
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.magnet.1.max_damage
+    value: 12
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.magnet.1.radius
+    value: 2.5
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.magnet.1.force
+    value: 6
+    unit: "\uD798"
+    description: "\uC790\uC11D \uC774\uB3D9 \uD798"
+  - key: skill.magnet.1.cooldown
+    value: 0
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.magnet.2.max_damage
+    value: 12
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.magnet.2.radius
+    value: 2.5
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.magnet.2.force
+    value: 6
+    unit: "\uD798"
+    description: "\uC790\uC11D \uC774\uB3D9 \uD798"
+  - key: skill.magnet.2.cooldown
+    value: 2
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.magnet.3.max_damage
+    value: 18
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.magnet.3.radius
+    value: 3.8
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.magnet.3.force
+    value: 8
+    unit: "\uD798"
+    description: "\uC790\uC11D \uC774\uB3D9 \uD798"
+  - key: skill.magnet.3.cooldown
+    value: 3
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.kettle.1.max_damage
+    value: 0
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.kettle.1.healing
+    value: 16
+    unit: HP
+    description: "\uBAA8\uB4E0 \uC9C4\uC601 \uD68C\uBCF5\uB7C9"
+  - key: skill.kettle.1.radius
+    value: 1.4
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.kettle.1.force
+    value: 0
+    unit: "\uD798"
+    description: "\uC790\uC11D \uC774\uB3D9 \uD798"
+  - key: skill.kettle.1.cooldown
+    value: 1
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.kettle.2.max_damage
+    value: 8
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.kettle.2.radius
+    value: 1.5
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.kettle.2.zone_damage
+    value: 6
+    unit: HP
+    description: "\uC7A5\uD310 \uD134 \uD53C\uD574"
+  - key: skill.kettle.2.zone_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC7A5\uD310 \uC9C0\uC18D"
+  - key: skill.kettle.2.zone_length
+    value: 4
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uC7A5\uD310 \uAE38\uC774"
+  - key: skill.kettle.2.slow
+    value: 0.75
+    unit: "\uBC30\uC728"
+    description: "\uC7A5\uD310 \uC774\uB3D9\uC18D\uB3C4"
+  - key: skill.kettle.2.cooldown
+    value: 2
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: skill.kettle.3.max_damage
+    value: 42
+    unit: HP
+    description: "\uCD5C\uB300 \uD53C\uD574"
+  - key: skill.kettle.3.radius
+    value: 2.4
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD6A8\uACFC \uBC18\uACBD"
+  - key: skill.kettle.3.delay
+    value: 0.7
+    unit: "\uCD08"
+    description: "\uBC1C\uB3D9 \uB300\uAE30"
+  - key: skill.kettle.3.terrain_radius_px
+    value: 38
+    unit: px
+    description: "\uC9C0\uD615 \uD30C\uAD34 \uBC18\uACBD"
+  - key: skill.kettle.3.cooldown
+    value: 3
+    unit: "\uC790\uAE30 \uD134"
+    description: "\uC7AC\uC0AC\uC6A9 \uB300\uAE30"
+  - key: common.potion.healing
+    value: 24
+    unit: HP
+    description: "\uD3EC\uC158 \uBAA8\uB4E0 \uC9C4\uC601 \uCE58\uC720"
+  - key: common.potion.radius
+    value: 1.8
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uD3EC\uC158 \uCE58\uC720 \uBC18\uACBD"
+  - key: common.ice.zone_length
+    value: 3.5
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uC5BC\uC74C \uC7A5\uD310 \uAE38\uC774"
+  - key: common.ice.zone_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC5BC\uC74C \uC7A5\uD310 \uC9C0\uC18D"
+  - key: common.ice.slow
+    value: 0.45
+    unit: "\uBC30\uC728"
+    description: "\uC5BC\uC74C \uC7A5\uD310 \uC774\uB3D9\uC18D\uB3C4"
+  - key: common.smoke.radius
+    value: 2.2
+    unit: "\uC6D4\uB4DC \uB2E8\uC704"
+    description: "\uC5F0\uB9C9 \uC870\uC900 \uBC29\uD574 \uBC94\uC704"
+  - key: common.smoke.zone_rounds
+    value: 2
+    unit: "\uB77C\uC6B4\uB4DC"
+    description: "\uC5F0\uB9C9 \uC9C0\uC18D"
+  - key: common.helmet.absorption
+    value: 25
+    unit: HP
+    description: "\uB2E4\uC74C \uD53C\uD574 \uD55C \uBC88 \uD761\uC218"
+  - key: training.turn_seconds
+    value: 3600
+    unit: "\uCD08"
+    description: "\uD6C8\uB828\uC7A5 \uD589\uB3D9 \uC2DC\uAC04"

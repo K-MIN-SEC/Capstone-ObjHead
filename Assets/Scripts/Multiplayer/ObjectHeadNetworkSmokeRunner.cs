@@ -50,7 +50,14 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
             }
 
             Debug.Log($"[OBJECT_HEAD_SMOKE] {profile}: lobby ready, role={(network.IsHost ? "HOST" : "CLIENT")}, host={lobby.hostUserId}");
-            await network.SetSelectionAsync(ObjectHeadContent.Load().DefaultSelection(count));
+            var selection=ObjectHeadContent.Load().DefaultSelection(count);
+            bool expanded=GetArgument("-objectHeadSmokeRoster")=="expanded";
+            if(expanded)
+            {
+                var kinds=new[]{ObjectHeadCharacterKind.Revolver,ObjectHeadCharacterKind.Magnet,ObjectHeadCharacterKind.Kettle};
+                selection=Enumerable.Range(0,selection.Length).Select(i=>kinds[i%kinds.Length]).ToArray();
+            }
+            await network.SetSelectionAsync(selection);
             await WaitUntil(() => network.LobbyState.players.Any(p=>p.userId==network.LocalUserId && ObjectHeadContent.Load().ValidSelection(p.characters,count)), "selection acknowledgement");
             await network.SetReadyAsync(true);
             await WaitUntil(
@@ -78,7 +85,7 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
                 await Task.Delay(1000);
                 TurnManager turnManager = FindAny<TurnManager>();
                 int hostSeat = GameStartData.Instance.players.First(p=>p.userId==network.LocalUserId).playerIndex;
-                for(int i=0;i<turnManager.Characters.Length && turnManager.CurrentPlayerIndex!=hostSeat;i++) turnManager.EndCurrentTurn();
+                for(int i=0;i<turnManager.Characters.Length && (turnManager.CurrentPlayerIndex!=hostSeat || (expanded && turnManager.CurrentCharacter.GetComponent<DemoSkillSelector>().CharacterKind!=ObjectHeadCharacterKind.Revolver));i++) turnManager.EndCurrentTurn();
                 await Task.Delay(300);
                 SkillFireController fire = turnManager?.CurrentCharacter?.GetComponent<SkillFireController>();
                 DemoSkillSelector selector =
@@ -89,7 +96,7 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
                 }
 
                 selector.SetSkillIndex(
-                    selector.CharacterKind == ObjectHeadCharacterKind.Bulb ? 2 : 0);
+                    selector.CharacterKind == ObjectHeadCharacterKind.Bulb || selector.CharacterKind == ObjectHeadCharacterKind.Revolver ? 2 : 0);
                 turnManager.CurrentCharacter.GetComponent<AimController>().SetAimDirection(Vector2.down);
                 fire.Fire(0.15f);
                 await WaitUntil(

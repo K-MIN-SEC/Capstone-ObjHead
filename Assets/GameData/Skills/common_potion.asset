@@ -1,0 +1,69 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab4af5e3143a4fb4d9e8569ecd87fd46, type: 3}
+  m_Name: common_potion
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadSkillDefinition
+  balancePrefix: common.potion
+  nameKey: common_potion
+  descriptionKey: 
+  cooldown: 0
+  settings:
+    straightShot: 0
+    straightSpeed: 0
+    healing: 24
+    pullsTargets: 0
+    projectileSprite: {fileID: 0}
+    effectType: 7
+    headSprite: {fileID: -1333086307896101198, guid: bf112838ab5eee042b3b82ce78606cd6, type: 3}
+    projectileColor: {r: 1, g: 1, b: 1, a: 1}
+    impactColor: {r: 1, g: 1, b: 1, a: 1}
+    maxDamage: 0
+    explosionRadiusWorld: 1.8
+    knockbackForce: 0
+    terrainRadiusPx: 0
+    bridgeLengthWorld: 0
+    bridgeThicknessPx: 8
+    chainCount: 1
+    chainSpacingWorld: 0.25
+    chainDelaySeconds: 0.1
+    chainMaxTotalDamage: 0
+    chainSpreadRadiusWorld: 0
+    useWideClusterPattern: 0
+    useRollingChainPath: 0
+    rollingChainMinSpeed: 0
+    rollingChainAngularSpeed: 0
+    delaySeconds: 0
+    zoneDurationTurns: 0
+    zoneDamagePerTick: 0
+    zoneTickSeconds: 1
+    zoneDurationRounds: 0
+    zoneDamagePerTurn: 0
+    zoneLengthWorld: 0
+    zoneThicknessWorld: 0.2
+    slowMultiplier: 1
+    projectileVisualDiameter: 0.58
+    blinkBeforeEffect: 0
+    blinkSeconds: 0.45
+    blinkIntervalSeconds: 0.08
+    blinkSpriteA: {fileID: 0}
+    blinkSpriteB: {fileID: 0}
+    skillId: 104
+    commonHeadTypeId: 0
+    terrainBurstCount: 0
+    terrainBurstStampRadiusPx: 0
+    terrainBurstMaxPlacementAttemptsPerStamp: 4
+    terrainBurstIntervalSeconds: 0.06
+    terrainBurstSpreadWorld: 1
+    terrainBurstVerticalBiasWorld: 0
+    finalTerrainRadiusXWorld: 1
+    finalTerrainRadiusYWorld: 0.8
+    maxBuildHeightAboveSurfaceWorld: 5

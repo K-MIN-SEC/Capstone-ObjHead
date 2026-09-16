@@ -800,7 +800,7 @@ public class TerrainManager : MonoBehaviour
                 }
 
                 TerrainType currentType = terrainTypeMask[x, y];
-                if (currentType != TerrainType.Base && currentType != TerrainType.Created)
+                if (currentType != TerrainType.Base && currentType != TerrainType.Created && currentType != TerrainType.Cloud)
                 {
                     continue;
                 }
@@ -842,6 +842,8 @@ public class TerrainManager : MonoBehaviour
         int radiusX = Mathf.Max(1, radiusXPx);
         int radiusY = Mathf.Max(1, radiusYPx);
         Color fillColor = ColorForTerrainType(terrainType);
+        var art=ObjectHeadPresentation.Load();
+        Sprite stamp=terrainType==TerrainType.Cloud?art?.cloudTerrainSprite:terrainType==TerrainType.Created?art?.dirtTerrainSprite:null;
         bool changed = false;
 
         for (int y = center.y - radiusY; y <= center.y + radiusY; y++)
@@ -867,9 +869,18 @@ public class TerrainManager : MonoBehaviour
                     continue;
                 }
 
+                Color pixelColor=fillColor;
+                if(stamp!=null)
+                {
+                    Rect rect=stamp.rect;
+                    float u=(normalizedX+1)*.5f,v=(normalizedY+1)*.5f;
+                    pixelColor=stamp.texture.GetPixel(Mathf.Clamp((int)(rect.x+u*(rect.width-1)),0,stamp.texture.width-1),Mathf.Clamp((int)(rect.y+v*(rect.height-1)),0,stamp.texture.height-1));
+                    if(pixelColor.a<.15f)continue;
+                    pixelColor.a=1;
+                }
                 solidMask[x, y] = true;
                 terrainTypeMask[x, y] = terrainType;
-                runtimeVisualTexture.SetPixel(x, y, fillColor);
+                runtimeVisualTexture.SetPixel(x, y, pixelColor);
                 runtimeCollisionTexture.SetPixel(x, y, Color.white);
                 MarkDirtyPixelAndNeighbors(x, y);
                 changed = true;
@@ -1039,6 +1050,7 @@ public class TerrainManager : MonoBehaviour
         switch (terrainType)
         {
             case TerrainType.Created: return createdTerrainColor;
+            case TerrainType.Cloud: return Color.white;
             case TerrainType.Indestructible: return indestructibleTerrainColor;
             case TerrainType.Base: return baseTerrainColor;
             default: return Color.clear;
