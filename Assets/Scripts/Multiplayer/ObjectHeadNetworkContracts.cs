@@ -9,7 +9,8 @@ public enum ObjectHeadMapSelectionMode
 [Serializable]
 public sealed class ObjectHeadRoomSettings
 {
-    public const string CurrentRulesetVersion = "demo-2026-09-15";
+    public const string CurrentRulesetVersion = "alpha-2026-09-16-islands-v2";
+    public ObjectHeadMatchMode mode;
 
     public string rulesetVersion = CurrentRulesetVersion;
     public int minPlayers = 2;
@@ -23,6 +24,7 @@ public sealed class ObjectHeadRoomSettings
         return new ObjectHeadRoomSettings
         {
             rulesetVersion = rulesetVersion,
+            mode = mode,
             minPlayers = minPlayers,
             maxPlayers = maxPlayers,
             mapSelectionMode = mapSelectionMode,
@@ -39,6 +41,14 @@ public sealed class ObjectHeadLobbyPlayer
     public string username;
     public bool ready;
     public int playerIndex;
+    public ObjectHeadCharacterKind[] characters = Array.Empty<ObjectHeadCharacterKind>();
+}
+
+[Serializable]
+public sealed class ObjectHeadSelectionRequest
+{
+    public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
+    public ObjectHeadCharacterKind[] characters;
 }
 
 [Serializable]
@@ -89,13 +99,15 @@ public sealed class ObjectHeadSettingsRequest
 
 public static class ObjectHeadNetworkProtocol
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 3;
 
     public const long PlayerHello = 1;
     public const long LobbyState = 2;
     public const long ReadyRequest = 3;
     public const long SettingsRequest = 4;
     public const long GameStart = 5;
+    public const long SelectionRequest = 6;
+    public const long ReturnToLobby = 7;
 
     // Gameplay opcodes are reserved now so lobby work never collides with them.
     public const long GameplayCommand = 100;

@@ -12,6 +12,11 @@ public class ObjectHeadCameraController : MonoBehaviour
     [SerializeField, Min(0.1f)] private float followLerp = 8f;
     [SerializeField, Min(0.1f)] private float manualPanSpeed = 9f;
     [SerializeField, Min(0.1f)] private float zoomSpeed = 7f;
+    [Header("Mouse wheel (independent of frame rate)")]
+    [Tooltip("Fraction of the current view height changed by one wheel notch. 0.16 = 16%.")]
+    [SerializeField, Range(0.01f, 0.5f)] private float wheelZoomFraction = 0.16f;
+    [Tooltip("Used ONLY when Input Settings keeps the platform-specific range. Unity's default normalized scroll already reports 1 per notch.")]
+    [SerializeField, Min(1f)] private float wheelUnitsPerNotch = 120f;
     [SerializeField, Min(1f)] private float minSize = 4f;
     [SerializeField, Min(1f)] private float defaultPlaySize = 7.5f;
     [SerializeField, Min(1f)] private float maxSize = 18f;
@@ -147,6 +152,7 @@ public class ObjectHeadCameraController : MonoBehaviour
     {
         Vector2 pan = Vector2.zero;
         float zoomDelta = 0f;
+        float wheelNotches = 0f;
         bool focusCharacter = false;
         bool overview = false;
 
@@ -167,7 +173,9 @@ public class ObjectHeadCameraController : MonoBehaviour
         Mouse mouse = Mouse.current;
         if (mouse != null)
         {
-            zoomDelta -= mouse.scroll.ReadValue().y * 0.035f;
+            wheelNotches = NormalizeWheelNotches(mouse.scroll.ReadValue().y,
+                InputSystem.settings.scrollDeltaBehavior == InputSettings.ScrollDeltaBehavior.UniformAcrossAllPlatforms,
+                wheelUnitsPerNotch);
             if (mouse.middleButton.isPressed || mouse.rightButton.isPressed)
             {
                 pan -= mouse.delta.ReadValue() * 0.018f;
@@ -182,7 +190,7 @@ public class ObjectHeadCameraController : MonoBehaviour
         if (Input.GetKey(KeyCode.Semicolon)) pan.x += 1f;
         if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) zoomDelta += 1f;
         if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) zoomDelta -= 1f;
-        zoomDelta -= Input.mouseScrollDelta.y * 0.25f;
+        wheelNotches = Input.mouseScrollDelta.y;
         if (Input.GetMouseButton(1) || Input.GetMouseButton(2))
         {
             pan.x -= Input.GetAxisRaw("Mouse X") * 12f;
@@ -214,17 +222,31 @@ public class ObjectHeadCameraController : MonoBehaviour
                 transform.position + (Vector3)(panStep * manualPanSpeed * Time.unscaledDeltaTime));
         }
 
-        if (Mathf.Abs(zoomDelta) > 0f)
+        // Scroll is an accumulated event, not a held velocity. Multiplying it by deltaTime
+        // made high-refresh-rate machines zoom less and made keyboard/mouse disagree.
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) wheelNotches = 0f;
+        if (Mathf.Abs(zoomDelta) > 0f || Mathf.Abs(wheelNotches) > 0f)
         {
             overviewMode = false;
             manualControl = true;
             forceCharacterFocus = false;
             targetCamera.orthographicSize = Mathf.Clamp(
-                targetCamera.orthographicSize + zoomDelta * zoomSpeed * Time.unscaledDeltaTime,
+                WheelZoomSize(targetCamera.orthographicSize, wheelNotches, wheelZoomFraction) + zoomDelta * zoomSpeed * Time.unscaledDeltaTime,
                 minSize,
                 maxSize);
             transform.position = ClampToTerrain(transform.position);
         }
+    }
+
+    public static float WheelZoomSize(float size, float notches, float fraction)
+    {
+        return size * Mathf.Pow(1f - Mathf.Clamp(fraction, .01f, .5f), notches);
+    }
+
+    public static float NormalizeWheelNotches(float delta, bool alreadyNormalized, float rawUnitsPerNotch)
+    {
+        return alreadyNormalized ? delta : delta / Mathf.Max(1f, rawUnitsPerNotch);
     }
 
     private void ToggleTerrainOverview()

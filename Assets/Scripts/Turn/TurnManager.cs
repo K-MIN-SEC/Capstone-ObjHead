@@ -342,10 +342,12 @@ public class TurnManager : MonoBehaviour
         SubscribeCharacterDeaths();
     }
 
-    public void SetCharacters(TurnCharacterController[] turnCharacters)
+    public void SetCharacters(TurnCharacterController[] turnCharacters, int firstPlayer = 1)
     {
         UnsubscribeCharacterDeaths();
         characters = turnCharacters ?? new TurnCharacterController[0];
+        int first = Array.FindIndex(characters, c => c != null && c.GetComponent<ObjectHeadTeamMember>()?.PlayerIndex == firstPlayer);
+        if (first >= 0) startingIndex = first;
         isMatchOver = false;
         winningPlayerIndex = -1;
         victoryCheckPending = false;
@@ -359,6 +361,7 @@ public class TurnManager : MonoBehaviour
 
     public void NotifyCharacterDied(CharacterCombat combat)
     {
+        if (useExternalTurnAuthority) return;
         if (isMatchOver || combat == null)
         {
             return;
@@ -697,6 +700,7 @@ public class TurnManager : MonoBehaviour
 
     private bool TryResolveVictory()
     {
+        if (useExternalTurnAuthority) return false;
         HashSet<int> alivePlayers = new HashSet<int>();
         bool hasTeamInfo = false;
         if (characters == null)
@@ -707,6 +711,7 @@ public class TurnManager : MonoBehaviour
         for (int i = 0; i < characters.Length; i++)
         {
             TurnCharacterController character = characters[i];
+            if (character != null && character.GetComponent<ObjectHeadTeamMember>() != null) hasTeamInfo = true;
             if (!CanTakeTurn(character))
             {
                 continue;
@@ -716,7 +721,7 @@ public class TurnManager : MonoBehaviour
             if (member != null)
             {
                 hasTeamInfo = true;
-                alivePlayers.Add(member.PlayerIndex);
+                alivePlayers.Add(member.AllianceId);
             }
             else
             {
@@ -724,6 +729,7 @@ public class TurnManager : MonoBehaviour
             }
         }
 
+        if (hasTeamInfo && alivePlayers.Count == 0) { EndMatch(-1); return true; }
         if (!hasTeamInfo || alivePlayers.Count != 1)
         {
             victoryCheckPending = false;
@@ -737,6 +743,11 @@ public class TurnManager : MonoBehaviour
         }
 
         return false;
+    }
+
+    public void ApplyNetworkMatchResult(int winner)
+    {
+        if (useExternalTurnAuthority && !isMatchOver) EndMatch(winner);
     }
 
     private void EndMatch(int playerIndex)

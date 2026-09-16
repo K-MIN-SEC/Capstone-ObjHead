@@ -6,6 +6,8 @@ public sealed class ObjectHeadPlayerAssignment
     public string userId;
     public string username;
     public int playerIndex;
+    public int allianceId;
+    public ObjectHeadCharacterKind[] characters = Array.Empty<ObjectHeadCharacterKind>();
 }
 
 [Serializable]
@@ -15,6 +17,8 @@ public sealed class GameStartData
 
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public string matchId;
+    public bool localMatch;
+    public ObjectHeadMatchMode mode;
     public string rulesetVersion;
     public int playerCount;
     public ObjectHeadMapSelectionMode mapSelectionMode;

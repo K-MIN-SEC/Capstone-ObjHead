@@ -9,6 +9,7 @@ public class ObjectHeadTeamMember : MonoBehaviour
     [SerializeField] private string characterLabel = "Character";
 
     public int PlayerIndex => playerIndex;
+    public int AllianceId => ObjectHeadMatchRules.Alliance(playerIndex);
     public int TeamSlotIndex => teamSlotIndex;
     public string CharacterLabel => characterLabel;
     public string DisplayName => $"P{playerIndex}-{teamSlotIndex} {characterLabel}";
@@ -29,6 +30,9 @@ public static class ObjectHeadTeamColors
 
     public static Color GetColor(int playerIndex)
     {
+        var palette = ObjectHeadContent.Load()?.allianceColors;
+        int alliance = ObjectHeadMatchRules.Alliance(playerIndex);
+        if (palette != null && alliance > 0 && alliance <= palette.Length) return palette[alliance - 1];
         if (playerIndex == 1)
         {
             return TeamOne;

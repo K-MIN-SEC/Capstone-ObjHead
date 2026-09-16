@@ -106,6 +106,7 @@ public class SkillProjectile : MonoBehaviour
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
         body.linearVelocity = velocity;
         body.angularVelocity = CalculateFlightSpinVelocity(velocity);
+        ObjectHeadPresentation.Launch(skillSettings.skillId, transform);
     }
 
     private void FixedUpdate()
@@ -269,6 +270,7 @@ public class SkillProjectile : MonoBehaviour
         }
         else
         {
+            ObjectHeadPresentation.Impact(skillSettings.skillId, impactPoint, skillSettings.explosionRadiusWorld);
             ApplySkillEffect(impactPoint);
         }
 
@@ -458,6 +460,7 @@ public class SkillProjectile : MonoBehaviour
 
     private void SpawnExplosionMarker(Vector2 point)
     {
+        if (ObjectHeadPresentation.Impact(skillSettings.skillId, point, skillSettings.explosionRadiusWorld)) return;
         GameObject marker = new GameObject("ChainExplosionMarker");
         marker.transform.position = point;
         SpriteRenderer renderer = marker.AddComponent<SpriteRenderer>();
@@ -666,6 +669,7 @@ public class SkillProjectile : MonoBehaviour
 
     private void SpawnGrowthMarker(Vector2 point)
     {
+        if (ObjectHeadPresentation.Impact(skillSettings.skillId, point, .25f)) return;
         GameObject marker = new GameObject("TerrainGrowthMarker");
         marker.transform.position = point;
         SpriteRenderer renderer = marker.AddComponent<SpriteRenderer>();
@@ -847,6 +851,16 @@ public class SkillProjectile : MonoBehaviour
     private IEnumerator ExplosionFadeRoutine(Vector2 impactPoint)
     {
         DisablePhysicsAtImpact(impactPoint);
+
+        // Authored effects replace the old opaque circle, without changing resolution timing.
+        if (ObjectHeadPresentation.Load()?.Find(skillSettings.skillId)?.impactPrefab != null)
+        {
+            GetComponent<SpriteRenderer>().enabled = false;
+            CompleteTurn();
+            yield return new WaitForSeconds(Mathf.Max(.01f, explosionFadeSeconds));
+            Destroy(gameObject);
+            yield break;
+        }
 
         SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
         transform.position = impactPoint;

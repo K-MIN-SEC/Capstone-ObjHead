@@ -39,6 +39,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
     public event Action<GameStartData> MatchStarting;
     public event Action<string> LogMessage;
     public event Action<long, string, string> GameplayMessageReceived;
+    public event Action<string> SessionInterrupted;
 
     public string Status => status;
     public string MatchId => currentMatch != null ? currentMatch.Id : string.Empty;
@@ -144,7 +145,8 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         {
             client = new Client(scheme, host, port, serverKey);
             string authId = BuildStableTestIdentity(localProfileId);
-            session = await client.AuthenticateCustomAsync(authId, displayName, true);
+            // Nakama usernames are globally unique; the lobby nickname is not an account identifier.
+            session = await client.AuthenticateCustomAsync(authId, null, true);
             socket = Nakama.Socket.From(client);
             SubscribeSocket(socket);
             await socket.ConnectAsync(session, true);
@@ -184,6 +186,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             lobbyState = null;
             roomCode = string.Empty;
             gameStarting = false;
+            GameStartData.Clear();
             SetStatus("Offline");
             LobbyChanged?.Invoke(null);
         }
@@ -230,23 +233,29 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         await SendAsync(ObjectHeadNetworkProtocol.PlayerHello, new ObjectHeadPlayerHello { username = displayName });
     }
 
-    public async Task StartQuickMatchAsync(int playerCount = 2)
+    public Task StartQuickMatchAsync(int playerCount = 2) => StartQuickMatchAsync(playerCount == 2 ? ObjectHeadMatchMode.Duel : playerCount == 4 ? ObjectHeadMatchMode.FreeForAll : throw new ArgumentException("unsupported_mode"));
+
+    private ObjectHeadMatchMode pendingMatchMode;
+    public async Task StartQuickMatchAsync(ObjectHeadMatchMode mode)
     {
         EnsureConnected();
         await LeaveCurrentMatchAsync();
 
-        int count = Mathf.Clamp(playerCount, 2, 4);
+        var definition = ObjectHeadContent.Load().Mode(mode) ?? throw new ArgumentException("unsupported_mode");
+        int count = definition.players;
+        pendingMatchMode = mode;
         pendingMatchPlayerCount = count;
         Dictionary<string, string> stringProperties = new Dictionary<string, string>
         {
             { "game", "object_head_battle" },
-            { "ruleset", ObjectHeadRoomSettings.CurrentRulesetVersion }
+            { "ruleset", ObjectHeadRoomSettings.CurrentRulesetVersion },
+            { "mode", mode.ToString() }
         };
         Dictionary<string, double> numericProperties = new Dictionary<string, double>
         {
             { "player_count", count }
         };
-        string query = "+properties.game:object_head_battle +properties.ruleset:" + ObjectHeadRoomSettings.CurrentRulesetVersion;
+        string query = "+properties.game:object_head_battle +properties.ruleset:" + ObjectHeadRoomSettings.CurrentRulesetVersion + " +properties.mode:" + mode;
 
         matchmakerTicket = await socket.AddMatchmakerAsync(query, count, count, stringProperties, numericProperties);
         SetStatus($"Matchmaking for {count} players...");
@@ -264,9 +273,54 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         SetStatus("Matchmaking cancelled.");
     }
 
+    public async Task SetSelectionAsync(ObjectHeadCharacterKind[] selection)
+    {
+        EnsureInMatch();
+        if (GameStartData.Instance != null) throw new InvalidOperationException("match_in_progress");
+        if (!ObjectHeadContent.Load().ValidSelection(selection, lobbyState.settings.maxPlayers))
+            throw new InvalidOperationException("selection_required");
+        if (IsHost)
+        {
+            ApplySelection(LocalUserId, selection);
+            await BroadcastLobbyStateAsync();
+        }
+        else await SendAsync(ObjectHeadNetworkProtocol.SelectionRequest, new ObjectHeadSelectionRequest { characters = selection });
+    }
+
+    private void ApplySelection(string userId, ObjectHeadCharacterKind[] selection)
+    {
+        ObjectHeadLobbyPlayer player = lobbyState?.players?.FirstOrDefault(p => p.userId == userId);
+        if (player == null || !ObjectHeadContent.Load().ValidSelection(selection, lobbyState.settings.maxPlayers)) return;
+        player.characters = (ObjectHeadCharacterKind[])selection.Clone();
+        player.ready = false;
+        IncrementLobbyRevision();
+        NotifyLobbyChanged();
+    }
+
+    public async Task ReturnToLobbyAsync()
+    {
+        EnsureInMatch();
+        if (!IsHost) throw new InvalidOperationException("host_only");
+        await SendAsync(ObjectHeadNetworkProtocol.ReturnToLobby, new ObjectHeadReadyRequest());
+        ApplyReturnToLobby();
+        await BroadcastLobbyStateAsync();
+    }
+
+    private void ApplyReturnToLobby()
+    {
+        GameStartData.Clear();
+        gameStarting = false;
+        foreach (ObjectHeadLobbyPlayer player in lobbyState.players) player.ready = false;
+        if (IsHost) IncrementLobbyRevision();
+        SceneManager.LoadScene(config.TitleSceneName);
+    }
+
     public async Task SetReadyAsync(bool ready)
     {
         EnsureInMatch();
+        ObjectHeadLobbyPlayer local = lobbyState?.players?.FirstOrDefault(p => p.userId == LocalUserId);
+        if (ready && (local == null || !ObjectHeadContent.Load().ValidSelection(local.characters, lobbyState.settings.maxPlayers)))
+            throw new InvalidOperationException("selection_required");
         if (IsHost)
         {
             UpsertPlayer(LocalUserId, displayName, ready);
@@ -285,7 +339,15 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         ObjectHeadRoomSettings normalized = NormalizeSettings(settings);
         if (IsHost)
         {
+            if (normalized.maxPlayers < lobbyState.players.Length)
+                throw new InvalidOperationException("room_capacity_too_small");
             lobbyState.settings = normalized;
+            foreach (ObjectHeadLobbyPlayer player in lobbyState.players)
+            {
+                player.ready = false;
+                if (!ObjectHeadContent.Load().ValidSelection(player.characters, normalized.maxPlayers))
+                    player.characters = Array.Empty<ObjectHeadCharacterKind>();
+            }
             IncrementLobbyRevision();
             NotifyLobbyChanged();
             await BroadcastLobbyStateAsync();
@@ -333,7 +395,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         }
 
         ObjectHeadLobbyPlayer[] players = lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>();
-        if (players.Length < lobbyState.settings.minPlayers)
+        if (players.Length < lobbyState.settings.minPlayers || players.Length > lobbyState.settings.maxPlayers)
         {
             reason = $"Need at least {lobbyState.settings.minPlayers} players.";
             return false;
@@ -342,6 +404,12 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         if (players.Any(player => !player.ready))
         {
             reason = "Every player must be ready.";
+            return false;
+        }
+
+        if (players.Any(player => !ObjectHeadContent.Load().ValidSelection(player.characters, players.Length)))
+        {
+            reason = "selection_required";
             return false;
         }
 
@@ -362,6 +430,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             lobbyState = null;
             SetStatus("Disconnected: " + reason);
             NotifyLobbyChanged();
+            SessionInterrupted?.Invoke("connection_lost");
         });
         targetSocket.ReceivedMatchPresence += presenceEvent => Enqueue(() => HandlePresenceChanged(presenceEvent));
         targetSocket.ReceivedMatchState += matchState => Enqueue(() => HandleMatchState(matchState));
@@ -454,6 +523,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
     private ObjectHeadRoomSettings BuildQuickMatchSettings()
     {
         ObjectHeadRoomSettings settings = config.DefaultRoomSettings;
+        settings.mode = pendingMatchMode;
         settings.minPlayers = pendingMatchPlayerCount;
         settings.maxPlayers = pendingMatchPlayerCount;
         return settings;
@@ -467,6 +537,11 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         }
 
         currentMatch.UpdatePresences(presenceEvent);
+        if (presenceEvent.Leaves.Any(p => p.UserId == HostUserId) ||
+            (GameStartData.Instance != null && presenceEvent.Leaves.Any()))
+        {
+            SessionInterrupted?.Invoke("player_disconnected");
+        }
         if (lobbyState == null || !IsHost)
         {
             return;
@@ -505,6 +580,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
                     if (IsHost)
                     {
                         ObjectHeadPlayerHello hello = JsonUtility.FromJson<ObjectHeadPlayerHello>(json);
+                        if (hello == null || hello.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion) return;
                         UpsertPlayer(senderUserId, hello.username, false);
                         IncrementLobbyRevision();
                         NotifyLobbyChanged();
@@ -525,6 +601,9 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
                         return;
                     }
 
+                    if (receivedLobby.hostUserId != senderUserId || receivedLobby.matchId != MatchId ||
+                        (lobbyState != null && receivedLobby.revision < lobbyState.revision)) return;
+
                     lobbyState = receivedLobby;
                     roomCode = receivedLobby.roomCode;
                     SetStatus("Lobby synchronized.");
@@ -535,11 +614,28 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
                     if (IsHost)
                     {
                         ObjectHeadReadyRequest readyRequest = JsonUtility.FromJson<ObjectHeadReadyRequest>(json);
+                        ObjectHeadLobbyPlayer readyPlayer = lobbyState.players.FirstOrDefault(p => p.userId == senderUserId);
+                        if (readyRequest == null || readyRequest.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion ||
+                            readyPlayer == null || (readyRequest.ready && !ObjectHeadContent.Load().ValidSelection(readyPlayer.characters, lobbyState.settings.maxPlayers))) return;
                         UpsertPlayer(senderUserId, FindPresenceUsername(senderUserId), readyRequest.ready);
                         IncrementLobbyRevision();
                         NotifyLobbyChanged();
                         await BroadcastLobbyStateAsync();
                     }
+                    break;
+
+                case ObjectHeadNetworkProtocol.SelectionRequest:
+                    if (IsHost && GameStartData.Instance == null)
+                    {
+                        ObjectHeadSelectionRequest selection = JsonUtility.FromJson<ObjectHeadSelectionRequest>(json);
+                        if (selection == null || selection.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion) return;
+                        ApplySelection(senderUserId, selection.characters);
+                        await BroadcastLobbyStateAsync();
+                    }
+                    break;
+
+                case ObjectHeadNetworkProtocol.ReturnToLobby:
+                    if (senderUserId == HostUserId) ApplyReturnToLobby();
                     break;
 
                 case ObjectHeadNetworkProtocol.SettingsRequest:
@@ -610,18 +706,21 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         {
             matchId = currentMatch.Id,
             rulesetVersion = settings.rulesetVersion,
+            mode = settings.mode,
             playerCount = orderedPlayers.Length,
             mapSelectionMode = settings.mapSelectionMode,
             mapId = mapId,
             mapSeed = seed,
             characterSpawnSeed = seed,
-            startingPlayerIndex = 1,
+            startingPlayerIndex = seed % orderedPlayers.Length + 1,
             startedAtUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             players = orderedPlayers.Select(player => new ObjectHeadPlayerAssignment
             {
                 userId = player.userId,
                 username = player.username,
-                playerIndex = player.playerIndex
+                playerIndex = player.playerIndex,
+                allianceId = ObjectHeadContent.Load().Mode(settings.mode).Alliance(player.playerIndex),
+                characters = (ObjectHeadCharacterKind[])player.characters.Clone()
             }).ToArray()
         };
     }
@@ -776,6 +875,8 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         ObjectHeadLobbyPlayer existing = players.FirstOrDefault(player => player.userId == userId);
         if (existing == null)
         {
+            if (GameStartData.Instance != null || players.Count >= lobbyState.settings.maxPlayers) return;
+            foreach (var player in players) player.ready = false;
             players.Add(new ObjectHeadLobbyPlayer
             {
                 userId = userId,
@@ -805,6 +906,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         {
             return;
         }
+        foreach (var player in lobbyState.players) player.ready = false;
 
         lobbyState.players = (lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>())
             .Where(player => player.userId != userId)
@@ -837,8 +939,8 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         result.rulesetVersion = string.IsNullOrWhiteSpace(result.rulesetVersion)
             ? ObjectHeadRoomSettings.CurrentRulesetVersion
             : result.rulesetVersion.Trim();
-        result.minPlayers = Mathf.Clamp(result.minPlayers, 2, 4);
-        result.maxPlayers = Mathf.Clamp(result.maxPlayers, result.minPlayers, 4);
+        var definition = ObjectHeadContent.Load().Mode(result.mode) ?? throw new ArgumentException("unsupported_mode");
+        result.minPlayers = result.maxPlayers = definition.players;
         result.fixedMapId = string.IsNullOrWhiteSpace(result.fixedMapId) ? config.FallbackMapId : result.fixedMapId.Trim();
         result.randomMapPool = result.randomMapPool != null && result.randomMapPool.Length > 0
             ? result.randomMapPool.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct().ToArray()

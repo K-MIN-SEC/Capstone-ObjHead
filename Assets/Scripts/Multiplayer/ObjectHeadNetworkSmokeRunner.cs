@@ -33,23 +33,28 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
             network.MatchStarting += HandleMatchStarting;
 
             Debug.Log($"[OBJECT_HEAD_SMOKE] {profile}: connecting");
-            await network.ConnectAsync("Smoke" + profile, "smoke-" + profile);
-            await network.StartQuickMatchAsync(2);
+            string nickname = GetArgument("-objectHeadSmokeNickname");
+            await network.ConnectAsync(string.IsNullOrEmpty(nickname) ? "Smoke" + profile : nickname, "smoke-" + profile);
+            var mode = Enum.TryParse(GetArgument("-objectHeadSmokeMode"), out ObjectHeadMatchMode requested) ? requested : ObjectHeadMatchMode.Duel;
+            int count = ObjectHeadContent.Load().Mode(mode).players;
+            await network.StartQuickMatchAsync(mode);
 
             await WaitUntil(
-                () => network.IsInMatch && network.LobbyState?.players?.Length == 2,
+                () => network.IsInMatch && network.LobbyState?.players?.Length == count,
                 "two-player lobby synchronization");
 
             ObjectHeadLobbyState lobby = network.LobbyState;
-            if (string.IsNullOrWhiteSpace(lobby.hostUserId) || lobby.players.Select(player => player.userId).Distinct().Count() != 2)
+            if (string.IsNullOrWhiteSpace(lobby.hostUserId) || lobby.players.Select(player => player.userId).Distinct().Count() != count)
             {
                 throw new InvalidOperationException("Lobby has an invalid host or duplicate players.");
             }
 
             Debug.Log($"[OBJECT_HEAD_SMOKE] {profile}: lobby ready, role={(network.IsHost ? "HOST" : "CLIENT")}, host={lobby.hostUserId}");
+            await network.SetSelectionAsync(ObjectHeadContent.Load().DefaultSelection(count));
+            await WaitUntil(() => network.LobbyState.players.Any(p=>p.userId==network.LocalUserId && ObjectHeadContent.Load().ValidSelection(p.characters,count)), "selection acknowledgement");
             await network.SetReadyAsync(true);
             await WaitUntil(
-                () => network.LobbyState?.players?.Length == 2 && network.LobbyState.players.All(player => player.ready),
+                () => network.LobbyState?.players?.Length == count && network.LobbyState.players.All(player => player.ready),
                 "all players ready");
 
             if (network.IsHost)
@@ -72,6 +77,9 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
             {
                 await Task.Delay(1000);
                 TurnManager turnManager = FindAny<TurnManager>();
+                int hostSeat = GameStartData.Instance.players.First(p=>p.userId==network.LocalUserId).playerIndex;
+                for(int i=0;i<turnManager.Characters.Length && turnManager.CurrentPlayerIndex!=hostSeat;i++) turnManager.EndCurrentTurn();
+                await Task.Delay(300);
                 SkillFireController fire = turnManager?.CurrentCharacter?.GetComponent<SkillFireController>();
                 DemoSkillSelector selector =
                     turnManager?.CurrentCharacter?.GetComponent<DemoSkillSelector>();
@@ -82,7 +90,8 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
 
                 selector.SetSkillIndex(
                     selector.CharacterKind == ObjectHeadCharacterKind.Bulb ? 2 : 0);
-                fire.Fire(0.65f);
+                turnManager.CurrentCharacter.GetComponent<AimController>().SetAimDirection(Vector2.down);
+                fire.Fire(0.15f);
                 await WaitUntil(
                     () => bridge.SentTerrainOperationCount > 0,
                     "host terrain-changing projectile impact");

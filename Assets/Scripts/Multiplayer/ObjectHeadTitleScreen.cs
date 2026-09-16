@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public sealed class ObjectHeadTitleScreen : MonoBehaviour
 {
@@ -11,6 +12,33 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     [Header("Data")]
     public ObjectHeadLocalizationTable localization;
+    public ObjectHeadContent content;
+    public Font uiFont;
+
+    [Header("Character selection and map")]
+    public Button[] slotButtons;
+    public Image[] slotPortraits;
+    public Text[] slotLabels;
+    public Button[] characterButtons;
+    public Text selectionHint;
+    public Text characterDescription;
+    public Button previousMapButton;
+    public Button nextMapButton;
+    public Image mapPreview;
+    public Text mapName;
+    public Button localPlayButton;
+    public Button helpButton;
+    public GameObject helpPanel;
+    public Button closeHelpButton;
+    public Button quitButton;
+    public Text localPlayerLabel;
+
+    private ObjectHeadCharacterKind[] selection = Array.Empty<ObjectHeadCharacterKind>();
+    private int selectedSlot;
+    private int selectedMap;
+    private bool localLobby;
+    private int localSelectionPlayer;
+    private ObjectHeadPlayerAssignment[] localPlayers;
 
     [Header("Panels")]
     public GameObject mainMenuPanel;
@@ -27,7 +55,10 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public Button createRoomButton;
     public Button joinRoomButton;
     public Button quickMatch2Button;
-    public Button quickMatch3Button;
+    public Button quickMatch3Button; // Legacy serialized field, not shown by 0916 scenes.
+    public Button quickMatchTeamsButton;
+    public Text lobbyModeText;
+    private ObjectHeadMatchMode selectedMode;
     public Button quickMatch4Button;
     public Button cancelMatchmakingButton;
 
@@ -64,6 +95,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     {
         network = ObjectHeadNetworkManager.Instance;
         localization ??= ObjectHeadLocalizationTable.Load();
+        content ??= ObjectHeadContent.Load();
+        uiFont ??= content != null ? content.uiFont : null;
         language = (ObjectHeadLanguage)Mathf.Clamp(
             PlayerPrefs.GetInt(LanguagePreferenceKey, (int)ObjectHeadLanguage.Korean),
             (int)ObjectHeadLanguage.Korean,
@@ -115,9 +148,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         lobbySizePlusButton?.onClick.AddListener(() => ChangeRoomSize(1));
         createRoomButton?.onClick.AddListener(CreateRoom);
         joinRoomButton?.onClick.AddListener(JoinRoom);
-        quickMatch2Button?.onClick.AddListener(() => StartQuickMatch(2));
-        quickMatch3Button?.onClick.AddListener(() => StartQuickMatch(3));
-        quickMatch4Button?.onClick.AddListener(() => StartQuickMatch(4));
+        quickMatch2Button?.onClick.AddListener(() => StartQuickMatch(ObjectHeadMatchMode.Duel));
+        quickMatchTeamsButton?.onClick.AddListener(() => StartQuickMatch(ObjectHeadMatchMode.Teams));
+        quickMatch4Button?.onClick.AddListener(() => StartQuickMatch(ObjectHeadMatchMode.FreeForAll));
         cancelMatchmakingButton?.onClick.AddListener(CancelMatchmaking);
         copyRoomCodeButton?.onClick.AddListener(CopyRoomCode);
         toggleMapModeButton?.onClick.AddListener(ToggleMapMode);
@@ -125,6 +158,22 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         readyButton?.onClick.AddListener(ToggleReady);
         startGameButton?.onClick.AddListener(StartGame);
         leaveRoomButton?.onClick.AddListener(LeaveRoom);
+        localPlayButton?.onClick.AddListener(EnterLocalLobby);
+        helpButton?.onClick.AddListener(() => helpPanel.SetActive(true));
+        closeHelpButton?.onClick.AddListener(() => helpPanel.SetActive(false));
+        quitButton?.onClick.AddListener(() => Application.Quit());
+        previousMapButton?.onClick.AddListener(() => ChangeMap(-1));
+        nextMapButton?.onClick.AddListener(() => ChangeMap(1));
+        for (int i = 0; i < slotButtons.Length; i++)
+        {
+            int slot = i;
+            slotButtons[i].onClick.AddListener(() => { selectedSlot = slot; RefreshSelection(); });
+        }
+        for (int i = 0; i < characterButtons.Length; i++)
+        {
+            int index = i;
+            characterButtons[i].onClick.AddListener(() => SelectCharacter(content.characters[index].kind));
+        }
     }
 
     private void SetLanguage(ObjectHeadLanguage nextLanguage)
@@ -137,7 +186,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void ChangeRoomSize(int delta)
     {
-        roomSize = Mathf.Clamp(roomSize + delta, 2, 4);
+        int at = Array.FindIndex(content.modes, m => m.mode == selectedMode);
+        var mode = content.modes[(at + delta + content.modes.Length) % content.modes.Length];
+        selectedMode = mode.mode;
+        roomSize = mode.players;
+        if (localLobby) { EnterLocalLobby(); return; }
         RefreshAll();
     }
 
@@ -168,13 +221,13 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }, "status_connecting");
     }
 
-    private void StartQuickMatch(int playerCount)
+    private void StartQuickMatch(ObjectHeadMatchMode mode)
     {
-        requestedMatchSize = playerCount;
+        requestedMatchSize = content.Mode(mode).players;
         Run(async () =>
         {
             await EnsureConnectedAsync();
-            await network.StartQuickMatchAsync(playerCount);
+            await network.StartQuickMatchAsync(mode);
             statusKey = "status_matching";
         }, "status_connecting");
     }
@@ -208,23 +261,38 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void ApplyRoomSettings()
     {
+        if (localLobby) { EnterLocalLobby(); return; }
         Run(() => network.UpdateRoomSettingsAsync(BuildRoomSettings()), "status_applying_settings");
     }
 
     private void ToggleReady()
     {
+        if (localLobby) { ConfirmLocalTeam(); return; }
+        if (selection.Length == 0) return;
         ObjectHeadLobbyPlayer localPlayer = FindLocalPlayer();
         bool nextReady = localPlayer == null || !localPlayer.ready;
-        Run(() => network.SetReadyAsync(nextReady), nextReady ? "status_readying" : "status_unreadying");
+        Run(async () =>
+        {
+            if (nextReady && (localPlayer == null || !localPlayer.characters.SequenceEqual(selection)))
+            {
+                await network.SetSelectionAsync(selection);
+                DateTime deadline = DateTime.UtcNow.AddSeconds(8);
+                while (DateTime.UtcNow < deadline && !(FindLocalPlayer()?.characters.SequenceEqual(selection) ?? false)) await Task.Delay(50);
+                if (!(FindLocalPlayer()?.characters.SequenceEqual(selection) ?? false)) throw new TimeoutException("connection_help");
+            }
+            await network.SetReadyAsync(nextReady);
+        }, nextReady ? "status_readying" : "status_unreadying");
     }
 
     private void StartGame()
     {
+        if (localLobby) { StartLocalGame(); return; }
         Run(network.StartGameAsync, "status_starting_game");
     }
 
     private void LeaveRoom()
     {
+        if (localLobby) { localLobby = false; RefreshAll(); return; }
         Run(async () =>
         {
             await network.DisconnectAsync();
@@ -253,10 +321,12 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     private ObjectHeadRoomSettings BuildRoomSettings()
     {
         ObjectHeadRoomSettings settings = network.Config.DefaultRoomSettings;
+        settings.mode = selectedMode;
         settings.minPlayers = roomSize;
         settings.maxPlayers = roomSize;
         settings.mapSelectionMode = selectedMapMode;
-        settings.fixedMapId = network.Config.FallbackMapId;
+        settings.fixedMapId = content.maps[selectedMap].id;
+        settings.randomMapPool = content.maps.Select(m => m.id).ToArray();
         return settings;
     }
 
@@ -278,13 +348,13 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         catch (Exception exception)
         {
             statusKey = "status_error";
-            rawStatus = exception.Message;
+            rawStatus = L(exception.Message) != exception.Message ? L(exception.Message) : L("connection_help");
             Debug.LogException(exception);
         }
         finally
         {
             busy = false;
-            RefreshAll();
+            if (this != null) RefreshAll();
         }
     }
 
@@ -302,8 +372,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     {
         if (lobby != null)
         {
-            roomSize = Mathf.Clamp(lobby.settings.maxPlayers, 2, 4);
+            selectedMode = lobby.settings.mode;
+            roomSize = content.Mode(selectedMode).players;
             selectedMapMode = lobby.settings.mapSelectionMode;
+            int mapIndex = Array.FindIndex(content.maps, m => m.id == lobby.settings.fixedMapId);
+            if (mapIndex >= 0) selectedMap = mapIndex;
             statusKey = "status_in_lobby";
         }
 
@@ -328,14 +401,14 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }
 
         ObjectHeadLobbyState lobby = network != null ? network.LobbyState : null;
-        bool inMatch = network != null && network.IsInMatch;
+        bool inMatch = localLobby || (network != null && network.IsInMatch);
         mainMenuPanel?.SetActive(!inMatch);
         lobbyPanel?.SetActive(inMatch);
         cancelMatchmakingButton?.gameObject.SetActive(network != null && network.IsMatchmaking);
 
         if (roomSizeValueText != null)
         {
-            roomSizeValueText.text = string.Format(L("room_size_value"), roomSize);
+            roomSizeValueText.text = L(content.Mode(selectedMode).nameKey);
         }
 
         if (statusText != null)
@@ -353,6 +426,26 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
             SetMainButtonsInteractable(!busy && (network == null || !network.IsMatchmaking));
             return;
         }
+
+        EnsureSelection();
+        RefreshSelection();
+        if (lobbyModeText != null) lobbyModeText.text = L(content.Mode(selectedMode).nameKey);
+        if (localLobby)
+        {
+            lobbyTitleText.text = L("local_title");
+            lobbyRoomCodeText.text = L("local_shared_screen");
+            lobbyCapacityText.text = string.Format(L("player_count_value"), roomSize, roomSize);
+            lobbyMapModeText.text = L(selectedMapMode == ObjectHeadMapSelectionMode.Fixed ? "map_fixed" : "map_random");
+            lobbyPlayerListText.text = string.Join("\n\n", localPlayers.Select((p, i) => $"P{i + 1}  " + L(p.characters.Length > 0 ? "ready_state" : "not_ready_state")));
+            readyButtonText.text = L("confirm_team");
+            readyButton.interactable = !busy;
+            startGameButton.gameObject.SetActive(true);
+            startGameButton.interactable = localPlayers.All(p => content.ValidSelection(p.characters, roomSize));
+            copyRoomCodeButton.gameObject.SetActive(false);
+            SetHostControls(true);
+            return;
+        }
+        copyRoomCodeButton.gameObject.SetActive(true);
 
         string roomCode = network.RoomCode;
         if (lobbyTitleText != null)
@@ -385,6 +478,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         }
 
         bool isHost = network.IsHost;
+        SetHostControls(isHost);
         lobbySizeMinusButton.interactable = !busy && isHost;
         lobbySizePlusButton.interactable = !busy && isHost;
         toggleMapModeButton.interactable = !busy && isHost;
@@ -408,7 +502,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
             {
                 string hostMark = player.userId == lobby.hostUserId ? "  " + L("host_mark") : string.Empty;
                 string readyMark = L(player.ready ? "ready_state" : "not_ready_state");
-                return $"P{player.playerIndex}   {player.username}   {readyMark}{hostMark}";
+                string team = string.Join(" / ", player.characters.Select(k => L(content.Character(k).nameKey)));
+                string alliance = selectedMode == ObjectHeadMatchMode.Teams ? string.Format(L("alliance_label"), content.Mode(selectedMode).Alliance(player.playerIndex)) + "  " : "";
+                return $"{alliance}P{player.playerIndex}  {player.username}   {readyMark}{hostMark}\n{team}\n";
             }));
     }
 
@@ -423,7 +519,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         createRoomButton.interactable = interactable;
         joinRoomButton.interactable = interactable;
         quickMatch2Button.interactable = interactable;
-        quickMatch3Button.interactable = interactable;
+        if (quickMatchTeamsButton != null) quickMatchTeamsButton.interactable = interactable;
+        if (localPlayButton != null) localPlayButton.interactable = interactable;
         quickMatch4Button.interactable = interactable;
         roomSizeMinusButton.interactable = interactable;
         roomSizePlusButton.interactable = interactable;
@@ -457,9 +554,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void ApplyRuntimeFont()
     {
-        runtimeFont = Font.CreateDynamicFontFromOSFont(
-            new[] { "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Arial" },
-            24);
+        runtimeFont = uiFont;
         if (runtimeFont == null)
         {
             return;
@@ -467,7 +562,90 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
         foreach (Text text in GetComponentsInChildren<Text>(true))
         {
-            text.font = runtimeFont;
+            if (text.font == null) text.font = runtimeFont;
         }
+    }
+
+    private void SetHostControls(bool host)
+    {
+        previousMapButton.interactable = nextMapButton.interactable = host && !busy;
+        lobbySizeMinusButton.interactable = lobbySizePlusButton.interactable = host && !busy;
+        toggleMapModeButton.interactable = applySettingsButton.interactable = host && !busy;
+    }
+
+    private void ChangeMap(int delta)
+    {
+        selectedMap = (selectedMap + delta + content.maps.Length) % content.maps.Length;
+        RefreshAll();
+    }
+
+    private void EnsureSelection()
+    {
+        int count = content.CharactersPerPlayer(roomSize);
+        if (selection.Length != count)
+        {
+            selection = content.DefaultSelection(roomSize);
+            selectedSlot = 0;
+        }
+    }
+
+    private void SelectCharacter(ObjectHeadCharacterKind kind)
+    {
+        EnsureSelection();
+        selection[selectedSlot] = kind;
+        if (localLobby) localPlayers[localSelectionPlayer].characters = Array.Empty<ObjectHeadCharacterKind>();
+        if (!localLobby) Run(() => network.SetSelectionAsync(selection), "saving_team");
+        RefreshAll();
+    }
+
+    private void RefreshSelection()
+    {
+        for (int i = 0; i < slotButtons.Length; i++)
+        {
+            bool active = i < selection.Length;
+            slotButtons[i].gameObject.SetActive(active);
+            if (!active) continue;
+            ObjectHeadCharacterDefinition definition = content.Character(selection[i]);
+            slotPortraits[i].sprite = definition.portrait;
+            slotLabels[i].text = L(definition.nameKey);
+            slotButtons[i].interactable = !busy;
+            var outline = slotButtons[i].GetComponent<Outline>();
+            if (outline != null) outline.enabled = i == selectedSlot;
+        }
+        foreach (Button button in characterButtons) button.interactable = !busy;
+        selectionHint.text = string.Format(L("selection_hint"), selection.Length);
+        characterDescription.text = selection.Length > 0 ? L(content.Character(selection[selectedSlot]).descriptionKey) : string.Empty;
+        mapPreview.sprite = content.maps[selectedMap].preview;
+        mapName.text = L(content.maps[selectedMap].nameKey) + "\n" + L(content.maps[selectedMap].descriptionKey);
+        localPlayerLabel.text = localLobby ? string.Format(L("select_player_team"), localSelectionPlayer + 1) : L("your_team");
+    }
+
+    private void EnterLocalLobby()
+    {
+        localLobby = true;
+        localSelectionPlayer = 0;
+        localPlayers = Enumerable.Range(1, roomSize).Select(i => new ObjectHeadPlayerAssignment { playerIndex = i, allianceId = content.Mode(selectedMode).Alliance(i), username = "P" + i }).ToArray();
+        selection = content.DefaultSelection(roomSize);
+        statusKey = "local_instructions";
+        RefreshAll();
+    }
+
+    private void ConfirmLocalTeam()
+    {
+        localPlayers[localSelectionPlayer].characters = (ObjectHeadCharacterKind[])selection.Clone();
+        localSelectionPlayer = (localSelectionPlayer + 1) % roomSize;
+        selection = localPlayers[localSelectionPlayer].characters.Length > 0
+            ? (ObjectHeadCharacterKind[])localPlayers[localSelectionPlayer].characters.Clone() : content.DefaultSelection(roomSize);
+        RefreshAll();
+    }
+
+    private void StartLocalGame()
+    {
+        if (localPlayers.Any(p => !content.ValidSelection(p.characters, roomSize))) return;
+        int seed = new System.Random().Next(1, int.MaxValue);
+        var map = content.maps[selectedMapMode == ObjectHeadMapSelectionMode.Random ? seed % content.maps.Length : selectedMap];
+        GameStartData.Apply(new GameStartData { localMatch = true, mode = selectedMode, playerCount = roomSize, players = localPlayers,
+            mapId = map.id, mapSeed = seed, characterSpawnSeed = seed, startingPlayerIndex = seed % roomSize + 1, rulesetVersion = ObjectHeadRoomSettings.CurrentRulesetVersion });
+        SceneManager.LoadScene(map.sceneName);
     }
 }

@@ -45,7 +45,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private static void HandleSceneLoaded(Scene unused, LoadSceneMode unusedMode)
     {
-        if (GameStartData.Instance == null || FindAny<ObjectHeadGameplayBridge>() != null)
+        if (GameStartData.Instance == null || GameStartData.Instance.localMatch || FindAny<ObjectHeadGameplayBridge>() != null)
         {
             return;
         }
@@ -114,6 +114,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
         localPlayerIndex = localAssignment.playerIndex;
         IndexCharacters();
+        foreach (var character in charactersById.Values)
+            character.GetComponent<CharacterCombat>().UseExternalHealth = !network.IsHost;
         terrainManager = FindAny<TerrainManager>();
         turnManager.ConfigureNetworkControl(localPlayerIndex, !network.IsHost);
         network.GameplayMessageReceived += HandleGameplayMessage;
@@ -168,6 +170,14 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 currentPlayerIndex = localPlayerIndex
             }, ObjectHeadNetworkProtocol.GameplayCommand);
         }
+    }
+
+    public void RequestEndTurn()
+    {
+        if (!IsReady || network.IsHost || turnManager.CurrentPlayerIndex != localPlayerIndex || endTurnRequestSerial == turnManager.TurnSerial) return;
+        endTurnRequestSerial = turnManager.TurnSerial;
+        Send(new ObjectHeadGameplayMessage { kind = ObjectHeadGameplayMessageKind.EndTurnRequest,
+            messageId = NextMessageId(), turnSerial = turnManager.TurnSerial, currentPlayerIndex = localPlayerIndex }, ObjectHeadNetworkProtocol.GameplayCommand);
     }
 
     private void IndexCharacters()
@@ -277,6 +287,10 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 if (senderUserId == network.HostUserId && !network.IsHost)
                 {
                     ReceivedTurnStateCount++;
+                    foreach (var state in message.combatStates ?? Array.Empty<ObjectHeadCombatState>())
+                        if (charactersById.TryGetValue(state.characterId, out var target))
+                            target.GetComponent<CharacterCombat>().ApplyNetworkHealth(state.hp, state.pending);
+                    if (message.matchOver) { turnManager.ApplyNetworkMatchResult(message.winner); break; }
                     turnManager.ApplyAuthoritativeTurnState(
                         message.currentTurnIndex,
                         message.turnSerial,
@@ -420,6 +434,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         Send(new ObjectHeadGameplayMessage
         {
             kind = ObjectHeadGameplayMessageKind.TurnState,
+            matchOver = turnManager.IsMatchOver,
+            winner = turnManager.WinningPlayerIndex,
+            combatStates = charactersById.Select(pair => new ObjectHeadCombatState {
+                characterId=pair.Key, hp=pair.Value.GetComponent<CharacterCombat>().CurrentHp,
+                pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage }).ToArray(),
             messageId = NextMessageId(),
             turnSerial = turnManager.TurnSerial,
             roundSerial = turnManager.RoundSerial,

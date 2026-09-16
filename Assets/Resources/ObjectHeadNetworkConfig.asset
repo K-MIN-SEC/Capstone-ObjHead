@@ -21,18 +21,25 @@ MonoBehaviour:
     port: 7350
     serverKey: defaultkey
   defaultRoomSettings:
-    rulesetVersion: demo-2026-09-15
+    mode: 0
+    rulesetVersion: alpha-2026-09-16-islands-v2
     minPlayers: 2
     maxPlayers: 2
     mapSelectionMode: 0
-    fixedMapId: object_head_demo_01
+    fixedMapId: wind_meadow
     randomMapPool:
-    - object_head_demo_01
-  fallbackMapId: object_head_demo_01
+    - wind_meadow
+    - twin_citadels
+    - shattered_reef
+  fallbackMapId: wind_meadow
   titleSceneName: ObjectHeadTitle
   mapScenes:
-  - mapId: object_head_demo_01
-    sceneName: SampleScene
+  - mapId: wind_meadow
+    sceneName: WindMeadow
+  - mapId: twin_citadels
+    sceneName: TwinCitadels
+  - mapId: shattered_reef
+    sceneName: ShatteredReef
   panelMargin: 12
   panelWidth: 430
   panelMaxHeight: 720

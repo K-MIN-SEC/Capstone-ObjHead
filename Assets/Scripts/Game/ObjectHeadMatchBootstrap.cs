@@ -33,6 +33,13 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField] private bool cleanupExistingPrototypeScene = true;
     [SerializeField] private bool addGamepadDebugOverlay = true;
     [SerializeField] private ObjectHeadMapAuthoring mapAuthoring;
+    [Header("Authored scene references")]
+    [SerializeField] private TerrainManager sceneTerrain;
+    [SerializeField] private ObjectHeadContent content;
+    [SerializeField] private TurnManager sceneTurnManager;
+    [SerializeField] private PlayerInventoryManager sceneInventory;
+    [SerializeField] private TerrainRandomSpawner sceneSpawner;
+    [SerializeField] private CommonHeadItemSpawner sceneItemSpawner;
 
     private TerrainManager terrain;
     private TurnManager turnManager;
@@ -42,7 +49,6 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
     public static int CurrentMatchSeed { get; private set; } = 6974;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreateForPlayableScene()
     {
         ObjectHeadNetworkConfig networkConfig = ObjectHeadNetworkConfig.LoadOrCreateRuntimeDefault();
@@ -73,8 +79,16 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
         built = true;
         balance = ObjectHeadBalanceTable.Load();
+        content ??= ObjectHeadContent.Load();
+        if (GameStartData.Instance != null) playerCount = GameStartData.Instance.playerCount;
 
         ResolveSceneAuthoring();
+
+        if (sceneTerrain != null)
+        {
+            BuildAuthoredMatch();
+            return;
+        }
 
         if (cleanupExistingPrototypeScene)
         {
@@ -119,6 +133,22 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
             new GameObject("ObjectHeadGamepadDebugOverlay").AddComponent<ObjectHeadGamepadDebugOverlay>();
         }
 #endif
+    }
+
+    private void BuildAuthoredMatch()
+    {
+        terrain = sceneTerrain;
+        // The authored Transform is the source of truth. The pixel mask still rebuilds at runtime.
+        terrain.SetTerrainOriginWorld(terrain.transform.position);
+        if (!terrain.IsInitialized) terrain.InitializeTerrain();
+        turnManager = sceneTurnManager;
+        sceneInventory.ConfigurePlayers(playerCount);
+        TurnCharacterController[] characters = SpawnDefaultTeams(terrain);
+        sceneSpawner.Configure(terrain, characters, ResolveCharacterSpawnSeed(), mapAuthoring);
+        sceneSpawner.SpawnCharacters();
+        sceneItemSpawner.Configure(turnManager, terrain, GameStartData.Instance != null ? GameStartData.Instance.mapSeed : commonHeadSpawnSeed);
+        turnManager.SetCharacters(characters, GameStartData.Instance != null ? GameStartData.Instance.startingPlayerIndex : 1);
+        Camera.main.GetComponent<ObjectHeadCameraController>().Configure(terrain, turnManager);
     }
 
     private void ResolveSceneAuthoring()
@@ -404,14 +434,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
     private TurnCharacterController[] SpawnDefaultTeams(TerrainManager manager)
     {
-        int charactersPerPlayer = GetCharactersPerPlayer(playerCount);
-        ObjectHeadCharacterKind[][] defaultTeams =
-        {
-            new[] { ObjectHeadCharacterKind.Bulb, ObjectHeadCharacterKind.Seed, ObjectHeadCharacterKind.Bomb },
-            new[] { ObjectHeadCharacterKind.Bomb, ObjectHeadCharacterKind.Bulb, ObjectHeadCharacterKind.Seed },
-            new[] { ObjectHeadCharacterKind.Seed, ObjectHeadCharacterKind.Bomb, ObjectHeadCharacterKind.Bulb },
-            new[] { ObjectHeadCharacterKind.Bulb, ObjectHeadCharacterKind.Bomb, ObjectHeadCharacterKind.Seed }
-        };
+        int charactersPerPlayer = content.CharactersPerPlayer(playerCount);
 
         List<TurnCharacterController>[] teams = new List<TurnCharacterController>[playerCount];
         for (int player = 0; player < playerCount; player++)
@@ -420,7 +443,10 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
             for (int slot = 0; slot < charactersPerPlayer; slot++)
             {
-                ObjectHeadCharacterKind kind = defaultTeams[player][slot % defaultTeams[player].Length];
+                ObjectHeadPlayerAssignment assignment = Array.Find(GameStartData.Instance?.players ?? Array.Empty<ObjectHeadPlayerAssignment>(), p => p.playerIndex == player + 1);
+                ObjectHeadCharacterKind[] team = assignment != null && content.ValidSelection(assignment.characters, playerCount)
+                    ? assignment.characters : content.DefaultSelection(playerCount);
+                ObjectHeadCharacterKind kind = team[slot];
                 float width = manager != null ? manager.WidthPx / (float)manager.PixelsPerUnit : 10f;
                 float height = manager != null ? manager.HeightPx / (float)manager.PixelsPerUnit : 10f;
                 Vector2 temporaryPosition = manager != null
@@ -459,6 +485,18 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
     private TurnCharacterController CreateCharacter(int playerIndex, int slotIndex, ObjectHeadCharacterKind kind, Vector2 position)
     {
+        ObjectHeadCharacterDefinition definition = content.Character(kind);
+        if (definition != null && definition.prefab != null)
+        {
+            GameObject instance = Instantiate(definition.prefab, position, Quaternion.identity);
+            instance.name = $"P{playerIndex}_Slot{slotIndex}_{kind}";
+            instance.GetComponent<DemoSkillSelector>().SetCharacterKind(kind);
+            instance.GetComponent<ObjectHeadTeamMember>().Configure(playerIndex, slotIndex, kind);
+            ApplyStats(kind, instance.GetComponent<CharacterCombat>());
+            instance.GetComponent<CharacterVisual>().SetFacingRight(playerIndex % 2 == 1);
+            instance.GetComponent<TurnCharacterController>().ConfigureMovement(BalanceFloat("character.move_speed", characterMoveSpeed), BalanceFloat("character.jump_force", characterJumpForce));
+            return instance.GetComponent<TurnCharacterController>();
+        }
         GameObject character = new GameObject($"P{playerIndex}_Slot{slotIndex}_{kind}");
         character.transform.position = position;
 

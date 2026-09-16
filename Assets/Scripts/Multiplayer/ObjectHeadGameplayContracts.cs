@@ -11,6 +11,9 @@ public enum ObjectHeadGameplayMessageKind
 [Serializable]
 public sealed class ObjectHeadGameplayMessage
 {
+    public ObjectHeadCombatState[] combatStates;
+    public bool matchOver;
+    public int winner;
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public string messageId;
     public ObjectHeadGameplayMessageKind kind;
@@ -41,4 +44,12 @@ public sealed class ObjectHeadTerrainOperationMessage
     public string messageId;
     public int turnSerial;
     public TerrainEditOperation operation;
+}
+
+[Serializable]
+public sealed class ObjectHeadCombatState
+{
+    public string characterId;
+    public int hp;
+    public int pending;
 }

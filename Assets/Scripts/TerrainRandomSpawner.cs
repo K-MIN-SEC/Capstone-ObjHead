@@ -73,6 +73,12 @@ public class TerrainRandomSpawner : MonoBehaviour
         }
 
         random = new System.Random(deterministicSeed);
+        var authored = mapAuthoring != null ? mapAuthoring.GetComponent<ObjectHeadSpawnLayout>() : null;
+        if (authored != null)
+        {
+            spawned = authored.Place(terrain, characters, deterministicSeed);
+            return;
+        }
         placedCharacters.Clear();
         teamAnchors.Clear();
 

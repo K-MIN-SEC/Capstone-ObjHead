@@ -1,0 +1,61 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9aa61da1699d6884db298f054e7b28d3, type: 3}
+  m_Name: ObjectHeadPresentation
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadPresentation
+  skills:
+  - skillId: 11
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactScale: 0.9
+  - skillId: 12
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactScale: 0.9
+  - skillId: 13
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactScale: 1.05
+  - skillId: 21
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    impactScale: 0.9
+  - skillId: 22
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    impactScale: 0.9
+  - skillId: 23
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    impactScale: 1.05
+  - skillId: 31
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactScale: 0.9
+  - skillId: 32
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactScale: 0.9
+  - skillId: 33
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactScale: 1.05
+  maximumEffects: 48

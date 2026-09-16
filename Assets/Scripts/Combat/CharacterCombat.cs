@@ -67,6 +67,15 @@ public class CharacterCombat : MonoBehaviour
     public event Action<CharacterCombat> Died;
 
     public int CurrentHp => currentHp;
+    public bool UseExternalHealth { get; set; }
+    public void ApplyNetworkHealth(int hp, int pending)
+    {
+        if (!UseExternalHealth) return;
+        currentHp = Mathf.Clamp(hp, 0, maxHp);
+        pendingDamage = Mathf.Max(0, pending);
+        AnimateHealthLabelTo(currentHp);
+        if (currentHp == 0) Die(true);
+    }
     public int MaxHp => maxHp;
     public int PendingDamage => pendingDamage;
     public float ThrowPower => throwPower;
@@ -129,6 +138,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
+        if (UseExternalHealth) return;
         if (isDead || damage <= 0)
         {
             return;
@@ -147,6 +157,7 @@ public class CharacterCombat : MonoBehaviour
 
     public int ApplyPendingDamage()
     {
+        if (UseExternalHealth) return 0;
         if (isDead || pendingDamage <= 0)
         {
             pendingDamage = 0;
@@ -244,6 +255,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void Die()
     {
+        if (UseExternalHealth) return;
         Die(true);
     }
 

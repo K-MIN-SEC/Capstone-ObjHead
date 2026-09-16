@@ -13,7 +13,7 @@ using UnityEngine.SceneManagement;
 public static class ObjectHeadTitleSceneBuilder
 {
     private const string ScenePath = "Assets/Scenes/ObjectHeadTitle.unity";
-    private const string PrefabPath = "Assets/Resources/UI/ObjectHeadTitleRoot.prefab";
+    private const string PrefabPath = "Assets/Prefabs/UI/ObjectHeadTitle.prefab";
     private const string GameplayScenePath = "Assets/Scenes/SampleScene.unity";
 
     [MenuItem("Object Head/Prepare Editable Title Scene")]
@@ -39,7 +39,7 @@ public static class ObjectHeadTitleSceneBuilder
         }
 
         EditorSceneManager.SaveScene(scene, ScenePath);
-        UpdateBuildSettings();
+        ObjectHeadReleaseAuthoring.Validate();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("[Object Head] Editable title scene prepared. Existing UI layout was preserved.");
@@ -50,7 +50,7 @@ public static class ObjectHeadTitleSceneBuilder
         // Data can be regenerated from the spreadsheet, but scene/prefab layout is never rebuilt here.
         ObjectHeadSpreadsheetImporter.ImportAndGetLocalization();
         ValidateEditableTitleAssets();
-        UpdateBuildSettings();
+        ObjectHeadReleaseAuthoring.Validate();
         AssetDatabase.SaveAssets();
 
         string outputPath = GetCommandLineValue("-objectHeadBuildPath");

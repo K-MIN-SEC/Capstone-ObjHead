@@ -25,11 +25,15 @@ public class CharacterVisual : MonoBehaviour
     [SerializeField] private int bodySortingOrder = 10;
     [SerializeField] private int headSortingOrder = 11;
 
-    private SpriteRenderer bodyRenderer;
-    private SpriteRenderer headRenderer;
-    private Sprite bodyIdle;
-    private Sprite bodyThrow;
-    private Sprite bodyHit;
+    [Header("Prefab visuals")]
+    [SerializeField] private SpriteRenderer bodyRenderer;
+    [SerializeField] private SpriteRenderer headRenderer;
+    [SerializeField] private Sprite bodyIdle;
+    [SerializeField] private Sprite bodyThrow;
+    [SerializeField] private Sprite bodyHit;
+    [SerializeField] private Sprite[] authoredSkillHeads;
+    [SerializeField] private bool preserveAuthoredTransforms;
+    private Vector3 authoredHeadScale = Vector3.one;
     private Sprite[,] headSprites;
     private Sprite uniqueHeadSprite;
     private Sprite temporaryCommonHeadSprite;
@@ -60,6 +64,7 @@ public class CharacterVisual : MonoBehaviour
 
     private void Awake()
     {
+        if (headRenderer != null) authoredHeadScale = headRenderer.transform.localScale;
         LoadSprites();
         BuildRenderers();
         ApplyVisualState();
@@ -223,8 +228,8 @@ public class CharacterVisual : MonoBehaviour
             }
         }
 
-        bodyRenderer = GetOrCreateChildRenderer("BodyRenderer", bodySortingOrder);
-        headRenderer = GetOrCreateChildRenderer("HeadRenderer", headSortingOrder);
+        if (bodyRenderer == null) bodyRenderer = GetOrCreateChildRenderer("BodyRenderer", bodySortingOrder);
+        if (headRenderer == null) headRenderer = GetOrCreateChildRenderer("HeadRenderer", headSortingOrder);
         uniqueHeadSprite = GetSelectedHeadSprite();
         ApplyFacing();
     }
@@ -250,6 +255,12 @@ public class CharacterVisual : MonoBehaviour
 
     private void LoadSprites()
     {
+        if (authoredSkillHeads != null && authoredSkillHeads.Length >= 3)
+        {
+            headSprites = new Sprite[3, 3];
+            for (int i = 0; i < 3; i++) headSprites[(int)characterKind, i] = authoredSkillHeads[i];
+            return;
+        }
         bodyIdle = Resources.Load<Sprite>("Sprites/Body/body_idle");
         bodyThrow = Resources.Load<Sprite>("Sprites/Body/body_throw");
         bodyHit = Resources.Load<Sprite>("Sprites/Body/body_hit");
@@ -279,9 +290,12 @@ public class CharacterVisual : MonoBehaviour
             uniqueHeadSprite = GetSelectedHeadSprite();
         }
         RefreshHeadSprite();
-        bodyRenderer.transform.localPosition = bodyLocalOffset;
-        headRenderer.transform.localPosition = headLocalOffset;
-        bodyRenderer.transform.localScale = Vector3.one * bodyScale;
+        if (!preserveAuthoredTransforms)
+        {
+            bodyRenderer.transform.localPosition = bodyLocalOffset;
+            headRenderer.transform.localPosition = headLocalOffset;
+            bodyRenderer.transform.localScale = Vector3.one * bodyScale;
+        }
         ApplyHeadScale();
         bodyRenderer.sortingOrder = bodySortingOrder;
         headRenderer.sortingOrder = headSortingOrder;
@@ -337,7 +351,7 @@ public class CharacterVisual : MonoBehaviour
         float scaleMultiplier = temporaryCommonHeadSprite != null
             ? TemporaryCommonHeadScaleMultiplier
             : 1f;
-        headRenderer.transform.localScale = Vector3.one * headScale * scaleMultiplier;
+        headRenderer.transform.localScale = (preserveAuthoredTransforms ? authoredHeadScale : Vector3.one * headScale) * scaleMultiplier;
     }
 
     private void SetBodySprite(Sprite sprite)
