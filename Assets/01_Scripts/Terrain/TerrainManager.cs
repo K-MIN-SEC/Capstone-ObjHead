@@ -477,6 +477,7 @@ public class TerrainManager : MonoBehaviour
 
     public bool DestroyCircle(Vector2 worldCenter, int radiusPx)
     {
+        if(!ObjectHeadCommonAuthority.CanEditTerrain)return false;
         if (!EnsureInitialized() || radiusPx <= 0)
         {
             return false;
@@ -510,6 +511,7 @@ public class TerrainManager : MonoBehaviour
         TerrainType terrainType,
         IEnumerable<Collider2D> blockedColliders)
     {
+        if(!ObjectHeadCommonAuthority.CanEditTerrain)return false;
         if (!EnsureInitialized() || radiusPx <= 0)
         {
             return false;
@@ -533,6 +535,7 @@ public class TerrainManager : MonoBehaviour
         TerrainType terrainType,
         IEnumerable<Collider2D> blockedColliders)
     {
+        if(!ObjectHeadCommonAuthority.CanEditTerrain)return false;
         if (!EnsureInitialized() || radiusPx <= 0)
         {
             return false;
@@ -561,6 +564,7 @@ public class TerrainManager : MonoBehaviour
         TerrainType terrainType,
         IEnumerable<Collider2D> blockedColliders)
     {
+        if(!ObjectHeadCommonAuthority.CanEditTerrain)return false;
         if (!EnsureInitialized() || radiusXPx <= 0 || radiusYPx <= 0)
         {
             return false;
@@ -598,6 +602,7 @@ public class TerrainManager : MonoBehaviour
 
     public bool CreateBridge(Vector2 startWorld, Vector2 direction, float lengthWorldUnits, int thicknessPx)
     {
+        if(!ObjectHeadCommonAuthority.CanEditTerrain)return false;
         if (!EnsureInitialized())
         {
             return false;

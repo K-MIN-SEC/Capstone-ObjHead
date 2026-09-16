@@ -56,6 +56,19 @@ public class TurnCharacterController : MonoBehaviour
     private PhysicsMaterial2D originalColliderMaterial;
 
     public bool HasControl => hasControl;
+    public bool UseNetworkInput {get;set;}
+    public float InputMoveX => horizontalInput;
+    public bool InputJumpHeld => jumpHeld;
+    private float networkInputUntil;
+    public void SetNetworkInput(float move,bool held)
+    {
+        if(!UseNetworkInput || !hasControl)return;
+        horizontalInput=Mathf.Clamp(move,-1,1);
+        if(held && !jumpHeld)jumpRequested=true;
+        if(!held && jumpHeld)jumpReleased=true;
+        jumpHeld=held;networkInputUntil=Time.unscaledTime+.35f;
+        UpdateFacingFromMovement();
+    }
     public bool IsGrounded => isGrounded;
     public bool IsTurnAvailable => isActiveAndEnabled && gameObject.activeInHierarchy;
     public bool IgnoreFallDamageUntilGrounded => ignoreFallDamageUntilGrounded;
@@ -87,6 +100,11 @@ public class TurnCharacterController : MonoBehaviour
 
     private void Update()
     {
+        if(UseNetworkInput)
+        {
+            if(!hasControl || Time.unscaledTime>networkInputUntil)ResetInput();
+            return;
+        }
         if (!hasControl)
         {
             ResetInput();

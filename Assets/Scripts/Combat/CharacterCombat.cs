@@ -68,12 +68,17 @@ public class CharacterCombat : MonoBehaviour
 
     public int CurrentHp => currentHp;
     public bool UseExternalHealth { get; set; }
-    public void ApplyNetworkHealth(int hp, int pending)
+    public void ApplyNetworkHealth(int hp, int pending, int shield=0)
     {
         if (!UseExternalHealth) return;
+        int previousHp=currentHp,previousPending=pendingDamage;
         currentHp = Mathf.Clamp(hp, 0, maxHp);
         pendingDamage = Mathf.Max(0, pending);
-        AnimateHealthLabelTo(currentHp);
+        shieldAbsorption = Mathf.Max(0, shield);
+        // Repeated snapshots must not restart the same animation every network tick.
+        if(currentHp!=previousHp)AnimateHealthLabelTo(currentHp);
+        if(currentHp<previousHp){ShowDamagePopup(previousHp-currentHp);FlashHit();}
+        else if(pendingDamage>previousPending)FlashHit();
         if (currentHp == 0) Die(true);
     }
     public int MaxHp => maxHp;

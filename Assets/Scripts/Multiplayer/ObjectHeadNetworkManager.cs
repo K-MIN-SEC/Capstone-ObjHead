@@ -10,7 +10,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 [DefaultExecutionOrder(-1000)]
-public sealed class ObjectHeadNetworkManager : MonoBehaviour
+public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 {
     private readonly ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
 
@@ -194,6 +194,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task CreateRoomAsync(ObjectHeadRoomSettings requestedSettings)
     {
+        if (UseDedicatedAuthority) { await CreateAuthoritativeRoomAsync(requestedSettings); return; }
         EnsureConnected();
         await LeaveCurrentMatchAsync();
 
@@ -216,6 +217,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task JoinRoomAsync(string roomCodeOrMatchId)
     {
+        if (UseDedicatedAuthority) { await JoinAuthoritativeRoomAsync(roomCodeOrMatchId); return; }
         EnsureConnected();
         if (string.IsNullOrWhiteSpace(roomCodeOrMatchId))
         {
@@ -248,14 +250,14 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         Dictionary<string, string> stringProperties = new Dictionary<string, string>
         {
             { "game", "object_head_battle" },
-            { "ruleset", ObjectHeadRoomSettings.CurrentRulesetVersion },
+            { "ruleset", UseDedicatedAuthority ? AuthorityRuleset : ObjectHeadRoomSettings.CurrentRulesetVersion },
             { "mode", mode.ToString() }
         };
         Dictionary<string, double> numericProperties = new Dictionary<string, double>
         {
             { "player_count", count }
         };
-        string query = "+properties.game:object_head_battle +properties.ruleset:" + ObjectHeadRoomSettings.CurrentRulesetVersion + " +properties.mode:" + mode;
+        string query = "+properties.game:object_head_battle +properties.ruleset:" + (UseDedicatedAuthority ? AuthorityRuleset : ObjectHeadRoomSettings.CurrentRulesetVersion) + " +properties.mode:" + mode;
 
         matchmakerTicket = await socket.AddMatchmakerAsync(query, count, count, stringProperties, numericProperties);
         SetStatus($"Matchmaking for {count} players...");
@@ -275,6 +277,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task SetSelectionAsync(ObjectHeadCharacterKind[] selection)
     {
+        if(UseDedicatedAuthority){await SendAsync(6,new ObjectHeadSelectionRequest{characters=selection});return;}
         EnsureInMatch();
         if (GameStartData.Instance != null) throw new InvalidOperationException("match_in_progress");
         if (!ObjectHeadContent.Load().ValidSelection(selection, lobbyState.settings.maxPlayers))
@@ -299,6 +302,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task ReturnToLobbyAsync()
     {
+        if(UseDedicatedAuthority){await SendAsync(7,new ObjectHeadReadyRequest());return;}
         EnsureInMatch();
         if (!IsHost) throw new InvalidOperationException("host_only");
         await SendAsync(ObjectHeadNetworkProtocol.ReturnToLobby, new ObjectHeadReadyRequest());
@@ -311,12 +315,13 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
         GameStartData.Clear();
         gameStarting = false;
         foreach (ObjectHeadLobbyPlayer player in lobbyState.players) player.ready = false;
-        if (IsHost) IncrementLobbyRevision();
+        if (IsHost && !UseDedicatedAuthority) IncrementLobbyRevision();
         SceneManager.LoadScene(config.TitleSceneName);
     }
 
     public async Task SetReadyAsync(bool ready)
     {
+        if (UseDedicatedAuthority) { await SendAsync(3,new ObjectHeadReadyRequest {ready=ready}); return; }
         EnsureInMatch();
         ObjectHeadLobbyPlayer local = lobbyState?.players?.FirstOrDefault(p => p.userId == LocalUserId);
         if (ready && (local == null || !ObjectHeadContent.Load().ValidSelection(local.characters, lobbyState.settings.maxPlayers)))
@@ -335,6 +340,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task UpdateRoomSettingsAsync(ObjectHeadRoomSettings settings)
     {
+        if (UseDedicatedAuthority) { settings=settings.Copy();settings.rulesetVersion=AuthorityRuleset;await SendAsync(4,new ObjectHeadSettingsRequest{settings=settings});return; }
         EnsureInMatch();
         ObjectHeadRoomSettings normalized = NormalizeSettings(settings);
         if (IsHost)
@@ -359,6 +365,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task StartGameAsync()
     {
+        if (UseDedicatedAuthority) { await SendAsync(5,new ObjectHeadReadyRequest()); return; }
         EnsureInMatch();
         if (!IsHost)
         {
@@ -444,6 +451,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
             matchmakerTicket = null;
             List<IUserPresence> participants = GetMatchedPresences(matched);
             currentMatch = await socket.JoinMatchAsync(matched);
+            if(UseDedicatedAuthority){lobbyState=null;await SendAsync(1,new ObjectHeadPlayerHello{username=displayName});return;}
             roomCode = string.Empty;
             if (participants.Count == 0)
             {
@@ -531,6 +539,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     private async void HandlePresenceChanged(IMatchPresenceEvent presenceEvent)
     {
+        if (UseDedicatedAuthority) return; // Only the server assigns seats and handles departures.
         if (currentMatch == null || presenceEvent.MatchId != currentMatch.Id)
         {
             return;
@@ -564,6 +573,7 @@ public sealed class ObjectHeadNetworkManager : MonoBehaviour
 
     private async void HandleMatchState(IMatchState matchState)
     {
+        if (UseDedicatedAuthority) { HandleAuthorityMatchState(matchState); return; }
         if (currentMatch == null || matchState.MatchId != currentMatch.Id)
         {
             return;

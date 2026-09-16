@@ -9,7 +9,7 @@ public enum ObjectHeadMapSelectionMode
 [Serializable]
 public sealed class ObjectHeadRoomSettings
 {
-    public const string CurrentRulesetVersion = "alpha-2026-09-16-six-heads-v3";
+    public const string CurrentRulesetVersion = "alpha-2026-09-16-common-authority-v4";
     public ObjectHeadMatchMode mode;
 
     public string rulesetVersion = CurrentRulesetVersion;
@@ -54,6 +54,8 @@ public sealed class ObjectHeadSelectionRequest
 [Serializable]
 public sealed class ObjectHeadLobbyState
 {
+    public bool dedicatedAuthority;
+    public bool authorityReady;
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public int revision;
     public string matchId;

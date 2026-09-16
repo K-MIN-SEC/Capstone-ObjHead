@@ -140,7 +140,8 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
     private void EndTurn()
     {
         if (!CanControl()) return;
-        if (Online && !network.IsHost) FindAnyObjectByType<ObjectHeadGameplayBridge>()?.RequestEndTurn();
+        if(ObjectHeadCommonAuthority.IsDedicatedMatch)FindAnyObjectByType<ObjectHeadDedicatedGameplay>()?.RequestEndTurn();
+        else if (Online && !network.IsHost) FindAnyObjectByType<ObjectHeadGameplayBridge>()?.RequestEndTurn();
         else turns.EndCurrentTurn();
     }
 

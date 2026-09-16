@@ -18,6 +18,8 @@ public sealed class GameStartData
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public string matchId;
     public bool localMatch;
+    public bool dedicatedAuthority;
+    public string authorityUserId;
     public ObjectHeadMatchMode mode;
     public string rulesetVersion;
     public int playerCount;

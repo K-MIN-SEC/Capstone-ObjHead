@@ -31,6 +31,8 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
     private const string ResourcesPath = "ObjectHeadNetworkConfig";
 
     [Header("Server profiles")]
+    [SerializeField] private bool useDedicatedAuthority;
+    public bool UseDedicatedAuthority => useDedicatedAuthority;
     [SerializeField] private string defaultProfileId = "local";
     [SerializeField] private ObjectHeadServerProfile[] profiles =
     {

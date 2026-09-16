@@ -28,6 +28,12 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
     private float nextTurnStateTime;
     private int endTurnRequestSerial = -1;
     private long localMessageSequence;
+    private long hostStateSequence,lastHostStateSequence;
+    private PlayerInventoryManager inventoryManager;
+    private readonly Dictionary<string,CommonHeadItem> replicaItems=new Dictionary<string,CommonHeadItem>();
+    public int AcceptedCommonUseCount {get;private set;}
+    public int ReceivedCommonUseCount {get;private set;}
+    public int ReceivedInventoryStateCount {get;private set;}
 
     public bool IsReady { get; private set; }
     public int ReceivedRemoteSnapshotCount { get; private set; }
@@ -45,6 +51,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private static void HandleSceneLoaded(Scene unused, LoadSceneMode unusedMode)
     {
+        if(ObjectHeadCommonAuthority.IsDedicatedMatch)
+        {
+            if(FindAny<ObjectHeadDedicatedGameplay>()==null)new GameObject("DedicatedGameplay").AddComponent<ObjectHeadDedicatedGameplay>();
+            return;
+        }
         if (GameStartData.Instance == null || GameStartData.Instance.localMatch || FindAny<ObjectHeadGameplayBridge>() != null)
         {
             return;
@@ -77,6 +88,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         }
 
         SkillFireController.FireCommitted -= HandleLocalFireCommitted;
+        CommonHeadUseController.UseCommitted -= HandleCommonUseCommitted;
     }
 
     private IEnumerator InitializeWhenSceneReady()
@@ -117,11 +129,13 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         foreach (var character in charactersById.Values)
             character.GetComponent<CharacterCombat>().UseExternalHealth = !network.IsHost;
         terrainManager = FindAny<TerrainManager>();
+        inventoryManager = FindAny<PlayerInventoryManager>();
         turnManager.ConfigureNetworkControl(localPlayerIndex, !network.IsHost);
         network.GameplayMessageReceived += HandleGameplayMessage;
         turnManager.TurnStarted += HandleTurnStateChanged;
         turnManager.TurnPhaseChanged += HandleTurnPhaseChanged;
         SkillFireController.FireCommitted += HandleLocalFireCommitted;
+        CommonHeadUseController.UseCommitted += HandleCommonUseCommitted;
 
         if (network.IsHost && terrainManager != null)
         {
@@ -220,6 +234,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             aimX = direction.x,
             aimY = direction.y,
             selectedSkillIndex = selector != null ? selector.SelectedSkillIndex : 0
+            ,commonSlot=character.GetComponent<CommonHeadUseController>()?.SelectedSlotIndex ?? -1
         }, ObjectHeadNetworkProtocol.GameplayCommand);
     }
 
@@ -283,13 +298,30 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 ApplyFireCommand(senderPlayerIndex, message);
                 break;
 
-            case ObjectHeadGameplayMessageKind.TurnState:
-                if (senderUserId == network.HostUserId && !network.IsHost)
+            case ObjectHeadGameplayMessageKind.CommonUseRequest:
+                if(network.IsHost)AcceptCommonUse(senderPlayerIndex,message);
+                break;
+
+            case ObjectHeadGameplayMessageKind.CommonUseAccepted:
+                if(!network.IsHost && senderUserId==network.HostUserId &&
+                    message.turnSerial==turnManager.TurnSerial && charactersById.TryGetValue(message.characterId,out var commonCharacter) &&
+                    commonCharacter==turnManager.CurrentCharacter && ObjectHeadContent.Load()?.Common(message.commonType)!=null)
                 {
+                    commonCharacter.GetComponent<CommonHeadUseController>()?.UseReplicated(message.commonType,message.normalizedPower,
+                        new Vector2(message.aimX,message.aimY),new Vector2(message.positionX,message.positionY));
+                    ReceivedCommonUseCount++;
+                }
+                break;
+
+            case ObjectHeadGameplayMessageKind.TurnState:
+                if (senderUserId == network.HostUserId && !network.IsHost && message.stateSequence>lastHostStateSequence)
+                {
+                    lastHostStateSequence=message.stateSequence;
                     ReceivedTurnStateCount++;
+                    ApplyCommonState(message);
                     foreach (var state in message.combatStates ?? Array.Empty<ObjectHeadCombatState>())
                         if (charactersById.TryGetValue(state.characterId, out var target))
-                            target.GetComponent<CharacterCombat>().ApplyNetworkHealth(state.hp, state.pending);
+                            target.GetComponent<CharacterCombat>().ApplyNetworkHealth(state.hp, state.pending,state.shield);
                     if (message.matchOver) { turnManager.ApplyNetworkMatchResult(message.winner); break; }
                     turnManager.ApplyAuthoritativeTurnState(
                         message.currentTurnIndex,
@@ -385,6 +417,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         AimController aim = character.GetComponent<AimController>();
         aim?.SetAimDirection(new Vector2(message.aimX, message.aimY));
         character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex);
+        if(message.commonSlot>=0)character.GetComponent<CommonHeadUseController>()?.TrySelectCommonHeadSlot(message.commonSlot);
         ReceivedRemoteSnapshotCount++;
     }
 
@@ -434,11 +467,16 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         Send(new ObjectHeadGameplayMessage
         {
             kind = ObjectHeadGameplayMessageKind.TurnState,
+            stateSequence=++hostStateSequence,
+            inventoryStates=(startData.players ?? Array.Empty<ObjectHeadPlayerAssignment>()).Select(p=>new ObjectHeadInventoryState{
+                playerIndex=p.playerIndex,slots=inventoryManager.GetInventory(p.playerIndex).CaptureSlots()}).ToArray(),
+            worldItems=FindObjectsByType<CommonHeadItem>(FindObjectsSortMode.None).Select(item=>new ObjectHeadWorldItemState{
+                id=item.NetworkId,type=item.ItemType,x=item.transform.position.x,y=item.transform.position.y}).ToArray(),
             matchOver = turnManager.IsMatchOver,
             winner = turnManager.WinningPlayerIndex,
             combatStates = charactersById.Select(pair => new ObjectHeadCombatState {
                 characterId=pair.Key, hp=pair.Value.GetComponent<CharacterCombat>().CurrentHp,
-                pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage }).ToArray(),
+                pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage,shield=pair.Value.GetComponent<CharacterCombat>().ShieldAbsorption }).ToArray(),
             messageId = NextMessageId(),
             turnSerial = turnManager.TurnSerial,
             roundSerial = turnManager.RoundSerial,
@@ -450,6 +488,69 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             remainingTurnSeconds = turnManager.RemainingTurnSeconds,
             remainingResidualSeconds = turnManager.RemainingResidualSeconds
         }, ObjectHeadNetworkProtocol.GameplayEvent);
+    }
+
+    public bool RequestCommonUse(CommonHeadUseController use,int slot,CommonHeadType type,float power)
+    {
+        var character=use!=null?use.GetComponent<TurnCharacterController>():null;
+        if(!IsReady || character==null || GetPlayerIndex(character)!=localPlayerIndex || !turnManager.CanCharacterFire(character))return false;
+        Vector2 aim=character.GetComponent<AimController>().AimDirection;
+        var message=new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.CommonUseRequest,
+            messageId=NextMessageId(),characterId=GetCharacterId(character),turnSerial=turnManager.TurnSerial,
+            commonSlot=slot,commonType=type,normalizedPower=power,aimX=aim.x,aimY=aim.y};
+        if(network.IsHost)return AcceptCommonUse(localPlayerIndex,message);
+        Send(message,ObjectHeadNetworkProtocol.GameplayCommand);return true;
+    }
+
+    private static bool Finite(float value)=>!float.IsNaN(value)&&!float.IsInfinity(value);
+    private bool AcceptCommonUse(int senderPlayerIndex,ObjectHeadGameplayMessage message)
+    {
+        if(!network.IsHost || !charactersById.TryGetValue(message.characterId ?? "",out var character) ||
+            senderPlayerIndex!=GetPlayerIndex(character) || character!=turnManager.CurrentCharacter ||
+            message.turnSerial!=turnManager.TurnSerial || !turnManager.CanCharacterFire(character) ||
+            ObjectHeadContent.Load()?.Common(message.commonType)==null ||
+            !Finite(message.normalizedPower) || message.normalizedPower<0 || message.normalizedPower>1 ||
+            !Finite(message.aimX) || !Finite(message.aimY))return false;
+        var direction=new Vector2(message.aimX,message.aimY);
+        if(!Finite(direction.sqrMagnitude)||direction.sqrMagnitude<.0001f)return false;
+        bool accepted=character.GetComponent<CommonHeadUseController>().UseAuthoritative(
+            message.commonSlot,message.commonType,message.normalizedPower,direction.normalized);
+        if(accepted){AcceptedCommonUseCount++;SendTurnState();}
+        return accepted;
+    }
+
+    private void HandleCommonUseCommitted(CommonHeadUseController use,int slot,CommonHeadType type,float power,Vector2 aim,Vector2 origin)
+    {
+        if(network==null || !network.IsHost)return;
+        Send(new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.CommonUseAccepted,messageId=NextMessageId(),
+            characterId=GetCharacterId(use.GetComponent<TurnCharacterController>()),turnSerial=turnManager.TurnSerial,
+            commonSlot=slot,commonType=type,normalizedPower=power,aimX=aim.x,aimY=aim.y,positionX=origin.x,positionY=origin.y},
+            ObjectHeadNetworkProtocol.GameplayEvent);
+    }
+
+    private void ApplyCommonState(ObjectHeadGameplayMessage message)
+    {
+        foreach(var state in message.inventoryStates ?? Array.Empty<ObjectHeadInventoryState>())
+            if(state!=null && startData.players.Any(p=>p.playerIndex==state.playerIndex))
+                inventoryManager.GetInventory(state.playerIndex).ApplyAuthoritativeSlots(state.slots);
+        ReceivedInventoryStateCount++;
+        if(message.worldItems==null)return;
+        var present=new HashSet<string>();
+        foreach(var state in message.worldItems)
+        {
+            if(state==null || string.IsNullOrEmpty(state.id) || !present.Add(state.id) || !Finite(state.x)||!Finite(state.y) ||
+                ObjectHeadContent.Load()?.Common(state.type)==null)continue;
+            if(!replicaItems.TryGetValue(state.id,out var item) || item==null)
+            {
+                item=CommonHeadItem.Create(state.type,new Vector2(state.x,state.y),CommonHeadItem.GetDefaultSprite(state.type));
+                replicaItems[state.id]=item;
+            }
+            item.ApplyReplica(state);
+        }
+        foreach(var id in replicaItems.Keys.Where(id=>!present.Contains(id)).ToArray())
+        {
+            if(replicaItems[id]!=null)replicaItems[id].Retire();replicaItems.Remove(id);
+        }
     }
 
     private async void Send(object message, long opCode)

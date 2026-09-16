@@ -7,6 +7,8 @@ using UnityEngine.InputSystem;
 [DisallowMultipleComponent]
 public class CommonHeadUseController : MonoBehaviour
 {
+    public static event System.Action<CommonHeadUseController,int,CommonHeadType,float,Vector2,Vector2> UseCommitted;
+    private Vector2? approvedOrigin;
     [Header("Throw")]
     [SerializeField, Min(0.05f)] private float projectileRadius = 0.18f;
     [SerializeField, Min(0f)] private float projectileGravityScale = 1f;
@@ -242,29 +244,46 @@ public class CommonHeadUseController : MonoBehaviour
         Debug.Log($"{name} selected {type} common head in slot {slotIndex + 6}.");
     }
 
-    private void UseSelectedHead(float normalizedPower)
+    public bool UseSelectedHead(float normalizedPower)
     {
-        int slotIndex = selectedSlotIndex;
-        CommonHeadType type = selectedType;
-        Sprite sprite = selectedSprite;
-        if (slotIndex < 0 ||
-            type == CommonHeadType.None ||
-            inventory.GetSlot(slotIndex) != type)
+        RefreshReferences();
+        if(ObjectHeadCommonAuthority.IsDedicatedMatch)
+            return FindAny<ObjectHeadDedicatedGameplay>()?.RequestCommon(this,selectedSlotIndex,selectedType,normalizedPower)==true;
+        if(ObjectHeadCommonAuthority.Online)
         {
-            return;
+            var bridge=FindAny<ObjectHeadGameplayBridge>();
+            return bridge!=null && bridge.RequestCommonUse(this,selectedSlotIndex,selectedType,normalizedPower);
         }
+        return UseAuthoritative(selectedSlotIndex,selectedType,normalizedPower,aimController.AimDirection);
+    }
 
-        if (!inventory.TryConsume(slotIndex, out CommonHeadType consumedType))
-        {
-            return;
-        }
+    public bool UseAuthoritative(int slotIndex,CommonHeadType expectedType,float normalizedPower,Vector2 direction)
+    {
+        RefreshReferences();
+        if(!ObjectHeadCommonAuthority.CanWrite || commonActionInProgress || inventory==null || turnManager==null ||
+            expectedType==CommonHeadType.None || inventory.GetSlot(slotIndex)!=expectedType ||
+            !turnManager.CanCharacterFire(turnCharacter))return false;
+        if(!turnManager.TryBeginAction(turnCharacter))return false;
+        if(!inventory.TryConsume(slotIndex,out CommonHeadType type))return false;
+        aimController.SetAimDirection(direction);
+        Vector2 origin=aimController.AimOrigin;
+        UseCommitted?.Invoke(this,slotIndex,type,Mathf.Clamp01(normalizedPower),aimController.AimDirection,origin);
+        ExecuteUse(type,CommonHeadItem.GetDefaultSprite(type),normalizedPower,origin);
+        return true;
+    }
 
-        if (!turnManager.TryBeginAction(turnCharacter))
-        {
-            inventory.TryAdd(consumedType, sprite, out _);
-            return;
-        }
+    public void UseReplicated(CommonHeadType type,float normalizedPower,Vector2 direction,Vector2 origin)
+    {
+        if(ObjectHeadCommonAuthority.CanWrite || commonActionInProgress)return;
+        aimController.SetAimDirection(direction);
+        // The host already consumed the inventory slot and began the action.
+        // Do not consume again: the full inventory snapshot can arrive before this event.
+        ExecuteUse(type,CommonHeadItem.GetDefaultSprite(type),normalizedPower,origin);
+    }
 
+    private void ExecuteUse(CommonHeadType consumedType,Sprite sprite,float normalizedPower,Vector2 origin)
+    {
+        approvedOrigin=origin;
         selectedSlotIndex = -1;
         selectedType = CommonHeadType.None;
         selectedSprite = null;
@@ -274,7 +293,7 @@ public class CommonHeadUseController : MonoBehaviour
         aimController?.RememberCurrentAimForTeam();
         characterVisual?.PlayThrowPose(0.25f);
         characterVisual?.HideHeadForThrow();
-        Debug.Log($"{name} used {consumedType} common head from slot {slotIndex + 6} at power {normalizedPower:0.00}.");
+        Debug.Log($"{name} used {consumedType} common head at power {normalizedPower:0.00}.");
 
         var definition=ObjectHeadContent.Load()?.Common(consumedType);
         if(definition!=null && definition.use==ObjectHeadCommonUse.SelfShield)
@@ -311,7 +330,7 @@ public class CommonHeadUseController : MonoBehaviour
         string projectileName)
     {
         Vector2 direction = aimController != null ? aimController.AimDirection : Vector2.right;
-        Vector2 origin = aimController != null ? aimController.AimOrigin : (Vector2)transform.position;
+        Vector2 origin = approvedOrigin ?? (aimController != null ? aimController.AimOrigin : (Vector2)transform.position);
         Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);
 
         GameObject projectileObject = new GameObject(projectileName);
@@ -473,6 +492,7 @@ public class CommonHeadUseController : MonoBehaviour
 
     private void CompleteCommonAction()
     {
+        approvedOrigin=null;
         commonActionInProgress = false;
         characterVisual?.RestoreUniqueHead();
         characterVisual?.ShowHeadAfterAction();

@@ -16,6 +16,7 @@ public sealed class ObjectHeadSkillPresentation
 [CreateAssetMenu(menuName="Object Head/Skill Presentation")]
 public sealed class ObjectHeadPresentation : ScriptableObject
 {
+    public static event Action<int,Vector2,float> ImpactCommitted;
     public Sprite smokeSprite,cloudTerrainSprite,dirtTerrainSprite,airstrikeBombSprite;
     [Min(1)]public float airstrikeDropHeight=8;
     [Min(.1f)]public float airstrikeFallSeconds=.45f;
@@ -28,6 +29,7 @@ public sealed class ObjectHeadPresentation : ScriptableObject
 
     public static void Launch(int id, Transform projectile)
     {
+        if(ObjectHeadNetworkManager.Instance?.IsDedicatedWorker==true)return;
         var library=Load(); var profile=library != null ? library.Find(id) : null;
         if(profile==null)return;
         Spawn(profile.launchPrefab,projectile.position,1);
@@ -40,6 +42,15 @@ public sealed class ObjectHeadPresentation : ScriptableObject
     }
 
     public static bool Impact(int id, Vector2 point, float radius)
+    {
+        if(ObjectHeadCommonAuthority.IsDedicatedMatch)
+        {
+            if(ObjectHeadCommonAuthority.CanWrite)ImpactCommitted?.Invoke(id,point,radius);
+            return true; // Network clients display only the confirmed impact, not their predicted collision.
+        }
+        return PresentConfirmedImpact(id,point,radius);
+    }
+    public static bool PresentConfirmedImpact(int id,Vector2 point,float radius)
     {
         var library=Load(); var profile=library != null ? library.Find(id) : null;
         if(profile?.impactPrefab==null)return false;

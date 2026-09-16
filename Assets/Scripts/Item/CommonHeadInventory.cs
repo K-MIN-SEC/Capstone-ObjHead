@@ -11,6 +11,20 @@ public class CommonHeadInventory : MonoBehaviour
 
     public event Action InventoryChanged;
     public int PlayerIndex => playerIndex;
+    public CommonHeadType[] CaptureSlots(){EnsureSlots();return (CommonHeadType[])slots.Clone();}
+    public void ApplyAuthoritativeSlots(CommonHeadType[] values)
+    {
+        if(ObjectHeadCommonAuthority.CanWrite || values==null || values.Length!=SlotCount)return;
+        var catalog=ObjectHeadContent.Load();
+        foreach(var value in values)if(value!=CommonHeadType.None && catalog?.Common(value)==null)return;
+        EnsureSlots();bool changed=false;
+        for(int i=0;i<SlotCount;i++)
+        {
+            if(slots[i]==values[i])continue;
+            slots[i]=values[i];slotSprites[i]=CommonHeadItem.GetDefaultSprite(values[i]);changed=true;
+        }
+        if(changed)InventoryChanged?.Invoke();
+    }
 
     public int Count
     {
@@ -57,6 +71,7 @@ public class CommonHeadInventory : MonoBehaviour
     {
         EnsureSlots();
         slotIndex = -1;
+        if(!ObjectHeadCommonAuthority.CanWrite)return false;
         if (type == CommonHeadType.None)
         {
             return false;
@@ -81,6 +96,7 @@ public class CommonHeadInventory : MonoBehaviour
 
     public bool TryConsume(int slotIndex, out CommonHeadType type)
     {
+        if(!ObjectHeadCommonAuthority.CanWrite){type=CommonHeadType.None;return false;}
         type = GetSlot(slotIndex);
         if (type == CommonHeadType.None)
         {

@@ -105,6 +105,11 @@ public class SkillFireController : MonoBehaviour
 
     public void Fire(float normalizedPower)
     {
+        if(ObjectHeadCommonAuthority.IsDedicatedMatch && !ObjectHeadCommonAuthority.CanWrite)
+        {
+            FindAnyObjectByType<ObjectHeadDedicatedGameplay>()?.RequestFire(this,normalizedPower);
+            return;
+        }
         FireInternal(normalizedPower, true);
     }
 

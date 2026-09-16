@@ -11,7 +11,7 @@ public sealed class ObjectHeadAudio : MonoBehaviour
     public static float SfxVolume {get=>PlayerPrefs.GetFloat("Audio.SFX",.65f);set=>PlayerPrefs.SetFloat("Audio.SFX",Mathf.Clamp01(value));}
     public static void Save()=>PlayerPrefs.Save();
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Boot(){if(instance==null)new GameObject("Audio").AddComponent<ObjectHeadAudio>();}
+    private static void Boot(){if(ObjectHeadNetworkManager.Instance?.IsDedicatedWorker==true)return;if(instance==null)new GameObject("Audio").AddComponent<ObjectHeadAudio>();}
     private void Awake()
     {
         if(instance!=null){Destroy(gameObject);return;}instance=this;DontDestroyOnLoad(gameObject);

@@ -17,6 +17,15 @@ public class CommonHeadItem : MonoBehaviour
     private Collider2D pickupTrigger;
     private bool registered;
     private bool pinnedToGround;
+    private bool consumed;
+    private string networkId;
+    public string NetworkId=>networkId;
+    public void ApplyReplica(ObjectHeadWorldItemState state)
+    {
+        networkId=state.id;transform.position=new Vector3(state.x,state.y,transform.position.z);
+        body.simulated=false;
+    }
+    public void Retire(){if(consumed)return;consumed=true;gameObject.SetActive(false);Destroy(gameObject);}
 
     public static int ActiveCount
     {
@@ -82,6 +91,7 @@ public class CommonHeadItem : MonoBehaviour
 
         CommonHeadItem item = itemObject.AddComponent<CommonHeadItem>();
         item.itemType = type;
+        item.networkId = System.Guid.NewGuid().ToString("N");
         item.body = body;
         item.groundCollider = groundCollider;
         item.pickupTrigger = pickupTrigger;
@@ -151,13 +161,27 @@ public class CommonHeadItem : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if(consumed || !ObjectHeadCommonAuthority.CanWrite)return;
         if (other.GetComponent<WaterZone>() != null || other.GetComponent<DeathZone>() != null)
         {
-            Destroy(gameObject);
+            Retire();
             return;
         }
 
-        ObjectHeadTeamMember member = other.GetComponentInParent<ObjectHeadTeamMember>();
+        TryCollect(other.GetComponentInParent<CharacterCombat>());
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        if(!consumed && ObjectHeadCommonAuthority.CanWrite)TryCollect(other.GetComponentInParent<CharacterCombat>());
+    }
+
+    public bool TryCollect(CharacterCombat character)
+    {
+        if(consumed || !ObjectHeadCommonAuthority.CanWrite || character==null || character.IsDead)return false;
+        var collider=character.GetComponent<Collider2D>();
+        if(collider==null || pickupTrigger==null || !pickupTrigger.Distance(collider).isOverlapped)return false;
+        ObjectHeadTeamMember member = character.GetComponent<ObjectHeadTeamMember>();
         PlayerInventoryManager manager = FindAny<PlayerInventoryManager>();
         CommonHeadInventory inventory = member != null && manager != null
             ? manager.GetInventory(member.PlayerIndex)
@@ -166,11 +190,11 @@ public class CommonHeadItem : MonoBehaviour
         Sprite collectedSprite = renderer != null ? renderer.sprite : GetDefaultSprite(itemType);
         if (inventory == null || !inventory.TryAdd(itemType, collectedSprite, out int slotIndex))
         {
-            return;
+            return false;
         }
 
-        Debug.Log($"{other.name} picked up {itemType} common head in slot {slotIndex + 6}.");
-        Destroy(gameObject);
+        Debug.Log($"{character.name} picked up {itemType} common head in slot {slotIndex + 6}.");
+        Retire();return true;
     }
 
     private void OnCollisionEnter2D(Collision2D collision)

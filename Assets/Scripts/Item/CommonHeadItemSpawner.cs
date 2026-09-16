@@ -93,6 +93,7 @@ public class CommonHeadItemSpawner : MonoBehaviour
 
     public void RefillMissingItems()
     {
+        if(!ObjectHeadCommonAuthority.CanWrite)return;
         var entries=ObjectHeadContent.Load()?.commonHeads;
         if(entries!=null && entries.Length>0){foreach(var entry in entries)SpawnMissingType(entry.type);return;}
         SpawnMissingType(CommonHeadType.Attack);
