@@ -36,7 +36,7 @@ public static class ObjectHeadReleaseAuthoring
         content.uiFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Art/Fonts/NotoSansCJKkr-Regular.otf");
         if (content.uiFont == null) throw new InvalidOperationException("Bundled Korean font is required.");
         AssetDatabase.CreateAsset(content, "Assets/Resources/ObjectHeadContent.asset");
-        content.teamRules = new[] { new ObjectHeadTeamRule { players = 2, charactersPerPlayer = 3 }, new ObjectHeadTeamRule { players = 4, charactersPerPlayer = 1 } };
+        content.teamRules = new[] { new ObjectHeadTeamRule { players = 2, charactersPerPlayer = 3 }, new ObjectHeadTeamRule { players = 4, charactersPerPlayer = 2 } };
         content.modes = new[] {
             new ObjectHeadModeDefinition { mode=ObjectHeadMatchMode.Duel,nameKey="mode_duel",players=2,alliances=new[]{1,2},spawnSeats=new[]{0,1} },
             new ObjectHeadModeDefinition { mode=ObjectHeadMatchMode.FreeForAll,nameKey="mode_ffa",players=4,alliances=new[]{1,2,3,4},spawnSeats=new[]{0,1,2,3} },

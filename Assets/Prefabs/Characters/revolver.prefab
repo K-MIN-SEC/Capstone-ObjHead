@@ -271,6 +271,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 007319efcafe4ed2bc5386fa5e8e16d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterVisual
+  normalizeHeadSprites: 1
+  commonHeadSizeMultiplier: 1
   characterKind: 3
   selectedSkillIndex: 0
   spriteFacesRightByDefault: 1

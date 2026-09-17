@@ -36,6 +36,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public ObjectHeadFrontEnd frontEnd;
     public bool InLobby => localLobby || (network != null && network.IsInMatch);
     public ObjectHeadLanguage Language => language;
+    public event Action LanguageChanged;
     public string Translate(string key) => L(key);
 
     private ObjectHeadCharacterKind[] selection = Array.Empty<ObjectHeadCharacterKind>();
@@ -52,6 +53,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     [Header("Main menu")]
     public InputField nicknameInput;
     public InputField roomCodeInput;
+    public ObjectHeadRoomAccessPanel roomAccess;
     public Text roomSizeValueText;
     public Button koreanButton;
     public Button englishButton;
@@ -80,6 +82,12 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public Button applySettingsButton;
     public Button readyButton;
     public Text readyButtonText;
+    public Button aiRosterModeButton;
+    public Text aiRosterModeText;
+    public Button aiDifficultyButton;
+    public Text aiDifficultyText;
+    public Button editLocalSquadButton;
+    public Text editLocalSquadText;
     public Button startGameButton;
     public Button leaveRoomButton;
 
@@ -93,6 +101,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     private int roomSize = 2;
     private int requestedMatchSize;
     private ObjectHeadMapSelectionMode selectedMapMode = ObjectHeadMapSelectionMode.Fixed;
+    private bool randomizeAiCharacters = true;
+    private ObjectHeadAIDifficulty selectedAiDifficulty = ObjectHeadAIDifficulty.Normal;
+    private readonly System.Collections.Generic.Dictionary<int,ObjectHeadCharacterKind[]> manualAiRosters = new System.Collections.Generic.Dictionary<int,ObjectHeadCharacterKind[]>();
     private string statusKey = "status_offline";
     private string rawStatus;
 
@@ -161,6 +172,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         toggleMapModeButton?.onClick.AddListener(ToggleMapMode);
         applySettingsButton?.onClick.AddListener(ApplyRoomSettings);
         readyButton?.onClick.AddListener(ToggleReady);
+        aiRosterModeButton?.onClick.AddListener(ToggleAIRosterMode);
+        aiDifficultyButton?.onClick.AddListener(CycleAIDifficulty);
+        editLocalSquadButton?.onClick.AddListener(ChangeLocalSelectionPlayer);
         startGameButton?.onClick.AddListener(StartGame);
         leaveRoomButton?.onClick.AddListener(LeaveRoom);
         localPlayButton?.onClick.AddListener(EnterLocalLobby);
@@ -187,6 +201,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         PlayerPrefs.SetInt(LanguagePreferenceKey, (int)language);
         PlayerPrefs.Save();
         RefreshAll();
+        LanguageChanged?.Invoke();
     }
 
     private void ChangeRoomSize(int delta)
@@ -204,7 +219,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         Run(async () =>
         {
             await EnsureConnectedAsync();
-            await network.CreateRoomAsync(BuildRoomSettings());
+            await network.CreateRoomAsync(BuildRoomSettings(),roomAccess!=null && roomAccess.IsPrivate,roomAccess?.CreatePassword);
+            roomAccess?.ClearPasswords();
             statusKey = "status_room_created";
         }, "status_connecting");
     }
@@ -229,7 +245,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         Run(async () =>
         {
             await EnsureConnectedAsync();
-            await network.JoinRoomAsync(code);
+            await network.JoinRoomAsync(code,roomAccess?.JoinPassword);
+            roomAccess?.ClearPasswords();
             statusKey = "status_joined_room";
         }, "status_connecting");
     }
@@ -362,8 +379,10 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         catch (Exception exception)
         {
             statusKey = "status_error";
-            rawStatus = L(exception.Message) != exception.Message ? L(exception.Message) : L("connection_help");
-            Debug.LogException(exception);
+            string errorKey=ObjectHeadRoomAccessPanel.ErrorKey(exception.Message);
+            rawStatus = L(errorKey) != errorKey ? L(errorKey) : L("connection_help");
+            // Admission errors are expected. Never log a request containing a password.
+            Debug.LogWarning("[Title] Operation failed: "+errorKey);
         }
         finally
         {
@@ -447,19 +466,34 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         if (lobbyModeText != null) lobbyModeText.text = L(content.Mode(selectedMode).nameKey);
         if (localLobby)
         {
+            bool aiBattle=localPlayers.Any(player=>player.isAi);
             lobbyTitleText.text = L("local_title");
             lobbyRoomCodeText.text = L("local_shared_screen");
             lobbyCapacityText.text = string.Format(L("player_count_value"), roomSize, roomSize);
             lobbyMapModeText.text = L(selectedMapMode == ObjectHeadMapSelectionMode.Fixed ? "map_fixed" : "map_random");
-            lobbyPlayerListText.text = string.Join("\n\n", localPlayers.Select((p, i) => $"P{i + 1}  " + L(p.characters.Length > 0 ? "ready_state" : "not_ready_state")));
+            lobbyPlayerListText.text = string.Join("\n", localPlayers.Select((p, i) =>
+            {
+                string team=p.characters.Length>0?string.Join(" / ",p.characters.Select(kind=>L(content.Character(kind).nameKey))):L("not_ready_state");
+                string controller=p.isAi?" · "+L("ai_difficulty_"+p.aiDifficulty.ToString().ToLowerInvariant()):string.Empty;
+                return $"P{i+1}  {p.username}{controller}\n{team}";
+            }));
             readyButtonText.text = L("confirm_team");
             readyButton.interactable = !busy;
             startGameButton.gameObject.SetActive(true);
             startGameButton.interactable = localPlayers.All(p => content.ValidSelection(p.characters, roomSize));
             copyRoomCodeButton.gameObject.SetActive(false);
+            if(aiRosterModeButton!=null)aiRosterModeButton.gameObject.SetActive(aiBattle);
+            if(aiDifficultyButton!=null)aiDifficultyButton.gameObject.SetActive(aiBattle);
+            if(aiRosterModeText!=null)aiRosterModeText.text=L(randomizeAiCharacters?"ai_roster_random":"ai_roster_select");
+            if(aiDifficultyText!=null)aiDifficultyText.text=L("ai_difficulty_"+selectedAiDifficulty.ToString().ToLowerInvariant());
+            if(editLocalSquadButton!=null)editLocalSquadButton.gameObject.SetActive(!aiBattle || !randomizeAiCharacters);
+            if(editLocalSquadText!=null)editLocalSquadText.text=string.Format(L("edit_local_squad"),localSelectionPlayer+1);
             SetHostControls(true);
             return;
         }
+        if(aiRosterModeButton!=null)aiRosterModeButton.gameObject.SetActive(false);
+        if(aiDifficultyButton!=null)aiDifficultyButton.gameObject.SetActive(false);
+        if(editLocalSquadButton!=null)editLocalSquadButton.gameObject.SetActive(false);
         copyRoomCodeButton.gameObject.SetActive(true);
 
         string roomCode = network.RoomCode;
@@ -638,29 +672,90 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void EnterLocalLobby()
     {
-        ObjectHeadTraining.Pending = false;
+        bool training=ObjectHeadTraining.Pending;
+        if(!training)ObjectHeadTraining.Pending = false;
         localLobby = true;
         localSelectionPlayer = 0;
-        localPlayers = Enumerable.Range(1, roomSize).Select(i => new ObjectHeadPlayerAssignment { playerIndex = i, allianceId = content.Mode(selectedMode).Alliance(i), username = "P" + i }).ToArray();
+        manualAiRosters.Clear();
+        var rosterRandom=new System.Random(Environment.TickCount^roomSize^((int)selectedMode<<8));
+        localPlayers = Enumerable.Range(1, roomSize).Select(i => new ObjectHeadPlayerAssignment {
+            playerIndex = i,
+            allianceId = content.Mode(selectedMode).Alliance(i),
+            username = i==1?"Player":"AI "+(i-1),
+            isAi = !training && i>1,
+            aiDifficulty = selectedAiDifficulty,
+            characters = i==1?Array.Empty<ObjectHeadCharacterKind>():ObjectHeadAISettings.CreateRoster(content,roomSize,rosterRandom,randomizeAiCharacters)
+        }).ToArray();
         selection = content.DefaultSelection(roomSize);
-        statusKey = "local_instructions";
+        statusKey = training?"training_instructions":"ai_instructions";
+        RefreshAll();
+    }
+
+    private void ToggleAIRosterMode()
+    {
+        SaveLocalSelection();
+        randomizeAiCharacters=!randomizeAiCharacters;
+        localSelectionPlayer=0;
+        selection=(ObjectHeadCharacterKind[])localPlayers[0].characters.Clone();
+        selectedSlot=0;
+        RefreshAIRosters();
+    }
+
+    private void CycleAIDifficulty()
+    {
+        selectedAiDifficulty=(ObjectHeadAIDifficulty)(((int)selectedAiDifficulty+1)%Enum.GetValues(typeof(ObjectHeadAIDifficulty)).Length);
+        if(localPlayers!=null)foreach(var player in localPlayers.Where(player=>player.isAi))player.aiDifficulty=selectedAiDifficulty;
+        RefreshAll();
+    }
+
+    private void RefreshAIRosters()
+    {
+        if(localPlayers==null)return;
+        var rosterRandom=new System.Random(Environment.TickCount^roomSize^0xA17E);
+        foreach(var player in localPlayers.Where(player=>player.isAi))
+        {
+            if(randomizeAiCharacters)
+                player.characters=ObjectHeadAISettings.CreateRoster(content,roomSize,rosterRandom,true);
+            else if(manualAiRosters.TryGetValue(player.playerIndex,out var saved) && content.ValidSelection(saved,roomSize))
+                player.characters=(ObjectHeadCharacterKind[])saved.Clone();
+            // On first manual selection keep the displayed roster as the starting point.
+            else if(!content.ValidSelection(player.characters,roomSize))
+                player.characters=content.DefaultSelection(roomSize);
+        }
+        RefreshAll();
+    }
+
+    private void SaveLocalSelection()
+    {
+        if(!localLobby || localPlayers==null || !content.ValidSelection(selection,roomSize))return;
+        var player=localPlayers[localSelectionPlayer];
+        player.characters=(ObjectHeadCharacterKind[])selection.Clone();
+        if(player.isAi && !randomizeAiCharacters)manualAiRosters[player.playerIndex]=(ObjectHeadCharacterKind[])selection.Clone();
+    }
+
+    private void ChangeLocalSelectionPlayer()
+    {
+        if(!localLobby || localPlayers==null)return;
+        SaveLocalSelection();
+        if(!randomizeAiCharacters || !localPlayers.Any(player=>player.isAi))
+            localSelectionPlayer=(localSelectionPlayer+1)%localPlayers.Length;
+        else localSelectionPlayer=0;
+        selection=(ObjectHeadCharacterKind[])localPlayers[localSelectionPlayer].characters.Clone();
+        selectedSlot=0;
+        EnsureSelection();
         RefreshAll();
     }
 
     public void StartTraining()
     {
         selectedMode=ObjectHeadMatchMode.Duel;roomSize=2;
-        EnterLocalLobby();
         ObjectHeadTraining.Pending=true;
+        EnterLocalLobby();
     }
 
     private void ConfirmLocalTeam()
     {
-        localPlayers[localSelectionPlayer].characters = (ObjectHeadCharacterKind[])selection.Clone();
-        localSelectionPlayer = (localSelectionPlayer + 1) % roomSize;
-        selection = localPlayers[localSelectionPlayer].characters.Length > 0
-            ? (ObjectHeadCharacterKind[])localPlayers[localSelectionPlayer].characters.Clone() : content.DefaultSelection(roomSize);
-        RefreshAll();
+        ChangeLocalSelectionPlayer();
     }
 
     private void StartLocalGame()

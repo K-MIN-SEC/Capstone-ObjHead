@@ -6,6 +6,7 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody2D))]
 public class CharacterCombat : MonoBehaviour
 {
+    public static event Action<Vector2,float> DamagePresented;
     [SerializeField, Min(1)] private int maxHp = 100;
     [SerializeField, Min(0.1f)] private float throwPower = 1f;
     [SerializeField, Min(0.1f)] private float knockbackResistance = 1f;
@@ -143,7 +144,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
-        if (UseExternalHealth) return;
+        if (UseExternalHealth || ObjectHeadCaptivity.Captured(this)) return;
         if (isDead || damage <= 0)
         {
             return;
@@ -160,6 +161,12 @@ public class CharacterCombat : MonoBehaviour
         }
 
         ApplyDamageNow(damage);
+    }
+
+    public void ApplyCaptivityDamage(int damage)
+    {
+        if(UseExternalHealth || isDead || damage<=0 || !ObjectHeadCaptivity.Captured(this))return;
+        ShowDamagePopup(damage);ApplyDamageNow(damage);
     }
 
     public int Heal(int amount)
@@ -209,7 +216,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void ApplyKnockback(Vector2 force)
     {
-        if (isDead || body == null)
+        if (isDead || body == null || ObjectHeadCaptivity.Captured(this))
         {
             return;
         }
@@ -228,7 +235,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void ApplyExplosionKnockback(Vector2 explosionCenterWorld, float maxDamage)
     {
-        if (isDead || body == null || maxDamage <= 0f)
+        if (isDead || body == null || maxDamage <= 0f || ObjectHeadCaptivity.Captured(this))
         {
             return;
         }
@@ -331,7 +338,7 @@ public class CharacterCombat : MonoBehaviour
             turnManager = FindTurnManager();
         }
 
-        return turnManager != null && turnManager.IsResidualTimeActive;
+        return turnManager != null && turnManager.DefersCombatDamage;
     }
 
     private void EnsureHealthLabel()
@@ -486,6 +493,7 @@ public class CharacterCombat : MonoBehaviour
 
     private void ShowDamagePopup(int damage)
     {
+        if(damage>0)DamagePresented?.Invoke(transform.position,damagePopupSeconds);
         if (!showHealthLabel || damage <= 0)
         {
             return;
@@ -660,8 +668,12 @@ public class CharacterCombat : MonoBehaviour
 #endif
     }
 
+    private float lastMicroHit=-100;
     private void FlashHit()
     {
+        var feedback=ObjectHeadMicroFeedback.Load();
+        if(feedback!=null && Time.time-lastMicroHit>=feedback.hitInterval)
+        {lastMicroHit=Time.time;ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Hit,KnockbackCenter,Vector2.up);}
         if (characterVisual != null)
         {
             characterVisual.PlayHitFlash(hitFlashColor, hitFlashSeconds);

@@ -17,6 +17,7 @@ MonoBehaviour:
   descriptionKey: revolver_skill_2_description
   cooldown: 2
   settings:
+    resolveAtTurnEnd: 1
     straightShot: 0
     straightSpeed: 0
     healing: 28

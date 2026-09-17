@@ -15,12 +15,24 @@ public enum SkillEffectType
     HealBurst,
     Airstrike,
     MagneticPulse,
-    SmokeZone
+    SmokeZone,
+    Captivity,
+    Teleport,
+    HelicopterSupport,
+    Airflow,
+    Hover,
+    GourdRandom,
+    GourdRefill,
+    GourdSelect,
+    RainbowSweep
 }
 
 [System.Serializable]
 public struct ObjectHeadSkillSettings
 {
+    public ObjectHeadVacuumDefinition vacuum;
+    [Tooltip("Mark the impact point, then resolve after residual movement and before HP settlement.")]
+    public bool resolveAtTurnEnd;
     public bool straightShot;
     public float straightSpeed;
     public int healing;
@@ -137,8 +149,8 @@ public class DemoSkillSelector : MonoBehaviour
 {
     [SerializeField] private ObjectHeadSkillDefinition[] authoredSkills;
     private const int BasicSlotCount = 3;
-    private const int CommonSlotCount = 3;
-    private const int TotalLoadoutSlotCount = BasicSlotCount + CommonSlotCount;
+    private static int CommonSlotCount => CommonHeadInventory.SlotCount;
+    private static int TotalLoadoutSlotCount => BasicSlotCount + CommonSlotCount;
 
     [SerializeField] private ObjectHeadCharacterKind characterKind = ObjectHeadCharacterKind.Bulb;
     [SerializeField, Range(0, 2)] private int selectedSkillIndex;
@@ -159,6 +171,23 @@ public class DemoSkillSelector : MonoBehaviour
     private TurnCharacterController turnCharacter;
     private CommonHeadUseController commonHeadUseController;
     private ObjectHeadBalanceTable balance;
+    private bool trainingOverride;
+    private ObjectHeadSkillSettings trainingSettings;
+    private CommonHeadType trainingCommon;
+    private Sprite trainingIcon;
+    public bool HasTrainingSelection => ObjectHeadTraining.Enabled && trainingOverride;
+    public CommonHeadType TrainingCommon => HasTrainingSelection?trainingCommon:CommonHeadType.None;
+    public Sprite TrainingIcon => HasTrainingSelection?trainingIcon:null;
+    public void RefreshTrainingVisual(){if(HasTrainingSelection)characterVisual?.SetTemporaryCommonHead(TrainingIcon);}
+    public bool SelectTrainingHead(ObjectHeadHeadChoice choice)
+    {
+        if(!ObjectHeadTraining.Enabled || choice==null)return false;
+        SetSkillIndex(0);trainingOverride=true;trainingCommon=choice.common;
+        trainingSettings=choice.Resolve();trainingIcon=choice.icon;
+        characterVisual?.SetTemporaryCommonHead(choice.icon);
+        if(trainingSettings.effectType==SkillEffectType.GourdSelect)FindAnyObjectByType<ObjectHeadBattleScreen>()?.OpenGourdHeads(GetComponent<TurnCharacterController>());
+        return true;
+    }
 
     public ObjectHeadCharacterKind CharacterKind => characterKind;
     public int SelectedSkillIndex => selectedSkillIndex;
@@ -174,7 +203,7 @@ public class DemoSkillSelector : MonoBehaviour
 
     private void Update()
     {
-        if (!allowKeyboardSelection || turnCharacter == null || !turnCharacter.HasControl)
+        if (!allowKeyboardSelection || turnCharacter == null || !turnCharacter.AcceptsLocalInput)
         {
             return;
         }
@@ -195,11 +224,14 @@ public class DemoSkillSelector : MonoBehaviour
         ApplySelection();
     }
 
-    public void SetSkillIndex(int index)
+    public void SetSkillIndex(int index,bool openInventory=true)
     {
+        trainingOverride=false;trainingCommon=CommonHeadType.None;
         CancelCommonHeadSelection();
         selectedSkillIndex = Mathf.Clamp(index, 0, 2);
         ApplySelection();
+        if(openInventory && Application.isPlaying && GetCurrentSkillSettings().effectType==SkillEffectType.GourdSelect)
+            FindAnyObjectByType<ObjectHeadBattleScreen>()?.OpenGourdHeads(GetComponent<TurnCharacterController>());
     }
 
     public bool CanUseSelectedSkill()
@@ -209,6 +241,7 @@ public class DemoSkillSelector : MonoBehaviour
 
     public int GetRemainingCooldown(int skillIndex)
     {
+        if(ObjectHeadTraining.Enabled)return 0;
         return remainingCooldowns[Mathf.Clamp(skillIndex, 0, 2)];
     }
 
@@ -236,11 +269,29 @@ public class DemoSkillSelector : MonoBehaviour
 
     public void NotifySkillFired()
     {
+        if(ObjectHeadTraining.Enabled)return;
         remainingCooldowns[selectedSkillIndex] = GetCooldownDuration(selectedSkillIndex);
+    }
+
+    public ObjectHeadSkillSettings GetSkillSettings(int index)
+    {
+        if(characterVisual==null)characterVisual=GetComponent<CharacterVisual>();
+        if(balance==null)balance=ObjectHeadBalanceTable.Load();
+        // Query without triggering selection animations or cancelling a common head.
+        int previous = selectedSkillIndex;
+        try
+        {
+            selectedSkillIndex = Mathf.Clamp(index, 0, 2);
+            var result=GetCurrentSkillSettings();
+            if(result.projectileSprite==null && characterVisual!=null)result.headSprite=characterVisual.GetSkillHeadSprite(selectedSkillIndex);
+            return result;
+        }
+        finally { selectedSkillIndex = previous; }
     }
 
     public ObjectHeadSkillSettings GetCurrentSkillSettings()
     {
+        if(HasTrainingSelection)return trainingSettings;
         if (authoredSkills != null && selectedSkillIndex < authoredSkills.Length && authoredSkills[selectedSkillIndex] != null)
             return authoredSkills[selectedSkillIndex].Resolve(characterVisual);
         Sprite headSprite = characterVisual != null ? characterVisual.CurrentHeadSprite : null;

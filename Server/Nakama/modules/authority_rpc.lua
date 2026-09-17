@@ -1,6 +1,7 @@
 local nk=require("nakama")
 local rules=require("authority_rules")
 local match=require("authority_match")
+local access=require("authority_access")
 local function request(ctx,payload)
   if not ctx.user_id then error("authentication_required") end
   if type(payload)~="string" or #payload>rules.max_payload_bytes then error("invalid_request") end
@@ -10,7 +11,7 @@ local function request(ctx,payload)
 end
 local function list(query)
   local result={}
-  for _,entry in ipairs(nk.match_list(100,true,nil,nil,nil,"+label.game:object_head_authority +label.phase:lobby")) do
+  for _,entry in ipairs(nk.match_list(100,true,nil,nil,nil,"+label.game:object_head_authority +label.phase:lobby "..(query or ""))) do
     local info=nk.json_decode(entry.label)
     if info.ruleset==rules.ruleset then result[#result+1]=entry end
   end
@@ -20,6 +21,9 @@ local function create(ctx,payload)
   local data=request(ctx,payload)
   local settings=match.settings(data.settings)
   if not settings then error("invalid_settings") end
+  if data.public~=nil and type(data.public)~="boolean" then error("invalid_room_visibility") end
+  local private=data.public==false
+  if private and not access.password_valid(data.password) then error("room_password_invalid") end
   -- A transactional write bounds creation per account even across concurrent requests.
   local key={collection="object_head_room_limit",key="last_create",user_id=ctx.user_id}
   local old=nk.storage_read({key})[1]
@@ -31,7 +35,9 @@ local function create(ctx,payload)
   local mapping={collection="object_head_authority_codes",key=code,user_id="00000000-0000-0000-0000-000000000000",
     value={pending=true},version="*",permission_read=0,permission_write=0}
   nk.storage_write({mapping})
-  local id=nk.match_create("authority_match",{owner=ctx.user_id,settings=settings,code=code,public=data.public~=false})
+  local password_hash=private and nk.bcrypt_hash(data.password) or nil
+  local id=nk.match_create("authority_match",{owner=ctx.user_id,settings=settings,code=code,public=not private,private=private})
+  if private then access.save(id,password_hash) end
   mapping.version=nil;mapping.value={matchId=id};nk.storage_write({mapping})
   return nk.json_encode({matchId=id,roomCode=code})
 end
@@ -43,15 +49,23 @@ local function find(ctx,payload)
     if not code then error("invalid_room_code") end
     local entry=nk.storage_read({{collection="object_head_authority_codes",key=code,user_id="00000000-0000-0000-0000-000000000000"}})[1]
     if not entry or not entry.value.matchId or not nk.match_get(entry.value.matchId) then error("room_not_found") end
-    return nk.json_encode({matchId=entry.value.matchId,roomCode=code})
+    local room=nk.match_get(entry.value.matchId)
+    local info=nk.json_decode(room.label)
+    if info.ruleset~=rules.ruleset then error("incompatible_ruleset") end
+    return nk.json_encode({matchId=entry.value.matchId,roomCode=code,requiresPassword=info.private==true})
   end
   local rooms={}
-  for _,m in ipairs(list("+label.public:true +label.phase:lobby")) do
+  for _,m in ipairs(list("+label.visibility:public")) do
     local info=nk.json_decode(m.label)
     if info.public==true and info.players<info.capacity then info.matchId=m.match_id;rooms[#rooms+1]=info end
   end
   if #rooms==0 then return '{"rooms":[]}' end
   return nk.json_encode({rooms=rooms})
+end
+local function admission(ctx,payload)
+  local data=request(ctx,payload)
+  if data.rulesetVersion~=rules.ruleset then error("incompatible_ruleset") end
+  return access.authorize(ctx,data.matchId,data.password)
 end
 local function worker(ctx,payload)
   local data=request(ctx,payload)
@@ -71,6 +85,7 @@ end
 nk.register_rpc(create,"objecthead_authority_create")
 nk.register_rpc(find,"objecthead_authority_find")
 nk.register_rpc(worker,"objecthead_authority_worker")
+nk.register_rpc(admission,"objecthead_authority_admission")
 nk.register_matchmaker_matched(function(ctx,users)
   if not users[1] or users[1].properties.ruleset~=rules.ruleset then return nil end
   local modes={Duel=0,FreeForAll=1,Teams=2}

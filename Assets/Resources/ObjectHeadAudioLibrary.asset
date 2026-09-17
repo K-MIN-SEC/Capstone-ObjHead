@@ -13,3 +13,8 @@ MonoBehaviour:
   m_Name: ObjectHeadAudioLibrary
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadAudioLibrary
   music: {fileID: 8300000, guid: 667bdac3777502b4b87c84d5a2036a20, type: 3}
+  helicopterLoop: {fileID: 8300000, guid: a6867faa4b7049a48b70d8c43aaaecb2, type: 3}
+  supportMachineGun: {fileID: 8300000, guid: b6c9363a7c20a9f4691beb0bdbf4f253, type: 3}
+  supportRocket: {fileID: 8300000, guid: be0248254a04c62449a7c74521aa6561, type: 3}
+  supportFinal: {fileID: 8300000, guid: 3482b3855873f1a41a1074fd2a232066, type: 3}
+  rainbowLoop: {fileID: 8300000, guid: c54ca170ad399774b91d8d802d372e6a, type: 3}

@@ -7,5 +7,10 @@ public enum CommonHeadType
     HealingPotion,
     Ice,
     IronHelmet,
-    Smoke
+    Smoke,
+    Lock,
+    Eraser,
+    CrystalOrb,
+    HeavyWeapon,
+    RetroTV
 }

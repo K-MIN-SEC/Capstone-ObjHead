@@ -4,4 +4,5 @@ using UnityEngine;
 public sealed class ObjectHeadAudioLibrary : ScriptableObject
 {
     public AudioClip music;
+    public AudioClip helicopterLoop,supportMachineGun,supportRocket,supportFinal,rainbowLoop;
 }

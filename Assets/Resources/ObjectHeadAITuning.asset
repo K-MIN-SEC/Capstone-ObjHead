@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85864c75c70a035418e83afd3b993f05, type: 3}
+  m_Name: ObjectHeadAITuning
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadAITuning
+  beginnerPowerSamples: 4
+  normalPowerSamples: 7
+  proPowerSamples: 11
+  minimumPower: 0.2
+  trajectoryStep: 0.04
+  trajectorySeconds: 4
+  candidatesPerFrame: 8
+  planningBudgetSeconds: 1.2
+  friendlyFirePenalty: 1.8
+  selfDamagePenalty: 2.4
+  killBonus: 18
+  healingWeight: 1.2
+  zoneWeight: 0.55
+  controlWeight: 12
+  cooldownCost: 0.6
+  minimumShotUtility: 0.5
+  retreatSeconds: 1.1
+  dangerClearance: 0.6
+  landingWaitSeconds: 0.7
+  navigationBudgetSeconds: 1.6
+  navigationPositionSamples: 6
+  navigationStepWorld: 1.25
+  movementSearchSeconds: 3
+  jumpTraceStep: 0.035
+  jumpTraceSeconds: 1.7
+  walkStepHeight: 0.22

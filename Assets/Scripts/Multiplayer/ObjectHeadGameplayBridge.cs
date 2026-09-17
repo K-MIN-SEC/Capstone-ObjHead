@@ -264,6 +264,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             aimX = aimDirection.x,
             aimY = aimDirection.y,
             selectedSkillIndex = skillIndex,
+            gourdChoiceId = character.GetComponent<ObjectHeadGourd>()?.LastResolvedId,
             normalizedPower = normalizedPower
         }, ObjectHeadNetworkProtocol.GameplayCommand);
     }
@@ -295,7 +296,21 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 break;
 
             case ObjectHeadGameplayMessageKind.FireCommand:
-                ApplyFireCommand(senderPlayerIndex, message);
+                if(message.gourdRequest){if(network.IsHost)AcceptGourdFire(senderPlayerIndex,message);}
+                else ApplyFireCommand(senderPlayerIndex, message);
+                break;
+
+            case ObjectHeadGameplayMessageKind.FireAccepted:
+                if(!network.IsHost && senderUserId==network.HostUserId && message.turnSerial==turnManager.TurnSerial &&
+                    charactersById.TryGetValue(message.characterId??"",out var borrowedActor) && borrowedActor==turnManager.CurrentCharacter &&
+                    message.selectedSkillIndex>=0 && message.selectedSkillIndex<3)
+                {
+                    var gourd=borrowedActor.GetComponent<ObjectHeadGourd>();if(gourd==null)break;
+                    borrowedActor.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex,false);
+                    borrowedActor.GetComponent<AimController>().SetAimDirection(new Vector2(message.aimX,message.aimY));
+                    gourd.ConfirmedId=message.gourdChoiceId;
+                    if(borrowedActor.GetComponent<SkillFireController>().FireReplicated(message.normalizedPower))ReceivedFireCommandCount++;
+                }
                 break;
 
             case ObjectHeadGameplayMessageKind.CommonUseRequest:
@@ -321,7 +336,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                     ApplyCommonState(message);
                     foreach (var state in message.combatStates ?? Array.Empty<ObjectHeadCombatState>())
                         if (charactersById.TryGetValue(state.characterId, out var target))
+                        {
                             target.GetComponent<CharacterCombat>().ApplyNetworkHealth(state.hp, state.pending,state.shield);
+                            target.GetComponent<ObjectHeadGourd>()?.Apply(state.gourdCharges);
+                            ObjectHeadCaptivity.ApplyReplica(target,state.captiveTurns);
+                        }
                     if (message.matchOver) { turnManager.ApplyNetworkMatchResult(message.winner); break; }
                     turnManager.ApplyAuthoritativeTurnState(
                         message.currentTurnIndex,
@@ -331,7 +350,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                         message.remainingTurnSeconds,
                         message.remainingResidualSeconds,
                         message.residualTimeActive,
-                        message.actionUsed);
+                        message.actionUsed,
+                        message.settlementPending);
                 }
                 break;
 
@@ -404,19 +424,12 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             return;
         }
 
-        character.transform.position = new Vector3(
-            message.positionX,
-            message.positionY,
-            character.transform.position.z);
-        Rigidbody2D body = character.GetComponent<Rigidbody2D>();
-        if (body != null)
-        {
-            body.linearVelocity = new Vector2(message.velocityX, message.velocityY);
-        }
+        ObjectHeadNetworkSmoother smoother=character.GetComponent<ObjectHeadNetworkSmoother>()??character.gameObject.AddComponent<ObjectHeadNetworkSmoother>();
+        smoother.Push(new Vector2(message.positionX,message.positionY),new Vector2(message.velocityX,message.velocityY));
 
         AimController aim = character.GetComponent<AimController>();
         aim?.SetAimDirection(new Vector2(message.aimX, message.aimY));
-        character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex);
+        character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex,false);
         if(message.commonSlot>=0)character.GetComponent<CommonHeadUseController>()?.TrySelectCommonHeadSlot(message.commonSlot);
         ReceivedRemoteSnapshotCount++;
     }
@@ -432,7 +445,10 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             return;
         }
 
-        character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex);
+        character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex,false);
+        var gourd=character.GetComponent<ObjectHeadGourd>();
+        if(gourd!=null && GetPlayerIndex(network.HostUserId)!=senderPlayerIndex)return;
+        if(gourd!=null){gourd.ConfirmedId=message.gourdChoiceId;gourd.Select(message.gourdChoiceId);}
         character.GetComponent<AimController>()?.SetAimDirection(new Vector2(message.aimX, message.aimY));
         SkillFireController fire = character.GetComponent<SkillFireController>();
         if (fire != null && fire.FireReplicated(message.normalizedPower))
@@ -476,6 +492,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             winner = turnManager.WinningPlayerIndex,
             combatStates = charactersById.Select(pair => new ObjectHeadCombatState {
                 characterId=pair.Key, hp=pair.Value.GetComponent<CharacterCombat>().CurrentHp,
+                gourdCharges=pair.Value.GetComponent<ObjectHeadGourd>()?.Capture(),
+                captiveTurns=pair.Value.GetComponent<ObjectHeadCaptivity>()?.RemainingOwnTurns??0,
                 pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage,shield=pair.Value.GetComponent<CharacterCombat>().ShieldAbsorption }).ToArray(),
             messageId = NextMessageId(),
             turnSerial = turnManager.TurnSerial,
@@ -485,9 +503,33 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             phase = (int)turnManager.CurrentPhase,
             actionUsed = turnManager.ActionUsedThisTurn,
             residualTimeActive = turnManager.IsResidualTimeActive,
+            settlementPending = turnManager.IsTurnEndResolving || turnManager.IsSettlementTimeActive,
             remainingTurnSeconds = turnManager.RemainingTurnSeconds,
             remainingResidualSeconds = turnManager.RemainingResidualSeconds
         }, ObjectHeadNetworkProtocol.GameplayEvent);
+    }
+
+    public void RequestGourdFire(SkillFireController fire,float power)
+    {
+        var actor=fire!=null?fire.GetComponent<TurnCharacterController>():null;
+        if(!IsReady || actor==null || GetPlayerIndex(actor)!=localPlayerIndex || !turnManager.CanCharacterFire(actor))return;
+        var aim=actor.GetComponent<AimController>().AimDirection;
+        Send(new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.FireCommand,gourdRequest=true,
+            messageId=NextMessageId(),characterId=GetCharacterId(actor),turnSerial=turnManager.TurnSerial,
+            selectedSkillIndex=actor.GetComponent<DemoSkillSelector>().SelectedSkillIndex,gourdChoiceId=actor.GetComponent<ObjectHeadGourd>()?.SelectedId,
+            normalizedPower=power,aimX=aim.x,aimY=aim.y},ObjectHeadNetworkProtocol.GameplayCommand);
+    }
+    private void AcceptGourdFire(int senderPlayerIndex,ObjectHeadGameplayMessage message)
+    {
+        if(!network.IsHost || message.turnSerial!=turnManager.TurnSerial || !charactersById.TryGetValue(message.characterId??"",out var actor) ||
+            GetPlayerIndex(actor)!=senderPlayerIndex || !turnManager.CanCharacterFire(actor) || message.selectedSkillIndex<0 || message.selectedSkillIndex>2 ||
+            !Finite(message.normalizedPower) || message.normalizedPower<0 || message.normalizedPower>1 || !Finite(message.aimX) || !Finite(message.aimY))return;
+        var gourd=actor.GetComponent<ObjectHeadGourd>();var aim=new Vector2(message.aimX,message.aimY);
+        if(gourd==null || aim.sqrMagnitude<.0001f || (message.selectedSkillIndex==2 && !gourd.Select(message.gourdChoiceId)))return;
+        actor.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex,false);actor.GetComponent<AimController>().SetAimDirection(aim.normalized);
+        if(!actor.GetComponent<SkillFireController>().FireReplicated(message.normalizedPower))return;
+        message.gourdRequest=false;message.kind=ObjectHeadGameplayMessageKind.FireAccepted;message.messageId=NextMessageId();message.gourdChoiceId=gourd.LastResolvedId;
+        Send(message,ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
     public bool RequestCommonUse(CommonHeadUseController use,int slot,CommonHeadType type,float power)

@@ -37,6 +37,9 @@ public class WaterZone : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        CharacterCombat enteringCharacter=other.GetComponentInParent<CharacterCombat>();
+        if(enteringCharacter!=null && !enteringCharacter.IsDead)
+            ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Water,new Vector2(enteringCharacter.transform.position.x,GetComponent<Collider2D>().bounds.max.y),Vector2.up,1.4f);
         entered.Invoke(other.gameObject);
         CharacterCombat combat = other.GetComponentInParent<CharacterCombat>();
         if (combat != null)

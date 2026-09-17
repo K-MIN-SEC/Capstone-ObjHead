@@ -17,8 +17,8 @@ public sealed class ObjectHeadRoomBrowser : MonoBehaviour
     private bool busy;
     public int VisibleRoomCount => rows.Count;
     private void Awake() => refreshButton.onClick.AddListener(Refresh);
-    private void OnEnable() => Refresh();
-    private void OnDisable() { generation++; busy=false; }
+    private void OnEnable() { title.LanguageChanged+=Refresh;Refresh(); }
+    private void OnDisable() { title.LanguageChanged-=Refresh;generation++; busy=false; }
     private void ClearRows()
     {
         foreach (var row in rows) { row.gameObject.SetActive(false); Destroy(row.gameObject); }

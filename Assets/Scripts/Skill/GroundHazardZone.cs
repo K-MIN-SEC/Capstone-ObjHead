@@ -14,6 +14,7 @@ public class GroundHazardZone : MonoBehaviour
     private readonly Dictionary<CharacterCombat, int> overlapCounts = new Dictionary<CharacterCombat, int>();
     private readonly Dictionary<CharacterCombat, int> lastDamagedTurn = new Dictionary<CharacterCombat, int>();
     private readonly List<GameObject> segments = new List<GameObject>();
+    private readonly List<GameObject> artworkObjects = new List<GameObject>();
 
     private TerrainManager terrain;
     private TurnManager turnManager;
@@ -253,6 +254,7 @@ public class GroundHazardZone : MonoBehaviour
         }
 
         FinishRun(runActive, runStartX, runEndX, runYSum, runSamples);
+        RebuildArtwork(sampleCount, startX);
         if (segments.Count == 0)
         {
             Debug.Log($"{name} removed because no supported ground segments remain.");
@@ -315,10 +317,6 @@ public class GroundHazardZone : MonoBehaviour
         if(artwork!=null)
         {
             renderer.enabled=false;
-            var artObject=new GameObject("ZoneArtwork",typeof(SpriteRenderer));artObject.transform.SetParent(segmentObject.transform,false);
-            var art=artObject.GetComponent<SpriteRenderer>();art.sprite=artwork;art.sortingOrder=21;
-            artObject.transform.localScale=new Vector3(1f/artwork.bounds.size.x,Mathf.Max(thicknessWorld,.45f)/(thicknessWorld*artwork.bounds.size.y),1);
-            artObject.transform.localPosition=new Vector3(0,.5f,0);
         }
 
         BoxCollider2D box = segmentObject.AddComponent<BoxCollider2D>();
@@ -329,8 +327,66 @@ public class GroundHazardZone : MonoBehaviour
         segments.Add(segmentObject);
     }
 
+    private void RebuildArtwork(int sampleCount, float startX)
+    {
+        if (artwork == null) return;
+        var chain = new List<Vector2>();
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float x = Mathf.Lerp(startX, startX + lengthWorld, i / (float)(sampleCount - 1));
+            bool valid = TryFindSurface(x, out float y);
+            if (!valid || (chain.Count > 0 && Mathf.Abs(y - chain[chain.Count - 1].y) > sampleSpacing * 4f))
+            {
+                DrawArtworkChain(chain);
+                chain.Clear();
+            }
+            if (valid) chain.Add(new Vector2(x, y));
+        }
+        DrawArtworkChain(chain);
+    }
+
+    private void DrawArtworkChain(List<Vector2> points)
+    {
+        if (points.Count < 2) return;
+        var distance = new float[points.Count];
+        for (int i = 1; i < points.Count; i++) distance[i] = distance[i - 1] + Vector2.Distance(points[i - 1], points[i]);
+        float length = distance[distance.Length - 1];
+        if (length < .05f) return;
+        var presentation = ObjectHeadPresentation.Load();
+        float height = presentation != null ? presentation.groundZoneArtHeight : .3f;
+        float scale = height / Mathf.Max(.001f, artwork.bounds.size.y);
+        float width = artwork.bounds.size.x * scale;
+        // A short surface may receive a smaller whole stamp; never squeeze one axis.
+        scale *= Mathf.Min(1f, length / Mathf.Max(.001f, width));
+        width = artwork.bounds.size.x * scale;
+        float spacing = presentation != null ? presentation.groundZoneArtSpacing : .9f;
+        int count = Mathf.Max(1, Mathf.CeilToInt((length - width) / Mathf.Max(.05f, width * spacing)) + 1);
+        for (int n = 0; n < count; n++)
+        {
+            float at = count == 1 ? length * .5f : Mathf.Lerp(width * .5f, length - width * .5f, n / (float)(count - 1));
+            int edge = 1;
+            while (edge < points.Count - 1 && distance[edge] < at) edge++;
+            Vector2 tangent = (points[edge] - points[edge - 1]).normalized;
+            Vector2 normal = new Vector2(-tangent.y, tangent.x);
+            Vector2 position = Vector2.Lerp(points[edge - 1], points[edge], Mathf.InverseLerp(distance[edge - 1], distance[edge], at));
+            var artObject = new GameObject("ZoneArtwork", typeof(SpriteRenderer));
+            artObject.transform.SetParent(transform, false);
+            float overlap = presentation != null ? presentation.groundZoneTerrainOverlap : 0f;
+            artObject.transform.position = position + normal * (artwork.bounds.size.y * scale * (.5f-overlap));
+            artObject.transform.rotation = Quaternion.Euler(0, 0, Mathf.Atan2(tangent.y, tangent.x) * Mathf.Rad2Deg);
+            artObject.transform.localScale = Vector3.one * scale;
+            var renderer = artObject.GetComponent<SpriteRenderer>();
+            renderer.sprite = artwork;
+            renderer.sortingOrder = 21;
+            artworkObjects.Add(artObject);
+        }
+    }
+
     private void ClearSegments()
     {
+        foreach (var item in artworkObjects)
+            if (item != null) { item.SetActive(false); Destroy(item); }
+        artworkObjects.Clear();
         ClearTrackedSlows();
         overlapCounts.Clear();
         for (int i = segments.Count - 1; i >= 0; i--)
@@ -346,6 +402,7 @@ public class GroundHazardZone : MonoBehaviour
                 collider.enabled = false;
             }
 
+            segments[i].SetActive(false);
             Destroy(segments[i]);
         }
 

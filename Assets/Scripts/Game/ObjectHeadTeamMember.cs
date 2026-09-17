@@ -70,7 +70,8 @@ public static class ObjectHeadGamepadInput
 
     public static float MoveX()
     {
-        float legacyValue = ReadLegacyAxis("Horizontal");
+        // Horizontal also contains keyboard arrows. The fallback must be joystick-only.
+        float legacyValue = ReadLegacyAxis("ObjectHeadLeftStickX");
 #if ENABLE_INPUT_SYSTEM
         UnityEngine.InputSystem.Gamepad gamepad = GetGamepad();
         float value = legacyValue;

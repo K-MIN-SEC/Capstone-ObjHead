@@ -1,0 +1,135 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d75813a874572a46af8d62daaf18755, type: 3}
+  m_Name: ObjectHeadMicroFeedback
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadMicroFeedback
+  effectsEnabled: 1
+  particleBudget: 240
+  emissionsPerFrame: 80
+  visibilityMargin: 2
+  sortingOrder: 22
+  footstepDistance: 0.65
+  footstepInterval: 0.18
+  airborneGrace: 0.12
+  landingSpeed: 1.8
+  hitInterval: 0.15
+  recoilDistance: 0.055
+  recoilSeconds: 0.12
+  profiles:
+  - cue: 0
+    sprite: {fileID: 1489031960, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    count: 22
+    size: {x: 0.16, y: 0.38}
+    lifetime: {x: 0.8, y: 1.35}
+    speed: {x: 2, y: 5}
+    spread: 80
+    gravity: 8
+    scatter: 0.45
+    spin: 140
+    endScale: 0.5
+  - cue: 1
+    sprite: {fileID: 1080195110, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 0.78, g: 0.69, b: 0.53, a: 0.5}
+    count: 5
+    size: {x: 0.24, y: 0.5}
+    lifetime: {x: 0.4, y: 0.7}
+    speed: {x: 0.3, y: 1}
+    spread: 75
+    gravity: 0
+    scatter: 0.5
+    spin: 35
+    endScale: 1.6
+  - cue: 2
+    sprite: {fileID: 1080195110, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 0.83, g: 0.76, b: 0.63, a: 0.4}
+    count: 2
+    size: {x: 0.1, y: 0.19}
+    lifetime: {x: 0.16, y: 0.28}
+    speed: {x: 0.2, y: 0.5}
+    spread: 25
+    gravity: 0
+    scatter: 0.06
+    spin: 35
+    endScale: 1.6
+  - cue: 3
+    sprite: {fileID: 1080195110, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 0.88, g: 0.82, b: 0.69, a: 0.5}
+    count: 4
+    size: {x: 0.12, y: 0.24}
+    lifetime: {x: 0.2, y: 0.38}
+    speed: {x: 0.4, y: 1}
+    spread: 90
+    gravity: 0.5
+    scatter: 0.12
+    spin: 35
+    endScale: 1.6
+  - cue: 4
+    sprite: {fileID: 1080195110, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 0.88, g: 0.82, b: 0.69, a: 0.55}
+    count: 6
+    size: {x: 0.14, y: 0.28}
+    lifetime: {x: 0.22, y: 0.42}
+    speed: {x: 0.5, y: 1.2}
+    spread: 85
+    gravity: 1
+    scatter: 0.17
+    spin: 35
+    endScale: 1.6
+  - cue: 5
+    sprite: {fileID: 1080195110, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 0.55}
+    count: 3
+    size: {x: 0.09, y: 0.18}
+    lifetime: {x: 0.12, y: 0.24}
+    speed: {x: 0.6, y: 1.4}
+    spread: 25
+    gravity: 0
+    scatter: 0.06
+    spin: 35
+    endScale: 1.6
+  - cue: 6
+    sprite: {fileID: -7953308783598450473, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    count: 3
+    size: {x: 0.07, y: 0.16}
+    lifetime: {x: 0.12, y: 0.23}
+    speed: {x: 0.7, y: 1.6}
+    spread: 140
+    gravity: 1
+    scatter: 0.14
+    spin: 35
+    endScale: 1.6
+  - cue: 7
+    sprite: {fileID: 225625391, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 1}
+    count: 10
+    size: {x: 0.1, y: 0.26}
+    lifetime: {x: 0.3, y: 0.65}
+    speed: {x: 1.3, y: 3}
+    spread: 60
+    gravity: 5
+    scatter: 0.3
+    spin: 140
+    endScale: 0.5
+  - cue: 8
+    sprite: {fileID: 1489031960, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}
+    tint: {r: 1, g: 0.72, b: 0.8, a: 1}
+    count: 3
+    size: {x: 0.04, y: 0.11}
+    lifetime: {x: 0.25, y: 0.5}
+    speed: {x: 0.3, y: 1.2}
+    spread: 130
+    gravity: 2
+    scatter: 0.1
+    spin: 210
+    endScale: 0.15

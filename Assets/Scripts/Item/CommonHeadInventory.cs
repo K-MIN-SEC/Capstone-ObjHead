@@ -4,7 +4,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class CommonHeadInventory : MonoBehaviour
 {
-    private const int SlotCount = 3;
+    public static int SlotCount => Mathf.Clamp(ObjectHeadContent.Load()?.commonInventoryCapacity ?? 6,1,12);
     [SerializeField, Min(1)] private int playerIndex = 1;
     [SerializeField] private CommonHeadType[] slots = new CommonHeadType[SlotCount];
     [SerializeField] private Sprite[] slotSprites = new Sprite[SlotCount];

@@ -24,6 +24,8 @@ public class TurnManager : MonoBehaviour
     [SerializeField, Min(5f)] private float turnDurationSeconds = 30f;
     [SerializeField, Min(0.1f)] private float residualMovementSeconds = 5f;
     [SerializeField, Min(0f)] private float damageSettlementSeconds = 1f;
+    [SerializeField, Min(0f)] private float resolutionPhysicsTimeout = 2f;
+    [SerializeField, Min(0f)] private float resolutionStableSeconds = .15f;
 
     private int currentTurnIndex = -1;
     private bool isMatchOver;
@@ -43,6 +45,31 @@ public class TurnManager : MonoBehaviour
     private Coroutine damageSettlementRoutine;
     private bool useExternalTurnAuthority;
     private int locallyControlledPlayerIndex;
+    private bool trainingTimerPaused;
+    private bool resolvingTurnEnd;
+    public bool IsTurnEndResolving => resolvingTurnEnd;
+    public bool DefersCombatDamage => residualTimeActive || resolvingTurnEnd;
+
+    // Input ownership is distinct from simulation permission (AI/worker movement).
+    public bool CanLocalUserControl(TurnCharacterController character)
+    {
+        if(ObjectHeadHeadInventoryPanel.AnyOpen)return false;
+        if (character == null || character != CurrentCharacter || isMatchOver || networkStartPending ||
+            ObjectHeadNetworkManager.Instance?.IsDedicatedWorker == true) return false;
+        var member = character.GetComponent<ObjectHeadTeamMember>();
+        int seat = member != null ? member.PlayerIndex : currentTurnIndex + 1;
+        var data = GameStartData.Instance;
+        if (data?.localMatch == true)
+        {
+            if (data.players != null)
+                foreach (var player in data.players)
+                    if (player.playerIndex == seat) return !player.isAi;
+            return false;
+        }
+        if (data != null && !data.localMatch)
+            return locallyControlledPlayerIndex > 0 && locallyControlledPlayerIndex == seat;
+        return locallyControlledPlayerIndex <= 0 || locallyControlledPlayerIndex == seat;
+    }
 
     public event Action<TurnCharacterController> TurnStarted;
     public event Action<TurnCharacterController> TurnEnded;
@@ -62,6 +89,8 @@ public class TurnManager : MonoBehaviour
     public int WinningPlayerIndex => winningPlayerIndex;
     public float TurnDurationSeconds => turnDurationSeconds;
     public void ConfigureTraining(float duration){turnDurationSeconds=Mathf.Max(30,duration);remainingTurnSeconds=turnDurationSeconds;}
+    public bool TrainingTimerPaused=>trainingTimerPaused;
+    public void SetTrainingTimerPaused(bool paused){trainingTimerPaused=paused;}
     public float RemainingTurnSeconds => remainingTurnSeconds;
     public float TurnTime01 => turnDurationSeconds > 0f ? Mathf.Clamp01(remainingTurnSeconds / turnDurationSeconds) : 0f;
     public float ResidualMovementSeconds => residualMovementSeconds;
@@ -141,7 +170,7 @@ public class TurnManager : MonoBehaviour
         if (!useExternalTurnAuthority)
         {
             TickTurnTimer();
-            if (allowManualTurnEnd && WasEndTurnPressed())
+            if (allowManualTurnEnd && CanLocalUserControl(CurrentCharacter) && WasEndTurnPressed())
             {
                 EndTurn();
             }
@@ -170,7 +199,8 @@ public class TurnManager : MonoBehaviour
         float authoritativeRemainingTurnSeconds,
         float authoritativeRemainingResidualSeconds,
         bool authoritativeResidualTimeActive,
-        bool authoritativeActionUsed)
+        bool authoritativeActionUsed,
+        bool authoritativeSettlementPending = false)
     {
         if (!useExternalTurnAuthority || characters == null || characters.Length == 0)
         {
@@ -192,6 +222,7 @@ public class TurnManager : MonoBehaviour
         remainingResidualSeconds = Mathf.Max(0f, authoritativeRemainingResidualSeconds);
         residualTimeActive = authoritativeResidualTimeActive;
         actionUsedThisTurn = authoritativeActionUsed;
+        resolvingTurnEnd = authoritativeSettlementPending;
         if (CurrentPhase != authoritativePhase)
         {
             SetPhase(authoritativePhase);
@@ -204,7 +235,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanCharacterMove(TurnCharacterController character)
     {
-        if (networkStartPending || character == null || character != CurrentCharacter || isMatchOver || settlementTimeActive)
+        if (networkStartPending || character == null || ObjectHeadCaptivity.Captured(character) || character != CurrentCharacter || isMatchOver || settlementTimeActive || resolvingTurnEnd)
         {
             return false;
         }
@@ -221,7 +252,7 @@ public class TurnManager : MonoBehaviour
 
     public bool CanCharacterFire(TurnCharacterController character)
     {
-        return !networkStartPending && character != null &&
+        return !networkStartPending && character != null && !ObjectHeadCaptivity.Captured(character) &&
                character == CurrentCharacter &&
                !isMatchOver &&
                !actionUsedThisTurn &&
@@ -260,6 +291,12 @@ public class TurnManager : MonoBehaviour
                 CurrentPhase == TurnPhase.Resolving);
     }
 
+    public void ExtendResidualMovement(float seconds)
+    {
+        if(residualTimeActive && !isMatchOver && ObjectHeadCommonAuthority.CanWrite)
+            remainingResidualSeconds+=Mathf.Max(0,seconds);
+    }
+
     public void NotifyPostImpactDelay()
     {
         if (!isMatchOver && CurrentCharacter != null)
@@ -283,7 +320,13 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (victoryCheckPending && TryResolveVictory())
+        if (resolvingTurnEnd)
+        {
+            SetPhase(TurnPhase.WaitingManualEnd);
+            return;
+        }
+
+        if (victoryCheckPending && !DefersCombatDamage && TryResolveVictory())
         {
             return;
         }
@@ -299,6 +342,7 @@ public class TurnManager : MonoBehaviour
         }
 
         SetPhase(TurnPhase.WaitingManualEnd);
+        if (residualTimeActive) return;
         CharacterCombat combat = CurrentCharacter.GetComponent<CharacterCombat>();
         if (turnEndRequested || (combat != null && combat.IsDead))
         {
@@ -319,12 +363,12 @@ public class TurnManager : MonoBehaviour
 
     public void EndTurn()
     {
-        if (isMatchOver || CurrentCharacter == null)
+        if (isMatchOver || CurrentCharacter == null || CurrentCharacter.GetComponent<ObjectHeadCaptivity>()?.IsSkippingTurn==true)
         {
             return;
         }
 
-        if (residualTimeActive || settlementTimeActive)
+        if (residualTimeActive || settlementTimeActive || resolvingTurnEnd)
         {
             turnEndRequested = true;
             return;
@@ -337,6 +381,12 @@ public class TurnManager : MonoBehaviour
         }
 
         AdvanceTurn();
+    }
+
+    internal void CompleteCapturedTurn(TurnCharacterController character,int serial)
+    {
+        if(ObjectHeadCommonAuthority.CanWrite && !isMatchOver && CurrentCharacter==character && turnSerial==serial)
+            AdvanceTurn();
     }
 
     public void RefreshCharactersFromScene()
@@ -375,7 +425,7 @@ public class TurnManager : MonoBehaviour
             return;
         }
 
-        if (applyingResidualDamage)
+        if (applyingResidualDamage || resolvingTurnEnd || residualTimeActive)
         {
             victoryCheckPending = true;
             if (CurrentCharacter != null && combat.gameObject == CurrentCharacter.gameObject)
@@ -408,6 +458,8 @@ public class TurnManager : MonoBehaviour
 
     private void TickTurnTimer()
     {
+        // Training pauses the planning clock, not projectile resolution or delayed skills.
+        if(trainingTimerPaused && !(ObjectHeadTraining.Enabled && residualTimeActive))return;
         if (CurrentCharacter == null || CurrentPhase == TurnPhase.MatchOver)
         {
             return;
@@ -456,17 +508,37 @@ public class TurnManager : MonoBehaviour
         residualTimeActive = false;
         remainingResidualSeconds = 0f;
         Debug.Log("Residual movement timer expired.");
+        resolvingTurnEnd = true;
+        ApplyCharacterControlState();
+        StartCoroutine(ResolveBeforeSettlement(turnSerial));
+    }
+
+    private IEnumerator ResolveBeforeSettlement(int serial)
+    {
+        // In-flight shots and marked drops finish before the HP ledger is applied.
+        while (IsActionPending && !isMatchOver && turnSerial == serial) yield return null;
+        if (isMatchOver || turnSerial != serial) { resolvingTurnEnd = false; yield break; }
+        float until=Time.time+resolutionPhysicsTimeout,stable=0;
+        while(Time.time<until && stable<resolutionStableSeconds)
+        {
+            bool moving=false;
+            foreach(var character in characters)
+                if(character!=null && character.GetComponent<Rigidbody2D>().linearVelocity.sqrMagnitude>.04f){moving=true;break;}
+            stable=moving?0:stable+Time.deltaTime;
+            yield return null;
+        }
         bool appliedPendingDamage = FlushPendingResidualDamage();
+        resolvingTurnEnd = false;
 
         if (isMatchOver || CurrentCharacter == null)
         {
-            return;
+            yield break;
         }
 
         if (appliedPendingDamage && damageSettlementSeconds > 0f)
         {
             BeginDamageSettlementTime();
-            return;
+            yield break;
         }
 
         CompletePostResidualTransition();
@@ -492,6 +564,14 @@ public class TurnManager : MonoBehaviour
         }
 
         CharacterCombat currentCombat = CurrentCharacter.GetComponent<CharacterCombat>();
+        if(ObjectHeadTraining.Enabled && !turnEndRequested && currentCombat!=null && !currentCombat.IsDead)
+        {
+            actionUsedThisTurn=false;remainingTurnSeconds=turnDurationSeconds;
+            CurrentCharacter.GetComponent<SkillFireController>()?.ResetTrainingAction();
+            CurrentCharacter.GetComponent<DemoSkillSelector>()?.ResetCooldowns();
+            CurrentCharacter.GetComponent<DemoSkillSelector>()?.RefreshTrainingVisual();
+            SetPhase(TurnPhase.Aiming);ApplyCharacterControlState();return;
+        }
         if (turnEndRequested || (currentCombat != null && currentCombat.IsDead))
         {
             AdvanceTurn();
@@ -547,6 +627,7 @@ public class TurnManager : MonoBehaviour
 
     private void BeginDamageSettlementTime()
     {
+        damageSettlementSeconds=Mathf.Max(damageSettlementSeconds,ObjectHeadCameraTuning.Load()?.settlementHoldSeconds??0);
         if (damageSettlementRoutine != null)
         {
             StopCoroutine(damageSettlementRoutine);

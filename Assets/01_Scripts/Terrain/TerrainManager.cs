@@ -791,6 +791,7 @@ public class TerrainManager : MonoBehaviour
         int radius = Mathf.Max(1, radiusPx);
         int radiusSquared = radius * radius;
         bool changed = false;
+        int removed=0,cloudRemoved=0;
 
         for (int y = center.y - radius; y <= center.y + radius; y++)
         {
@@ -816,6 +817,7 @@ public class TerrainManager : MonoBehaviour
                 }
 
                 solidMask[x, y] = false;
+                removed++;if(currentType==TerrainType.Cloud)cloudRemoved++;
                 terrainTypeMask[x, y] = TerrainType.Empty;
                 runtimeVisualTexture.SetPixel(x, y, Color.clear);
                 runtimeCollisionTexture.SetPixel(x, y, Color.clear);
@@ -824,6 +826,7 @@ public class TerrainManager : MonoBehaviour
             }
         }
 
+        if(changed)ObjectHeadMicroParticles.TerrainDestroyed(worldCenter,radiusPx/(float)PixelsPerUnit,cloudRemoved>removed/2);
         return changed;
     }
 

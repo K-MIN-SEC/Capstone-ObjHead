@@ -54,8 +54,47 @@ public class TurnCharacterController : MonoBehaviour
     private float groundedStabilityTimer;
     private float noFrictionTimer;
     private PhysicsMaterial2D originalColliderMaterial;
+    private ObjectHeadVacuumDefinition hoverTuning;
+    private float hoverRemaining,hoverClearance,hoverTargetY,hoverMinimumY;
+    public bool IsVacuumHovering => hoverRemaining>0;
+    public void BeginVacuumHover(float charge,ObjectHeadVacuumDefinition tuning)
+    {
+        if(tuning==null || !ObjectHeadCommonAuthority.CanWrite)return;
+        hoverTuning=tuning;hoverRemaining=tuning.hoverSeconds;
+        hoverClearance=Mathf.Lerp(tuning.hoverHeight.x,tuning.hoverHeight.y,Mathf.Clamp01(charge));
+        hoverTargetY=hoverMinimumY=body.position.y+hoverClearance;
+        BeginJetJumpFallDamageImmunity();body.linearVelocity=Vector2.zero;
+    }
+
+    private bool TickVacuumHover()
+    {
+        if(!IsVacuumHovering)return false;
+        if(!hasControl || hoverTuning==null){hoverRemaining=0;BeginJetJumpFallDamageImmunity();return false;}
+        hoverRemaining=Mathf.Max(0,hoverRemaining-Time.fixedDeltaTime);
+        var terrain=FindAnyObjectByType<TerrainManager>();
+        // Only follow solid terrain below; never jump through a roof or teleport onto a ledge.
+        var foot=new Vector2(bodyCollider.bounds.center.x,bodyCollider.bounds.min.y+.03f);
+        if(terrain!=null && terrain.TryCheckTerrainHit(foot,foot+Vector2.down*hoverTuning.groundProbe,out var floor))
+            hoverTargetY=Mathf.Max(hoverMinimumY,floor.point.y+bodyCollider.bounds.extents.y+hoverClearance);
+        var velocity=body.linearVelocity;
+        velocity.x=horizontalInput*moveSpeed*Mathf.Min(timedMoveSpeedMultiplier,hazardMoveSpeedMultiplier);
+        velocity.y=Mathf.Clamp((hoverTargetY-body.position.y)*4,-hoverTuning.verticalSpeed,hoverTuning.verticalSpeed);
+        body.linearVelocity=velocity;isGrounded=false;jumpRequested=false;jumpReleased=false;
+        if(hoverRemaining<=0)BeginJetJumpFallDamageImmunity();
+        return true;
+    }
 
     public bool HasControl => hasControl;
+    private TurnManager inputAuthority;
+    public bool AcceptsLocalInput
+    {
+        get
+        {
+            if (!hasControl || UseNetworkInput) return false;
+            if (inputAuthority == null) inputAuthority = FindAnyObjectByType<TurnManager>();
+            return inputAuthority != null && inputAuthority.CanLocalUserControl(this);
+        }
+    }
     public bool UseNetworkInput {get;set;}
     public float InputMoveX => horizontalInput;
     public bool InputJumpHeld => jumpHeld;
@@ -77,6 +116,10 @@ public class TurnCharacterController : MonoBehaviour
         UpdateFacingFromMovement();
     }
     public bool IsGrounded => isGrounded;
+    public float NavigationMoveSpeed => moveSpeed;
+    public float NavigationJumpSpeed => jumpForce;
+    public float NavigationGravity => customGravity;
+    public float NavigationHeldGravity => customGravity * heldJumpGravityMultiplier;
     public bool IsTurnAvailable => isActiveAndEnabled && gameObject.activeInHierarchy;
     public bool IgnoreFallDamageUntilGrounded => ignoreFallDamageUntilGrounded;
 
@@ -98,6 +141,7 @@ public class TurnCharacterController : MonoBehaviour
 
     private void OnDisable()
     {
+        hoverRemaining=0;
         hasControl = false;
         ResetInput();
         ClearHazardSlow();
@@ -112,7 +156,7 @@ public class TurnCharacterController : MonoBehaviour
             if(!hasControl || Time.unscaledTime>networkInputUntil)ResetInput();
             return;
         }
-        if (!hasControl)
+        if (!AcceptsLocalInput)
         {
             ResetInput();
             return;
@@ -127,6 +171,9 @@ public class TurnCharacterController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if(ObjectHeadCaptivity.Captured(this))
+        { body.linearVelocity=Vector2.zero;body.angularVelocity=0;ResetInput();return; }
+        if(TickVacuumHover())return;
         isGrounded = CheckGrounded();
         UpdateFallDamageImmunity();
         UpdateNoFrictionTimer();
@@ -252,6 +299,7 @@ public class TurnCharacterController : MonoBehaviour
 
     public void ResetTurnStatus()
     {
+        hoverRemaining=0;
         timedMoveSpeedMultiplier = 1f;
         timedMoveSpeedMultiplierTimer = 0f;
         hazardMoveSpeedMultiplier = 1f;

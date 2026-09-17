@@ -7,6 +7,8 @@ public sealed class ObjectHeadPlayerAssignment
     public string username;
     public int playerIndex;
     public int allianceId;
+    public bool isAi;
+    public ObjectHeadAIDifficulty aiDifficulty = ObjectHeadAIDifficulty.Normal;
     public ObjectHeadCharacterKind[] characters = Array.Empty<ObjectHeadCharacterKind>();
 }
 

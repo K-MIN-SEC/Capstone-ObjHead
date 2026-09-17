@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5a204a99f8ab7584385bf0933e0f41cc, type: 3}
   m_Name: ObjectHeadNetworkConfig
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadNetworkConfig
+  useDedicatedAuthority: 0
   defaultProfileId: local
   profiles:
   - id: local
@@ -31,6 +32,9 @@ MonoBehaviour:
     - wind_meadow
     - twin_citadels
     - shattered_reef
+    - tidal_caverns
+    - sky_terraces
+    - low_cavern
   fallbackMapId: wind_meadow
   titleSceneName: ObjectHeadTitle
   mapScenes:
@@ -40,6 +44,12 @@ MonoBehaviour:
     sceneName: TwinCitadels
   - mapId: shattered_reef
     sceneName: ShatteredReef
+  - mapId: tidal_caverns
+    sceneName: TidalCaverns
+  - mapId: sky_terraces
+    sceneName: SkyTerraces
+  - mapId: low_cavern
+    sceneName: LowCavern
   panelMargin: 12
   panelWidth: 430
   panelMaxHeight: 720

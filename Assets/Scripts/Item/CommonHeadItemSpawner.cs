@@ -95,7 +95,21 @@ public class CommonHeadItemSpawner : MonoBehaviour
     {
         if(!ObjectHeadCommonAuthority.CanWrite)return;
         var entries=ObjectHeadContent.Load()?.commonHeads;
-        if(entries!=null && entries.Length>0){foreach(var entry in entries)SpawnMissingType(entry.type);return;}
+        if(entries!=null && entries.Length>0)
+        {
+            // One opportunity per type before filling a second copy. Shuffle each
+            // refill deterministically so small maps do not always exclude new types.
+            var order=new List<ObjectHeadCommonDefinition>(entries);
+            for(int i=order.Count-1;i>0;i--){int j=random.Next(i+1);var temp=order[i];order[i]=order[j];order[j]=temp;}
+            bool added;
+            do
+            {
+                added=false;
+                foreach(var entry in order)
+                    if(CommonHeadItem.GetActiveCount(entry.type)<entry.spawnCount && TrySpawn(entry.type))added=true;
+            }while(added);
+            return;
+        }
         SpawnMissingType(CommonHeadType.Attack);
         SpawnMissingType(CommonHeadType.Mobility);
         SpawnMissingType(CommonHeadType.TerrainCreation);

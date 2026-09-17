@@ -16,139 +16,315 @@ MonoBehaviour:
   cloudTerrainSprite: {fileID: -684019765405300680, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
   dirtTerrainSprite: {fileID: -1695620776849007373, guid: 2d675f8f6785353419cce84ab84519f0, type: 3}
   airstrikeBombSprite: {fileID: -8310400477033871885, guid: 2d675f8f6785353419cce84ab84519f0, type: 3}
+  supportHelicopter: {fileID: -89508397, guid: 540808dfba862c744aa4c047184ad54b, type: 3}
+  supportPilot: {fileID: -8817833432330934362, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  supportHeavyHead: {fileID: 568581286, guid: d45300bc882cbf34ebe60354e3fe450c, type: 3}
+  supportLauncherPilot: {fileID: 8905971568371298875, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  rainbowCat: {fileID: 1037359521, guid: 46c50b46081dc984da173262e05276ff, type: 3}
+  supportMachineGunFrames:
+  - {fileID: -8817833432330934362, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  - {fileID: 542413250624776289, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  - {fileID: 6407536563301991849, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  supportLauncherFrames:
+  - {fileID: 8905971568371298875, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  - {fileID: 1992177854800140494, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  - {fileID: -4692628225445478087, guid: 7b82fd4b1df70bf469a81dff0e40413b, type: 3}
+  supportDoorMaskSprite: {fileID: 8023749182736451234, guid: e058784f376045d7961d2cead738d608, type: 3}
+  supportFiringFrameSeconds: 0.06
+  supportDoorMaskSize: {x: 1.45, y: 0.72}
+  supportDoorMaskOffset: {x: 0.88, y: -0.15}
+  supportMuzzleOffset: {x: 1.46, y: -0.32}
+  supportLauncherMuzzleOffset: {x: 1.46, y: -0.13}
+  supportTracerSprite: {fileID: 8023749182736451234, guid: e058784f376045d7961d2cead738d608, type: 3}
+  supportTracerSize: {x: 0.35, y: 0.045}
+  supportTracerColor: {r: 1, g: 0.88, b: 0.48, a: 1}
+  supportRocketRotationOffset: 90
+  supportRotorThickness: 0.045
+  supportRotorPerspective: 0.08
+  supportRotorTrailOpacity: 0.24
+  rainbowSeconds: 3
+  rainbowSize: 3
+  rainbowTerrainStep: 0.5
+  supportPilotOffset: {x: 0.88, y: -0.13}
+  supportRotorOffset: {x: 0.63, y: 0.78}
+  supportRotorWidth: 3.7
+  supportRotorRate: 32
+  supportHelicopterSize: 4.5
+  supportPilotSize: 1.28
+  supportOpeningSeconds: 0.7
+  supportSilenceSeconds: 0.65
+  supportArrivalSeconds: 1.1
+  supportAttackSeconds: 1
+  supportHoverHeight: 5
+  teleportSearchRadius: 2
+  teleportClearance: 0.12
+  groundZoneArtHeight: 0.55
+  groundZoneArtSpacing: 0.9
+  groundZoneTerrainOverlap: 0.22
   airstrikeDropHeight: 8
-  airstrikeFallSeconds: 0.45
+  airstrikeFallSeconds: 0.8
+  dropsFromSkyEdge: 1
+  skyDropMargin: 1.5
+  airstrikeBombSize: 2.1
+  healingSupplySprite: {fileID: -1333086307896101198, guid: bf112838ab5eee042b3b82ce78606cd6, type: 3}
+  healingSupplySize: 1.6
   skills:
   - skillId: 11
     zoneSprite: {fileID: -1468406432133682947, guid: 2d675f8f6785353419cce84ab84519f0, type: 3}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactPrefab: {fileID: 7206129335844978828, guid: 8c9b73602dfd4e64fa19b842d8bb71ca, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0
   - skillId: 12
     zoneSprite: {fileID: 8187649785660504512, guid: 2d675f8f6785353419cce84ab84519f0, type: 3}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0
   - skillId: 13
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1.05
+    cameraImpulse: 0
   - skillId: 21
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    impactPrefab: {fileID: 8075069108825040356, guid: 5306241bdfcee6649875c6e5bae97dbf, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0
   - skillId: 22
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    impactPrefab: {fileID: 8075069108825040356, guid: 5306241bdfcee6649875c6e5bae97dbf, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0
   - skillId: 23
     zoneSprite: {fileID: 5487367070931064068, guid: 2d675f8f6785353419cce84ab84519f0, type: 3}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 7924156586141728341, guid: 26fc3f775c49cd5479b86d251f2eff10, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1.05
+    cameraImpulse: 0
   - skillId: 31
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0.13
   - skillId: 32
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.9
+    cameraImpulse: 0.13
   - skillId: 33
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1.05
+    cameraImpulse: 0.13
   - skillId: 41
     zoneSprite: {fileID: 0}
-    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    launchPrefab: {fileID: 1940547686651648947, guid: 60b7f7d2c408b2643a3c293018a70ec6, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactPrefab: {fileID: 1940547686651648947, guid: 60b7f7d2c408b2643a3c293018a70ec6, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0.04
   - skillId: 42
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 1115030168676044872, guid: 04ac1ec531744b447890815726b6341d, type: 3}
     impactScale: 0.7
+    cameraImpulse: 0
   - skillId: 43
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
-    impactScale: 0.7
+    warningPrefab: {fileID: 1885380336633914692, guid: 0e7f7fbde62900d44855d77d6f486859, type: 3}
+    impactScale: 1.1
+    cameraImpulse: 0.3
   - skillId: 51
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactPrefab: {fileID: 4491334061088942852, guid: 48ddf622367ced74289422b844b40e57, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0.035
   - skillId: 52
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactPrefab: {fileID: 4491334061088942852, guid: 48ddf622367ced74289422b844b40e57, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0.035
   - skillId: 53
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    impactPrefab: {fileID: 4491334061088942852, guid: 48ddf622367ced74289422b844b40e57, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0.035
   - skillId: 61
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0
   - skillId: 62
     zoneSprite: {fileID: 7645288832448338556, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactPrefab: {fileID: 5229908246237580599, guid: f31265673fa688246961f536d594ec98, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0
   - skillId: 63
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    impactPrefab: {fileID: 6272921569830213927, guid: a7a8a385849be0742b236d300d6a61ef, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 0.7
+    cameraImpulse: 0.1
   - skillId: 104
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 0}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1
+    cameraImpulse: 0
   - skillId: 105
     zoneSprite: {fileID: 5309821191771297075, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 0}
+    impactPrefab: {fileID: 7206129335844978828, guid: 8c9b73602dfd4e64fa19b842d8bb71ca, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1
+    cameraImpulse: 0
   - skillId: 106
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 0}
+    impactPrefab: {fileID: 8676859823223044643, guid: 04693b17bdf0d2049819c7ebe1a4129b, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1
+    cameraImpulse: 0
   - skillId: 107
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
-    impactPrefab: {fileID: 0}
+    impactPrefab: {fileID: 5229908246237580599, guid: f31265673fa688246961f536d594ec98, type: 3}
+    warningPrefab: {fileID: 0}
     impactScale: 1
+    cameraImpulse: 0
+  - skillId: 108
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 8676859823223044643, guid: 04693b17bdf0d2049819c7ebe1a4129b, type: 3}
+    warningPrefab: {fileID: 5070128462624543091, guid: 738775c724ab2a6488dc1ceae1ce885f, type: 3}
+    impactScale: 1.1
+    cameraImpulse: 0.3
+  - skillId: 101
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 1
+    cameraImpulse: 0.12
+  - skillId: 102
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 8075069108825040356, guid: 5306241bdfcee6649875c6e5bae97dbf, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 1
+    cameraImpulse: 0
+  - skillId: 103
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 5229908246237580599, guid: f31265673fa688246961f536d594ec98, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 1
+    cameraImpulse: 0
+  - skillId: 110
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 0}
+    flightPrefab: {fileID: 0}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 0.6
+    cameraImpulse: 0.06
+  - skillId: 111
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 0}
+    flightPrefab: {fileID: 0}
+    impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 1.1
+    cameraImpulse: 0.3
+  - skillId: 71
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 0}
+    flightPrefab: {fileID: 0}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 0.65
+    cameraImpulse: 0.08
+  - skillId: 72
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 0}
+    flightPrefab: {fileID: 0}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 0.65
+    cameraImpulse: 0.08
+  - skillId: 73
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 0}
+    flightPrefab: {fileID: 0}
+    impactPrefab: {fileID: 6216842472964141127, guid: 1229467c5b7bc6e40a82a6f0de145034, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 0.65
+    cameraImpulse: 0.08
+  - skillId: 112
+    zoneSprite: {fileID: 0}
+    launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
+    flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
+    impactPrefab: {fileID: 4663346642606911948, guid: fe303d05543cad8459e164d8e14f029b, type: 3}
+    warningPrefab: {fileID: 0}
+    impactScale: 0.65
+    cameraImpulse: 0.08
   maximumEffects: 48
+  eraserSweepSeconds: 0.7
+  eraserVisualSize: 1.1

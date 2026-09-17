@@ -41,6 +41,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             characters.Add(Id(character),character);
             character.UseNetworkInput=Worker;
             character.GetComponent<CharacterCombat>().UseExternalHealth=!Worker;
+            if(!Worker && character.GetComponent<ObjectHeadNetworkSmoother>()==null)character.gameObject.AddComponent<ObjectHeadNetworkSmoother>();
         }
         turns.ConfigureNetworkControl(localSeat,!Worker);
         turns.SetNetworkStartPending(true);
@@ -89,6 +90,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         var aim=character.GetComponent<AimController>();
         Send(100,new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.FireCommand,messageId=MessageId(),
             characterId=Id(character),turnSerial=turns.TurnSerial,normalizedPower=power,
+            gourdChoiceId=character.GetComponent<ObjectHeadGourd>()?.SelectedId,
             selectedSkillIndex=character.GetComponent<DemoSkillSelector>().SelectedSkillIndex,aimX=aim.AimDirection.x,aimY=aim.AimDirection.y});
     }
     public bool RequestCommon(CommonHeadUseController use,int slot,CommonHeadType type,float power)
@@ -123,6 +125,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             if(!characters.TryGetValue(message.characterId??"",out var target) || target!=turns.CurrentCharacter)return;
             if(message.kind==ObjectHeadGameplayMessageKind.MovementInput)
             {
+                if(!Finite(message.moveX))return;
                 target.SetNetworkInput(message.moveX,message.jumpHeld,message.jumpPressed);
                 if(Finite(message.aimX) && Finite(message.aimY))target.GetComponent<AimController>().SetAimDirection(new Vector2(message.aimX,message.aimY));
                 return;
@@ -134,9 +137,11 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             if(message.kind==ObjectHeadGameplayMessageKind.FireCommand)
             {
                 if(message.selectedSkillIndex<0 || message.selectedSkillIndex>2)return;
-                target.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex);
+                target.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex,false);
+                var gourd=target.GetComponent<ObjectHeadGourd>();
+                if(gourd!=null && message.selectedSkillIndex==2 && !gourd.Select(message.gourdChoiceId))return;
                 if(target.GetComponent<SkillFireController>().FireReplicated(message.normalizedPower))
-                {message.kind=ObjectHeadGameplayMessageKind.FireAccepted;message.messageId=MessageId();Send(101,message);}
+                {message.gourdChoiceId=gourd?.LastResolvedId;message.kind=ObjectHeadGameplayMessageKind.FireAccepted;message.messageId=MessageId();Send(101,message);}
             }
             else if(message.kind==ObjectHeadGameplayMessageKind.CommonUseRequest)
                 target.GetComponent<CommonHeadUseController>().UseAuthoritative(message.commonSlot,message.commonType,message.normalizedPower,direction.normalized);
@@ -158,7 +163,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         if(!characters.TryGetValue(data.characterId??"",out var c) || data.turnSerial!=turns.TurnSerial)return;
         c.GetComponent<AimController>().SetAimDirection(new Vector2(data.aimX,data.aimY));
         if(data.kind==ObjectHeadGameplayMessageKind.FireAccepted)
-        {c.GetComponent<DemoSkillSelector>().SetSkillIndex(data.selectedSkillIndex);c.GetComponent<SkillFireController>().FireReplicated(data.normalizedPower);FiresReceived++;}
+        {c.GetComponent<DemoSkillSelector>().SetSkillIndex(data.selectedSkillIndex,false);var g=c.GetComponent<ObjectHeadGourd>();if(g!=null)g.ConfirmedId=data.gourdChoiceId;c.GetComponent<SkillFireController>().FireReplicated(data.normalizedPower);FiresReceived++;}
         else if(data.kind==ObjectHeadGameplayMessageKind.CommonUseAccepted)
         {c.GetComponent<CommonHeadUseController>().UseReplicated(data.commonType,data.normalizedPower,new Vector2(data.aimX,data.aimY),new Vector2(data.positionX,data.positionY));CommonUsesReceived++;}
     }
@@ -169,9 +174,12 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
             currentPlayerIndex=turns.CurrentPlayerIndex,turnSerial=turns.TurnSerial,roundSerial=turns.RoundSerial,
             phase=(int)turns.CurrentPhase,remainingTurnSeconds=turns.RemainingTurnSeconds,
             remainingResidualSeconds=turns.RemainingResidualSeconds,residualTimeActive=turns.IsResidualTimeActive,
+            settlementPending=turns.IsTurnEndResolving || turns.IsSettlementTimeActive,
             actionUsed=turns.ActionUsedThisTurn,matchOver=turns.IsMatchOver,winner=turns.WinningPlayerIndex,
             combatStates=characters.Select(pair=>{var c=pair.Value.GetComponent<CharacterCombat>();var b=pair.Value.GetComponent<Rigidbody2D>();
                 return new ObjectHeadCombatState{characterId=pair.Key,hp=c.CurrentHp,pending=c.PendingDamage,shield=c.ShieldAbsorption,
+                    gourdCharges=pair.Value.GetComponent<ObjectHeadGourd>()?.Capture(),
+                    captiveTurns=pair.Value.GetComponent<ObjectHeadCaptivity>()?.RemainingOwnTurns??0,
                     x=pair.Value.transform.position.x,y=pair.Value.transform.position.y,vx=b.linearVelocity.x,vy=b.linearVelocity.y};}).ToArray(),
             inventoryStates=GameStartData.Instance.players.Select(p=>new ObjectHeadInventoryState{playerIndex=p.playerIndex,slots=inventories.GetInventory(p.playerIndex).CaptureSlots()}).ToArray(),
             worldItems=FindObjectsByType<CommonHeadItem>(FindObjectsSortMode.None).Select(i=>new ObjectHeadWorldItemState{id=i.NetworkId,type=i.ItemType,x=i.transform.position.x,y=i.transform.position.y}).ToArray()});
@@ -181,7 +189,9 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         foreach(var state in data.combatStates??Array.Empty<ObjectHeadCombatState>())if(characters.TryGetValue(state.characterId,out var c))
         {
             c.GetComponent<CharacterCombat>().ApplyNetworkHealth(state.hp,state.pending,state.shield);
-            c.transform.position=new Vector3(state.x,state.y,c.transform.position.z);c.GetComponent<Rigidbody2D>().linearVelocity=new Vector2(state.vx,state.vy);
+            c.GetComponent<ObjectHeadGourd>()?.Apply(state.gourdCharges);
+            ObjectHeadCaptivity.ApplyReplica(c,state.captiveTurns);
+            c.GetComponent<ObjectHeadNetworkSmoother>()?.Push(new Vector2(state.x,state.y),new Vector2(state.vx,state.vy));
         }
         foreach(var inv in data.inventoryStates??Array.Empty<ObjectHeadInventoryState>())inventories.GetInventory(inv.playerIndex).ApplyAuthoritativeSlots(inv.slots);
         var present=new HashSet<string>();
@@ -193,7 +203,7 @@ public sealed class ObjectHeadDedicatedGameplay:MonoBehaviour
         }
         foreach(var id in items.Keys.Where(id=>!present.Contains(id)).ToArray()){if(items[id]!=null)items[id].Retire();items.Remove(id);}
         turns.ApplyAuthoritativeTurnState(data.currentTurnIndex,data.turnSerial,data.roundSerial,(TurnPhase)data.phase,
-            data.remainingTurnSeconds,data.remainingResidualSeconds,data.residualTimeActive,data.actionUsed);
+            data.remainingTurnSeconds,data.remainingResidualSeconds,data.residualTimeActive,data.actionUsed,data.settlementPending);
         if(data.matchOver)turns.ApplyNetworkMatchResult(data.winner);
     }
     private void CommonCommitted(CommonHeadUseController use,int slot,CommonHeadType type,float power,Vector2 aim,Vector2 origin)

@@ -12,6 +12,11 @@ public sealed class ObjectHeadSpawnLayout : MonoBehaviour
     [Min(.01f)] public float heightTolerance = .18f;
     [Min(.01f)] public float horizontalTolerance = .03f;
     public bool randomizeSeats = true;
+    [Tooltip("Use the floor immediately below each marker, including cave floors, rather than the highest surface at that X.")]
+    public bool useMarkerLocalSurface;
+    [Header("Authored spawn distribution checks (world units)")]
+    [Min(.01f)] public float maximumSpawnHeightSpread = .15f;
+    [Min(.01f)] public float maximumPlayerMeanHeightDifference = .15f;
     public bool Place(TerrainManager terrain, TurnCharacterController[] characters, int seed)
     {
         var rule = ObjectHeadMatchRules.Current;
@@ -35,12 +40,47 @@ public sealed class ObjectHeadSpawnLayout : MonoBehaviour
                 spawnLiftWorld=.06f,waterPaddingWorld=1.5f,maximumSurfaceHeightDifference=heightTolerance,
                 clearanceSampleStepWorld=.18f,randomAttempts=4,
                 exclusions=new System.Collections.Generic.List<TerrainSpawnExclusion>() };
-            if (!terrain.FindValidCharacterSpawn(request,new System.Random(seed),out Vector2 point,out _) || Mathf.Abs(point.y-marker.y)>heightTolerance)
-                throw new InvalidOperationException("Unsafe spawn marker: "+slots[member.TeamSlotIndex-1].name);
+            Vector2 point;
+            bool valid=useMarkerLocalSurface
+                ? TryLocalSurface(terrain,marker,request.colliderExtents,heightTolerance,out point)
+                : terrain.FindValidCharacterSpawn(request,new System.Random(seed),out point,out _);
+            if (!valid || Mathf.Abs(point.y-marker.y)>heightTolerance)
+                throw new InvalidOperationException($"Unsafe spawn marker: {slots[member.TeamSlotIndex-1].name}, marker={marker}, extents={request.colliderExtents}, candidate={point}");
             character.transform.position=point;
             character.GetComponent<Rigidbody2D>().linearVelocity=Vector2.zero;
         }
         return true;
+    }
+    public static bool TryLocalSurface(TerrainManager terrain,Vector2 marker,Vector2 extents,float tolerance,out Vector2 point)
+    {
+        point=default;
+        float foot=marker.y-extents.y-.06f;
+        if(!terrain.TryCheckTerrainHit(new Vector2(marker.x,foot+tolerance),new Vector2(marker.x,foot-tolerance),out var hit))return false;
+        if(hit.point.y<=terrain.TerrainOriginWorld.y+1.5f)return false;
+        float highest=hit.point.y,lowest=hit.point.y;
+        for(int i=0;i<5;i++)
+        {
+            float x=marker.x+Mathf.Lerp(-extents.x-.12f,extents.x+.12f,i/4f);
+            if(!terrain.TryCheckTerrainHit(new Vector2(x,hit.point.y+tolerance),new Vector2(x,hit.point.y-tolerance),out var support))return false;
+            if(Mathf.Abs(support.point.y-hit.point.y)>tolerance)return false;
+            highest=Mathf.Max(highest,support.point.y);lowest=Mathf.Min(lowest,support.point.y);
+        }
+        if(highest-lowest>tolerance)return false;
+        // Lift above the highest pixel under the footprint, not just the centre of a rough painted roof.
+        point=new Vector2(marker.x,highest+extents.y+.06f);
+        for(float x=-extents.x;x<=extents.x+.001f;x+=.08f)
+        for(float y=-extents.y+.02f;y<=extents.y+.001f;y+=.08f)
+            if(terrain.IsSolidWorld(point+new Vector2(x,y)))return false;
+        return true;
+    }
+
+    public bool HasValidHeightDistribution(TurnCharacterController[] characters)
+    {
+        if(characters==null||characters.Length==0)return false;
+        float spread=characters.Max(c=>c.transform.position.y)-characters.Min(c=>c.transform.position.y);
+        var averages=characters.GroupBy(c=>c.GetComponent<ObjectHeadTeamMember>().PlayerIndex)
+            .Select(group=>group.Average(c=>c.transform.position.y)).ToArray();
+        return spread<=maximumSpawnHeightSpread && averages.Max()-averages.Min()<=maximumPlayerMeanHeightDifference;
     }
     private void OnDrawGizmosSelected()
     {

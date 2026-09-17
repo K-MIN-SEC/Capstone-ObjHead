@@ -206,9 +206,10 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         }
     }
 
-    public async Task CreateRoomAsync(ObjectHeadRoomSettings requestedSettings)
+    public async Task CreateRoomAsync(ObjectHeadRoomSettings requestedSettings,bool isPrivate=false,string password=null)
     {
-        if (UseDedicatedAuthority) { await CreateAuthoritativeRoomAsync(requestedSettings); return; }
+        if (UseDedicatedAuthority) { await CreateAuthoritativeRoomAsync(requestedSettings,isPrivate,password); return; }
+        if(isPrivate)throw new InvalidOperationException("private_requires_authority");
         EnsureConnected();
         await LeaveCurrentMatchAsync();
 
@@ -229,9 +230,10 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         await BroadcastLobbyStateAsync();
     }
 
-    public async Task JoinRoomAsync(string roomCodeOrMatchId)
+    public async Task JoinRoomAsync(string roomCodeOrMatchId,string password=null)
     {
-        if (UseDedicatedAuthority) { await JoinAuthoritativeRoomAsync(roomCodeOrMatchId); return; }
+        if (UseDedicatedAuthority) { await JoinAuthoritativeRoomAsync(roomCodeOrMatchId,password); return; }
+        if(!string.IsNullOrEmpty(password))throw new InvalidOperationException("private_requires_authority");
         EnsureConnected();
         if (string.IsNullOrWhiteSpace(roomCodeOrMatchId))
         {

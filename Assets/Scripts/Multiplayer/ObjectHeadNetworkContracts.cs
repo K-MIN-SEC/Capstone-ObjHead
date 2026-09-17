@@ -54,6 +54,7 @@ public sealed class ObjectHeadSelectionRequest
 [Serializable]
 public sealed class ObjectHeadLobbyState
 {
+    public bool isPrivate;
     public bool dedicatedAuthority;
     public bool authorityReady;
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;

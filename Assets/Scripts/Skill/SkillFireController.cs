@@ -88,6 +88,7 @@ public class SkillFireController : MonoBehaviour
         }
 
         if (turnCharacter == null ||
+            !turnCharacter.AcceptsLocalInput ||
             powerChargeController == null ||
             hasFiredThisTurn ||
             (commonHeadUseController != null && commonHeadUseController.HasSelectedCommonHead) ||
@@ -105,11 +106,15 @@ public class SkillFireController : MonoBehaviour
 
     public void Fire(float normalizedPower)
     {
+        if(skillSelector!=null && skillSelector.TrainingCommon!=CommonHeadType.None)
+        { commonHeadUseController?.UseTrainingHead(skillSelector.TrainingCommon,normalizedPower);return; }
         if(ObjectHeadCommonAuthority.IsDedicatedMatch && !ObjectHeadCommonAuthority.CanWrite)
         {
             FindAnyObjectByType<ObjectHeadDedicatedGameplay>()?.RequestFire(this,normalizedPower);
             return;
         }
+        if(ObjectHeadCommonAuthority.Online && !ObjectHeadCommonAuthority.CanWrite && ObjectHeadGourd.IsMeta(skillSelector.GetCurrentSkillSettings().effectType))
+        {FindAnyObjectByType<ObjectHeadGameplayBridge>()?.RequestGourdFire(this,normalizedPower);return;}
         FireInternal(normalizedPower, true);
     }
 
@@ -117,9 +122,24 @@ public class SkillFireController : MonoBehaviour
     {
         return FireInternal(normalizedPower, false);
     }
+    private ObjectHeadSkillSettings? borrowedSettings;
+    public bool FireBorrowed(ObjectHeadSkillSettings settings,float power,bool publish)
+    {
+        borrowedSettings=settings;
+        try{return FireInternal(power,publish);}finally{borrowedSettings=null;}
+    }
+    public void PublishSpecialFire(float power,bool publish)
+    {if(publish)FireCommitted?.Invoke(this,Mathf.Clamp01(power),aimController.AimDirection,skillSelector.SelectedSkillIndex);}
+    public void ResetTrainingAction(){if(ObjectHeadTraining.Enabled)hasFiredThisTurn=false;}
 
     private bool FireInternal(float normalizedPower, bool publishNetworkEvent)
     {
+        var requested=borrowedSettings??skillSelector.GetCurrentSkillSettings();
+        if(!borrowedSettings.HasValue && ObjectHeadGourd.IsMeta(requested.effectType))
+        {
+            var gourd=GetComponent<ObjectHeadGourd>()??gameObject.AddComponent<ObjectHeadGourd>();
+            return gourd.Fire(requested.effectType,normalizedPower,publishNetworkEvent);
+        }
         if (aimController == null)
         {
             return false;
@@ -155,13 +175,36 @@ public class SkillFireController : MonoBehaviour
         aimController.RememberCurrentAimForTeam();
         Vector2 spawnPosition = aimController.AimOrigin + direction * spawnDistanceFromCharacter;
         Vector2 launchVelocity = CalculateThrowVelocity(direction, normalizedPower);
-        ObjectHeadSkillSettings skillSettings = skillSelector != null
+        ObjectHeadSkillSettings skillSettings = borrowedSettings ?? (skillSelector != null
             ? skillSelector.GetCurrentSkillSettings()
-            : ObjectHeadSkillSettings.CreateDefault(null, projectileColor, explosionColor, maxDamage, projectileRadius * explosionRadiusMultiplier, knockbackForce);
+            : ObjectHeadSkillSettings.CreateDefault(null, projectileColor, explosionColor, maxDamage, projectileRadius * explosionRadiusMultiplier, knockbackForce));
 
         characterVisual?.PlayThrowPose(0.25f);
+        ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Launch,spawnPosition,-direction);
         if (skillSettings.straightShot)
             launchVelocity=direction.normalized*Mathf.Max(1f,skillSettings.straightSpeed);
+
+        if(skillSettings.effectType==SkillEffectType.Airflow || skillSettings.effectType==SkillEffectType.Hover)
+        {
+            var tuning=skillSettings.vacuum;
+            if(tuning!=null)
+            {
+                if(skillSettings.effectType==SkillEffectType.Hover)
+                {
+                    turnCharacter.BeginVacuumHover(normalizedPower,tuning);
+                    StartCoroutine(ObjectHeadVacuum.PresentHover(turnCharacter,tuning));
+                    turnManager.ExtendResidualMovement(tuning.extraMovementSeconds);
+                }
+                else
+                {
+                    ObjectHeadVacuum.Apply(ownerCombat,aimController.AimOrigin,direction,normalizedPower,skillSettings.pullsTargets,tuning);
+                    StartCoroutine(ObjectHeadVacuum.Present(aimController.AimOrigin,direction,normalizedPower,skillSettings.pullsTargets,tuning));
+                }
+            }
+            skillSelector?.NotifySkillFired();
+            turnManager.NotifyActionResolved();
+            return true;
+        }
 
         if (skillSettings.effectType == SkillEffectType.CreateTerrainBridge)
         {
@@ -203,6 +246,12 @@ public class SkillFireController : MonoBehaviour
         skillSelector?.NotifySkillFired();
         return true;
     }
+
+    // The AI uses the same launch values as actual projectiles, including sheet overrides.
+    public float LaunchSpeed => CalculateThrowVelocity(Vector2.right, 1f).magnitude;
+    public float LaunchOffset => spawnDistanceFromCharacter;
+    public float ProjectileGravity => projectileGravityScale;
+    public float ProjectileLifetime => projectileLifetime;
 
     private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)
     {

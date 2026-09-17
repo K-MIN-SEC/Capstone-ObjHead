@@ -37,6 +37,16 @@ public sealed class ObjectHeadMapDefinition
 [CreateAssetMenu(menuName = "Object Head/Content Catalog")]
 public sealed class ObjectHeadContent : ScriptableObject
 {
+    [Header("Team-shared inventory")]
+    [Range(1,12)] public int commonInventoryCapacity = 6;
+    [Header("Visual sizing (apply to prefabs via Object Head/Visuals/Normalize Head Sizes)")]
+    [Min(.1f)] public float characterHeadVisualSize = .78f;
+    [Header("AI movement")]
+    [Min(0)] public float aiMoveSeconds = 1.5f;
+    [Min(.1f)] public float aiPreferredRange = 3f;
+    [Min(.1f)] public float aiGroundLookAhead = .6f;
+    [Min(.1f)] public float aiMaxSafeDrop = 1.2f;
+    [Min(.1f)] public float aiJumpCooldown = .7f;
     public ObjectHeadCommonDefinition[] commonHeads=Array.Empty<ObjectHeadCommonDefinition>();
     public ObjectHeadCommonDefinition Common(CommonHeadType type)=>commonHeads.FirstOrDefault(c=>c.type==type);
     public Font uiFont;

@@ -180,6 +180,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 007319efcafe4ed2bc5386fa5e8e16d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterVisual
+  normalizeHeadSprites: 1
+  commonHeadSizeMultiplier: 1
   characterKind: 4
   selectedSkillIndex: 0
   spriteFacesRightByDefault: 1
@@ -206,10 +208,12 @@ MonoBehaviour:
   jumpLand: {fileID: 6381737355608897979, guid: 97b6cd59389b79e488512a45ec611e4b, type: 3}
   bodyCharge: {fileID: 3879843724843913229, guid: 97b6cd59389b79e488512a45ec611e4b, type: 3}
   walkFramesPerSecond: 9
+  groundAnimationGraceSeconds: 0.12
+  walkReferenceSpeed: 2
   authoredSkillHeads:
-  - {fileID: -2465167129557535653, guid: 9558b31fda08a9243af292258add5e39, type: 3}
-  - {fileID: 9169261375236632098, guid: 9558b31fda08a9243af292258add5e39, type: 3}
-  - {fileID: -6681734455623159368, guid: 9558b31fda08a9243af292258add5e39, type: 3}
+  - {fileID: -9216305719365574153, guid: 258aed25a63ef9143bfa8dedc3fdfe41, type: 3}
+  - {fileID: -4203931379702987667, guid: 258aed25a63ef9143bfa8dedc3fdfe41, type: 3}
+  - {fileID: -6128964153791210278, guid: 258aed25a63ef9143bfa8dedc3fdfe41, type: 3}
   preserveAuthoredTransforms: 1
 --- !u!114 &4144692516584080240
 MonoBehaviour:
@@ -329,9 +333,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DemoSkillSelector
   authoredSkills:
-  - {fileID: 11400000, guid: 24578cc9250c9154081eaadce7467f23, type: 2}
-  - {fileID: 11400000, guid: dc6c7dc849d73f246805341164bc1dea, type: 2}
-  - {fileID: 11400000, guid: de874e638a819a7418086c02a4d96ddd, type: 2}
+  - {fileID: 11400000, guid: 1f1d56dad621c37488fc65e27d4f1be0, type: 2}
+  - {fileID: 11400000, guid: 03fd679e412854347875f1536ca49456, type: 2}
+  - {fileID: 11400000, guid: f1824b23e526b3043baf875c8375cf4b, type: 2}
   characterKind: 4
   selectedSkillIndex: 0
   allowKeyboardSelection: 1
@@ -550,7 +554,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.34, z: 0}
-  m_LocalScale: {x: 0.15057915, y: 0.15057915, z: 0.15057915}
+  m_LocalScale: {x: 0.12786885, y: 0.12786885, z: 0.12786885}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3206485756148457294}
@@ -604,7 +608,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 11
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -2465167129557535653, guid: 9558b31fda08a9243af292258add5e39, type: 3}
+  m_Sprite: {fileID: -9216305719365574153, guid: 258aed25a63ef9143bfa8dedc3fdfe41, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0

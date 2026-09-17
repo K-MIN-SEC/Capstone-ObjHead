@@ -26,6 +26,7 @@ public sealed class ObjectHeadGameplayMessage
     public int winner;
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
     public string messageId;
+    public bool gourdRequest;
     public ObjectHeadGameplayMessageKind kind;
     public string characterId;
     public int turnSerial;
@@ -37,6 +38,7 @@ public sealed class ObjectHeadGameplayMessage
     public bool residualTimeActive;
     public float remainingTurnSeconds;
     public float remainingResidualSeconds;
+    public bool settlementPending;
     public float positionX;
     public float positionY;
     public float velocityX;
@@ -44,6 +46,7 @@ public sealed class ObjectHeadGameplayMessage
     public float aimX;
     public float aimY;
     public int selectedSkillIndex;
+    public string gourdChoiceId;
     public float normalizedPower;
     public float moveX;
     public bool jumpHeld;
@@ -64,10 +67,12 @@ public sealed class ObjectHeadTerrainOperationMessage
 [Serializable]
 public sealed class ObjectHeadCombatState
 {
+    public ObjectHeadGourdCharge[] gourdCharges;
     public string characterId;
     public int hp;
     public int pending;
     public int shield;
+    public int captiveTurns;
     public float x,y,vx,vy;
 }
 

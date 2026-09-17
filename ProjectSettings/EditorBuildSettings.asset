@@ -17,5 +17,14 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/ShatteredReef.unity
     guid: 0befcea822a20c84a8220d1efb283ddd
+  - enabled: 1
+    path: Assets/Scenes/TidalCaverns.unity
+    guid: b72126c2d50f4a84cbe1ae64b5cdf4cd
+  - enabled: 1
+    path: Assets/Scenes/SkyTerraces.unity
+    guid: fb71c9f0192dd404392ece04e06700c6
+  - enabled: 1
+    path: Assets/Scenes/LowCavern.unity
+    guid: 826972c80ad6efc428151c2c5d1a4adb
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

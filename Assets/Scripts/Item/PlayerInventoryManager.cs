@@ -11,7 +11,7 @@ public class PlayerInventoryManager : MonoBehaviour
         inventories.Clear();
         for (int player = 1; player <= Mathf.Max(1, playerCount); player++)
         {
-            GetOrCreateInventory(player);
+            GetOrCreateInventory(InventoryOwner(player));
         }
     }
 
@@ -22,13 +22,15 @@ public class PlayerInventoryManager : MonoBehaviour
             return null;
         }
 
-        if (inventories.TryGetValue(playerIndex, out CommonHeadInventory inventory) && inventory != null)
+        int owner = InventoryOwner(playerIndex);
+
+        if (inventories.TryGetValue(owner, out CommonHeadInventory inventory) && inventory != null)
         {
             return inventory;
         }
 
         RefreshInventories();
-        return inventories.TryGetValue(playerIndex, out inventory) ? inventory : GetOrCreateInventory(playerIndex);
+        return inventories.TryGetValue(owner, out inventory) ? inventory : GetOrCreateInventory(owner);
     }
 
     public CommonHeadInventory GetInventoryFor(GameObject character)
@@ -37,18 +39,26 @@ public class PlayerInventoryManager : MonoBehaviour
         return member != null ? GetInventory(member.PlayerIndex) : null;
     }
 
-    private CommonHeadInventory GetOrCreateInventory(int playerIndex)
+    private static int InventoryOwner(int playerIndex)
     {
-        if (inventories.TryGetValue(playerIndex, out CommonHeadInventory existing) && existing != null)
+        // Common heads belong to the alliance. In FFA each player is their own
+        // alliance; in 2v2 both allies therefore resolve to the same inventory.
+        return Mathf.Max(1, ObjectHeadMatchRules.Alliance(playerIndex));
+    }
+
+    private CommonHeadInventory GetOrCreateInventory(int allianceId)
+    {
+        if (inventories.TryGetValue(allianceId, out CommonHeadInventory existing) && existing != null)
         {
             return existing;
         }
 
-        GameObject inventoryObject = new GameObject($"P{playerIndex}_CommonHeadInventory");
+        GameObject inventoryObject = new GameObject($"Team{allianceId}_CommonHeadInventory");
         inventoryObject.transform.SetParent(transform, false);
         CommonHeadInventory inventory = inventoryObject.AddComponent<CommonHeadInventory>();
-        inventory.ConfigurePlayer(playerIndex);
-        inventories[playerIndex] = inventory;
+        inventory.ConfigurePlayer(allianceId);
+        inventoryObject.name = $"Team{allianceId}_CommonHeadInventory";
+        inventories[allianceId] = inventory;
         return inventory;
     }
 

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 958191fb0021566498be21a57bfbeb8c, type: 3}
+  m_Name: ObjectHeadActionCues
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadActionCues
+  revealPrefab: {fileID: 598052091386011418, guid: b4607b7a452b2ec4ba240f2854c5aa00, type: 3}
+  refillPrefab: {fileID: 8187604029242073393, guid: 5033fd4ca16dbc24f844c6912b23cf4e, type: 3}
+  hoverPrefab: {fileID: 1387222146667611648, guid: 6f9f02f05b8ea0f44aa3a2c4cbd8a2b1, type: 3}
+  televisionPrefab: {fileID: 1455368870844253077, guid: 299b4499c3d2f444bb49e1246fce7920, type: 3}
+  hoverInterval: 0.18
+  televisionAnticipation: 0.35
+  windStreakLength: 0.55
+  windBend: 0.07

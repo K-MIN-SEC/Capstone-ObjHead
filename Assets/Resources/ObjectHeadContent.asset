@@ -12,6 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb2dadf9453cdc34d9b6f1e58612c3e4, type: 3}
   m_Name: ObjectHeadContent
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadContent
+  commonInventoryCapacity: 6
+  characterHeadVisualSize: 0.78
+  aiMoveSeconds: 1.5
+  aiPreferredRange: 3
+  aiGroundLookAhead: 0.6
+  aiMaxSafeDrop: 1.2
+  aiJumpCooldown: 0.7
   commonHeads:
   - type: 1
     nameKey: 
@@ -21,6 +28,9 @@ MonoBehaviour:
     use: 0
     spawnCount: 2
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 2
     nameKey: 
     sprite: {fileID: -2760808134284550240, guid: f565850f05e365740ab28f7e82e44c4e, type: 3}
@@ -29,6 +39,9 @@ MonoBehaviour:
     use: 0
     spawnCount: 2
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 3
     nameKey: 
     sprite: {fileID: 572652655752172784, guid: f565850f05e365740ab28f7e82e44c4e, type: 3}
@@ -37,6 +50,9 @@ MonoBehaviour:
     use: 0
     spawnCount: 2
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 4
     nameKey: common_potion
     sprite: {fileID: -1333086307896101198, guid: bf112838ab5eee042b3b82ce78606cd6, type: 3}
@@ -45,6 +61,9 @@ MonoBehaviour:
     use: 0
     spawnCount: 1
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 5
     nameKey: common_ice
     sprite: {fileID: 3805117481210420795, guid: 5e11d2be9ec608f4f8a830a9f0a12501, type: 3}
@@ -53,6 +72,9 @@ MonoBehaviour:
     use: 0
     spawnCount: 1
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 6
     nameKey: common_helmet
     sprite: {fileID: 2898349426171307124, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
@@ -61,6 +83,9 @@ MonoBehaviour:
     use: 1
     spawnCount: 1
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   - type: 7
     nameKey: common_smoke
     sprite: {fileID: 282491178868520942, guid: fdbb5d732639f0744a4ff292c95efe07, type: 3}
@@ -69,6 +94,64 @@ MonoBehaviour:
     use: 0
     spawnCount: 1
     shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
+  - type: 8
+    nameKey: common_lock
+    sprite: {fileID: 4788905825281754130, guid: 4de9770717a1702449f663237dffca64, type: 3}
+    worldVisualSize: 0.7
+    skill: {fileID: 11400000, guid: c12860cd080ec4742bb7fc784bcc75de, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
+  - type: 9
+    nameKey: common_eraser
+    sprite: {fileID: -672141043, guid: 6229bef741a90ea4b9ec8fef9fcbeecc, type: 3}
+    worldVisualSize: 0.78
+    skill: {fileID: 0}
+    use: 2
+    spawnCount: 2
+    shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
+  - type: 10
+    nameKey: common_crystal
+    sprite: {fileID: -250941453, guid: 9074783c28fac8345b273e6f406c2977, type: 3}
+    worldVisualSize: 0.78
+    skill: {fileID: 11400000, guid: aae20f9391addb54db0c9d7d90d54657, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
+  - type: 11
+    nameKey: common_heavy
+    sprite: {fileID: 568581286, guid: d45300bc882cbf34ebe60354e3fe450c, type: 3}
+    worldVisualSize: 0.78
+    skill: {fileID: 11400000, guid: 96047de0056ac1b43b21d768d3ce674c, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
+  - type: 12
+    nameKey: common_tv
+    sprite: {fileID: 2091590951, guid: c51d77b27c7c03549a039d4c3c47d9b4, type: 3}
+    worldVisualSize: 0.78
+    skill: {fileID: 11400000, guid: c7c45cacf120b4a47a774aa5e15e54e6, type: 2}
+    use: 0
+    spawnCount: 1
+    shieldAmount: 25
+    eraseMinimumRadius: 2.4
+    eraseMaximumRadius: 4.8
+    eraseClearance: 0.25
   uiFont: {fileID: 12800000, guid: 69bd4b4291fbced4b90a71350969cb08, type: 3}
   allianceColors:
   - {r: 0.8901961, g: 0.40784314, b: 0.3529412, a: 1}
@@ -134,9 +217,9 @@ MonoBehaviour:
     knockbackResistance: 1
   - roleKey: role_control
     kind: 4
-    nameKey: magnet_name
-    descriptionKey: magnet_description
-    portrait: {fileID: -2465167129557535653, guid: 9558b31fda08a9243af292258add5e39, type: 3}
+    nameKey: vacuum_name
+    descriptionKey: vacuum_description
+    portrait: {fileID: -9216305719365574153, guid: 258aed25a63ef9143bfa8dedc3fdfe41, type: 3}
     prefab: {fileID: 1407408590528247898, guid: 7eb32a132651ba24ea04b940aa195132, type: 3}
     accent: {r: 1, g: 1, b: 1, a: 1}
     maxHp: 110
@@ -152,11 +235,21 @@ MonoBehaviour:
     maxHp: 105
     throwPower: 1
     knockbackResistance: 1
+  - roleKey: role_control
+    kind: 6
+    nameKey: gourd_name
+    descriptionKey: gourd_description
+    portrait: {fileID: -7919275886492687647, guid: dfe4590c0f4322d4fb6a396ea90bfdeb, type: 3}
+    prefab: {fileID: 5296207041767640638, guid: d0dbe225f759cf04bae3eef10ead7d62, type: 3}
+    accent: {r: 1, g: 1, b: 1, a: 1}
+    maxHp: 95
+    throwPower: 1
+    knockbackResistance: 1
   teamRules:
   - players: 2
     charactersPerPlayer: 3
   - players: 4
-    charactersPerPlayer: 1
+    charactersPerPlayer: 2
   maps:
   - id: wind_meadow
     nameKey: map_meadow
@@ -173,3 +266,18 @@ MonoBehaviour:
     descriptionKey: map_reef_desc
     sceneName: ShatteredReef
     preview: {fileID: 21300000, guid: 10abefd5e8462bf4294012661f320c88, type: 3}
+  - id: tidal_caverns
+    nameKey: map_tidal_caverns
+    descriptionKey: map_tidal_caverns_description
+    sceneName: TidalCaverns
+    preview: {fileID: 21300000, guid: 3bdb4db90edc5b14a8047d2372b45619, type: 3}
+  - id: sky_terraces
+    nameKey: map_sky_terraces
+    descriptionKey: map_sky_terraces_description
+    sceneName: SkyTerraces
+    preview: {fileID: 21300000, guid: 727eb33bc7a6ab84fa7bfe6dcd6a8696, type: 3}
+  - id: low_cavern
+    nameKey: map_low_cavern
+    descriptionKey: map_low_cavern_description
+    sceneName: LowCavern
+    preview: {fileID: 21300000, guid: 000b2973647ae744484e59e33ed7edc6, type: 3}

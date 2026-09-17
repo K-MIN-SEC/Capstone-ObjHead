@@ -30,6 +30,7 @@ public class SkillProjectile : MonoBehaviour
     private bool hasPreviousPosition;
     private Vector2 launchDirection;
     private ObjectHeadCameraController cameraController;
+    private GameObject landingMarker;
 
     public bool IsFlying => isFlying && !isCompleted;
     public event Action Resolved;
@@ -99,6 +100,8 @@ public class SkillProjectile : MonoBehaviour
         ApplyProjectileVisual(spriteRenderer, radius);
 
         circleCollider.radius = 0.5f;
+        foreach (var item in FindObjectsByType<CommonHeadItem>(FindObjectsSortMode.None))
+            item.IgnoreProjectile(circleCollider);
 
         body.gravityScale = gravityScale;
         body.freezeRotation = false;
@@ -162,6 +165,7 @@ public class SkillProjectile : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
+        if (collision.collider.GetComponentInParent<CommonHeadItem>() != null) return;
         if (isCompleted)
         {
             return;
@@ -253,9 +257,51 @@ public class SkillProjectile : MonoBehaviour
     {
         Vector2 fadePoint = impactPoint;
 
-        if (skillSettings.effectType == SkillEffectType.Airstrike)
+        if (skillSettings.resolveAtTurnEnd)
+        {
+            DisablePhysicsAtImpact(impactPoint);
+            transform.rotation = Quaternion.identity;
+            turnManager?.NotifyPostImpactDelay();
+            // The spent flare/lock remains a marker. It has no physics or damage yet.
+            landingMarker=ObjectHeadPresentation.Warning(skillSettings.skillId,impactPoint,skillSettings.explosionRadiusWorld);
+            if(landingMarker!=null)landingMarker.transform.SetParent(transform,true);
+            while (turnManager != null && turnManager.IsResidualTimeActive) yield return null;
+            if(landingMarker!=null)Destroy(landingMarker);
+            turnManager?.NotifyResolving();
+            GetComponent<SpriteRenderer>().enabled = false;
+        }
+
+        if(skillSettings.effectType==SkillEffectType.RainbowSweep)
+        {
+            DisablePhysicsAtImpact(impactPoint);GetComponent<SpriteRenderer>().enabled=false;
+            yield return ObjectHeadRainbowSweep.Play(impactPoint,owner,terrain,skillSettings);
+        }
+        else if (skillSettings.effectType == SkillEffectType.Teleport)
+        {
+            ObjectHeadTeleport.Apply(owner,terrain,impactPoint);
+        }
+        else if (skillSettings.effectType == SkillEffectType.HelicopterSupport)
+        {
+            yield return ObjectHeadHelicopterSupport.Play(impactPoint,skillSettings,turnManager!=null?turnManager.TurnSerial:0);
+            // Presentation variants never change combat. Exactly one final explosion.
+            DestroyTerrainAtImpact(impactPoint);
+            ApplyDamage(impactPoint,0);
+            ObjectHeadPresentation.Impact(skillSettings.skillId,impactPoint,skillSettings.explosionRadiusWorld);
+        }
+        else if (skillSettings.effectType == SkillEffectType.Airstrike)
         {
             yield return ApplyAirstrikeRoutine(impactPoint);
+        }
+        else if (skillSettings.resolveAtTurnEnd && skillSettings.effectType == SkillEffectType.HealBurst)
+        {
+            yield return ApplyHealingSupplyRoutine(impactPoint);
+        }
+        else if (skillSettings.resolveAtTurnEnd && skillSettings.effectType == SkillEffectType.Captivity)
+        {
+            ObjectHeadCaptivity.CaptureArea(impactPoint, skillSettings.explosionRadiusWorld);
+            var cage = ObjectHeadCaptivityDefinition.Load()?.cagePrefab;
+            if (cage != null) yield return new WaitForSeconds(cage.fallSeconds + cage.closeSeconds);
+            ObjectHeadPresentation.Impact(skillSettings.skillId, impactPoint, skillSettings.explosionRadiusWorld);
         }
         else if (skillSettings.effectType == SkillEffectType.ChainExplosion)
         {
@@ -282,12 +328,41 @@ public class SkillProjectile : MonoBehaviour
         StartCoroutine(ExplosionFadeRoutine(fadePoint));
     }
 
+    private IEnumerator ApplyHealingSupplyRoutine(Vector2 point)
+    {
+        var art = ObjectHeadPresentation.Load();
+        point=ObjectHeadSkyDrop.Landing(terrain,point);
+        Vector2 from=ObjectHeadSkyDrop.Origin(point,art!=null?art.healingSupplySize:1.5f,terrain);
+        GameObject supply = null;
+        if (art?.healingSupplySprite != null && ObjectHeadNetworkManager.Instance?.IsDedicatedWorker != true)
+        {
+            supply = new GameObject("HealingSupplyDrop", typeof(SpriteRenderer));
+            var renderer = supply.GetComponent<SpriteRenderer>();
+            renderer.sprite = art.healingSupplySprite;
+            renderer.sortingOrder = 32;
+            supply.transform.localScale = Vector3.one * art.healingSupplySize / Mathf.Max(.01f, renderer.sprite.bounds.size.y);
+            supply.transform.position=from;
+        }
+        float duration = art != null ? Mathf.Max(.1f, art.airstrikeFallSeconds) : .45f;
+        for (float elapsed = 0; elapsed < duration; elapsed += Time.deltaTime)
+        {
+            if (supply != null) supply.transform.position = Vector2.Lerp(from, point,Mathf.Pow(elapsed / duration,1.5f));
+            yield return null;
+        }
+        if (supply != null) Destroy(supply);
+        ObjectHeadAreaHealing.Apply(point, skillSettings.explosionRadiusWorld, skillSettings.healing);
+        ObjectHeadPresentation.Impact(skillSettings.skillId, point, skillSettings.explosionRadiusWorld);
+    }
+
     private void ApplySkillEffect(Vector2 impactPoint)
     {
         float fallbackHorizontalSign = Mathf.Abs(lastVelocity.x) > 0.001f ? Mathf.Sign(lastVelocity.x) : 0f;
 
         switch (skillSettings.effectType)
         {
+            case SkillEffectType.Captivity:
+                ObjectHeadCaptivity.CaptureArea(impactPoint,skillSettings.explosionRadiusWorld);
+                break;
             case SkillEffectType.SmokeZone:
                 ObjectHeadSmokeZone.Create(impactPoint,skillSettings.explosionRadiusWorld,skillSettings.zoneDurationRounds,turnManager);
                 break;
@@ -331,25 +406,26 @@ public class SkillProjectile : MonoBehaviour
 
     private IEnumerator ApplyAirstrikeRoutine(Vector2 target)
     {
-        ObjectHeadPresentation.Impact(skillSettings.skillId,target,skillSettings.explosionRadiusWorld);
+        // Warning is not an explosion: impacts are shown only when each bomb actually lands.
         yield return new WaitForSeconds(Mathf.Max(.1f,skillSettings.delaySeconds));
         int count=Mathf.Clamp(skillSettings.chainCount,1,12);
         for(int i=0;i<count;i++)
         {
             Vector2 point=target+Vector2.right*((i-(count-1)*.5f)*skillSettings.chainSpacingWorld);
             var art=ObjectHeadPresentation.Load();
-            float height=art!=null?art.airstrikeDropHeight:8;
-            var from=point+Vector2.up*height;
-            if(terrain!=null && terrain.TryCheckTerrainHit(from,point-Vector2.up*height,out TerrainHit ground))point=ground.point;
-            if(art?.airstrikeBombSprite!=null)
+            point=ObjectHeadSkyDrop.Landing(terrain,point);
+            var from=ObjectHeadSkyDrop.Origin(point,art!=null?art.airstrikeBombSize:1.5f,terrain);
+            GameObject bomb=null;
+            if(art?.airstrikeBombSprite!=null && ObjectHeadNetworkManager.Instance?.IsDedicatedWorker!=true)
             {
-                var bomb=new GameObject("AirstrikeBomb",typeof(SpriteRenderer));var renderer=bomb.GetComponent<SpriteRenderer>();
+                bomb=new GameObject("AirstrikeBomb",typeof(SpriteRenderer));var renderer=bomb.GetComponent<SpriteRenderer>();
                 renderer.sprite=art.airstrikeBombSprite;renderer.sortingOrder=32;
-                bomb.transform.localScale=Vector3.one*(.7f/renderer.sprite.bounds.size.y);
-                float duration=Mathf.Max(.1f,art.airstrikeFallSeconds);
-                for(float elapsed=0;elapsed<duration;elapsed+=Time.deltaTime){bomb.transform.position=Vector2.Lerp(from,point,elapsed/duration);yield return null;}
-                Destroy(bomb);
+                bomb.transform.localScale=Vector3.one*(art.airstrikeBombSize/renderer.sprite.bounds.size.y);
+                bomb.transform.position=from;
             }
+            float duration=art!=null?Mathf.Max(.1f,art.airstrikeFallSeconds):.45f;
+            for(float elapsed=0;elapsed<duration;elapsed+=Time.deltaTime){if(bomb!=null)bomb.transform.position=Vector2.Lerp(from,point,Mathf.Pow(elapsed/duration,1.5f));yield return null;}
+            if(bomb!=null)Destroy(bomb);
             // All targets, including the owner and allies, share the existing explosion rules.
             DestroyTerrainAtImpact(point);
             DamageSystem.ApplyExplosion(point,owner,skillSettings.explosionRadiusWorld,

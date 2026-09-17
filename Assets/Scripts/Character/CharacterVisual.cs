@@ -9,13 +9,16 @@ public enum ObjectHeadCharacterKind
     Bomb,
     Revolver,
     Magnet,
-    Kettle
+    Kettle,
+    Gourd
 }
 
 [DisallowMultipleComponent]
 public class CharacterVisual : MonoBehaviour
 {
-    private const float TemporaryCommonHeadScaleMultiplier = 0.66f;
+    [Header("Head sizing (relative to the first authored skill head)")]
+    [SerializeField] private bool normalizeHeadSprites = true;
+    [SerializeField, Min(0.01f)] private float commonHeadSizeMultiplier = 1f;
 
     [SerializeField] private ObjectHeadCharacterKind characterKind = ObjectHeadCharacterKind.Bulb;
     [SerializeField, Range(0, 2)] private int selectedSkillIndex;
@@ -38,6 +41,12 @@ public class CharacterVisual : MonoBehaviour
     [SerializeField] private Sprite[] walkFrames;
     [SerializeField] private Sprite jumpTakeoff,jumpRise,jumpFall,jumpLand,bodyCharge;
     [SerializeField,Min(1)] private float walkFramesPerSecond=9;
+    [SerializeField,Min(.01f)] private float groundAnimationGraceSeconds=.12f;
+    [SerializeField,Min(.01f)] private float walkReferenceSpeed=2f;
+    private float walkPhase,lastGroundedTime;
+    private TurnCharacterController motionController;
+    private Rigidbody2D motionBody;
+    private PowerChargeController charge;
     private bool wasGrounded=true;
     private float landUntil,takeoffUntil;
     [SerializeField] private Sprite[] authoredSkillHeads;
@@ -50,6 +59,8 @@ public class CharacterVisual : MonoBehaviour
     private bool isDead;
     private bool isHeadHidden;
     private bool isFacingRight = true;
+    private Vector3 recoilOffset;
+    private float recoilUntil;
 
     public ObjectHeadCharacterKind CharacterKind => characterKind;
     public int SelectedSkillIndex => selectedSkillIndex;
@@ -75,6 +86,10 @@ public class CharacterVisual : MonoBehaviour
 
     private void Awake()
     {
+        if(GetComponent<ObjectHeadMotionFeedback>()==null)gameObject.AddComponent<ObjectHeadMotionFeedback>();
+        motionController=GetComponent<TurnCharacterController>();
+        motionBody=GetComponent<Rigidbody2D>();
+        charge=GetComponent<PowerChargeController>();
         if (headRenderer != null) authoredHeadScale = headRenderer.transform.localScale;
         LoadSprites();
         BuildRenderers();
@@ -83,17 +98,25 @@ public class CharacterVisual : MonoBehaviour
 
     private void LateUpdate()
     {
-        var controller=GetComponent<TurnCharacterController>();var rigid=GetComponent<Rigidbody2D>();
+        UpdateRecoil();
+        var controller=motionController;var rigid=motionBody;
         if(controller==null || rigid==null || isDead || temporaryStateRoutine!=null)return;
-        bool grounded=controller.IsGrounded;
+        if(controller.IsGrounded)lastGroundedTime=Time.time;
+        // Pixel slopes briefly lose contact. Don't replay jump/landing every physics tick.
+        bool grounded=controller.IsGrounded || (Time.time-lastGroundedTime<groundAnimationGraceSeconds && Mathf.Abs(rigid.linearVelocity.y)<1f);
         if(wasGrounded && !grounded)takeoffUntil=Time.time+.08f;
         if(!wasGrounded && grounded)landUntil=Time.time+.12f;
         wasGrounded=grounded;
         Sprite sprite=bodyIdle;
-        if(GetComponent<PowerChargeController>()?.IsCharging==true && bodyCharge!=null)sprite=bodyCharge;
+        if(charge?.IsCharging==true && bodyCharge!=null)sprite=bodyCharge;
         else if(!grounded)sprite=Time.time<takeoffUntil?jumpTakeoff:rigid.linearVelocity.y>0?jumpRise:jumpFall;
         else if(Time.time<landUntil)sprite=jumpLand;
-        else if(Mathf.Abs(rigid.linearVelocity.x)>.1f && walkFrames!=null && walkFrames.Length>0)sprite=walkFrames[(int)(Time.time*walkFramesPerSecond)%walkFrames.Length];
+        else if(Mathf.Abs(rigid.linearVelocity.x)>.1f && walkFrames!=null && walkFrames.Length>0)
+        {
+            walkPhase+=Time.deltaTime*walkFramesPerSecond*Mathf.Clamp(Mathf.Abs(rigid.linearVelocity.x)/walkReferenceSpeed,.35f,1.5f);
+            sprite=walkFrames[(int)walkPhase%walkFrames.Length];
+        }
+        else walkPhase=0;
         if(sprite!=null)SetBodySprite(sprite);
     }
 
@@ -187,6 +210,8 @@ public class CharacterVisual : MonoBehaviour
 
     public void PlayThrowPose(float seconds)
     {
+        var feedback=ObjectHeadMicroFeedback.Load();
+        if(feedback!=null && feedback.effectsEnabled)recoilUntil=Time.time+feedback.recoilSeconds;
         if (temporaryStateRoutine != null)
         {
             StopCoroutine(temporaryStateRoutine);
@@ -194,6 +219,19 @@ public class CharacterVisual : MonoBehaviour
 
         temporaryStateRoutine = StartCoroutine(TemporaryBodyState(bodyThrow, false, Color.white, seconds));
     }
+
+    private void UpdateRecoil()
+    {
+        if(bodyRenderer==null)return;
+        bodyRenderer.transform.localPosition-=recoilOffset;recoilOffset=Vector3.zero;
+        var feedback=ObjectHeadMicroFeedback.Load();
+        if(feedback==null || !feedback.effectsEnabled || isDead || Time.time>=recoilUntil)return;
+        float t=1-(recoilUntil-Time.time)/Mathf.Max(.01f,feedback.recoilSeconds);
+        recoilOffset=Vector3.right*((isFacingRight?-1:1)*feedback.recoilDistance*Mathf.Sin(t*Mathf.PI));
+        bodyRenderer.transform.localPosition+=recoilOffset;
+    }
+    private void OnDisable()
+    {if(bodyRenderer!=null)bodyRenderer.transform.localPosition-=recoilOffset;recoilOffset=Vector3.zero;recoilUntil=0;}
 
     public void PlayHitFlash(Color flashColor, float seconds)
     {
@@ -373,12 +411,14 @@ public class CharacterVisual : MonoBehaviour
             return;
         }
 
-        float scaleMultiplier = temporaryCommonHeadSprite != null
-            ? TemporaryCommonHeadScaleMultiplier
-            : 1f;
-        if (temporaryCommonHeadSprite != null && uniqueHeadSprite != null)
-            scaleMultiplier *= Mathf.Max(uniqueHeadSprite.bounds.size.x, uniqueHeadSprite.bounds.size.y)
-                / Mathf.Max(.001f, Mathf.Max(temporaryCommonHeadSprite.bounds.size.x, temporaryCommonHeadSprite.bounds.size.y));
+        float scaleMultiplier = temporaryCommonHeadSprite != null ? commonHeadSizeMultiplier : 1f;
+        // Preserve the designer's transform. Compensate only when swapping artwork,
+        // always against skill 1, never against the previously equipped head.
+        Sprite reference = GetSkillHeadSprite(0);
+        Sprite current = headRenderer.sprite;
+        if (normalizeHeadSprites && reference != null && current != null)
+            scaleMultiplier *= Mathf.Max(reference.bounds.size.x, reference.bounds.size.y)
+                / Mathf.Max(.001f, Mathf.Max(current.bounds.size.x, current.bounds.size.y));
         headRenderer.transform.localScale = (preserveAuthoredTransforms ? authoredHeadScale : Vector3.one * headScale) * scaleMultiplier;
     }
 

@@ -52,7 +52,7 @@ public class PowerChargeController : MonoBehaviour
         }
 
         if (turnCharacter == null ||
-            !turnCharacter.HasControl ||
+            !turnCharacter.AcceptsLocalInput ||
             turnManager == null ||
             !turnManager.CanCharacterFire(turnCharacter))
         {

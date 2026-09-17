@@ -17,6 +17,7 @@ MonoBehaviour:
   descriptionKey: revolver_skill_3_description
   cooldown: 3
   settings:
+    resolveAtTurnEnd: 1
     straightShot: 0
     straightSpeed: 0
     healing: 0
@@ -27,7 +28,7 @@ MonoBehaviour:
     projectileColor: {r: 1, g: 1, b: 1, a: 1}
     impactColor: {r: 1, g: 1, b: 1, a: 1}
     maxDamage: 18
-    explosionRadiusWorld: 1.35
+    explosionRadiusWorld: 2.1
     knockbackForce: 6
     terrainRadiusPx: 24
     bridgeLengthWorld: 0

@@ -1,0 +1,61 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5041382ba353ab4785a1d4020b83c10, type: 3}
+  m_Name: low_cavern
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadMapRecipe
+  mapId: low_cavern
+  nameKey: map_low_cavern
+  descriptionKey: map_low_cavern_description
+  sceneName: LowCavern
+  width: 1408
+  height: 768
+  pixelsPerUnit: 32
+  origin: {x: -22, y: -6}
+  waterY: -5.65
+  skyPadding: 16
+  soil: {r: 0.55, g: 0.41, b: 0.29, a: 1}
+  rock: {r: 0.27, g: 0.28, b: 0.31, a: 1}
+  grass: {r: 0.4392157, g: 0.5921569, b: 0.22745098, a: 1}
+  soilTexture: {fileID: 2800000, guid: e698675da0931ca4abebeca2ee32659e, type: 3}
+  grassTexture: {fileID: 2800000, guid: 7f64e1868b3efe54093bdde0d457140a, type: 3}
+  grassTilePixels: 120
+  grassTextureStrength: 0.55
+  textureTilePixels: 320
+  textureTint: {r: 1, g: 1, b: 1, a: 1}
+  grassDepth: 11
+  edgeColor: {r: 0.22745098, g: 0.16470589, b: 0.09803922, a: 1}
+  polygons: []
+  minimumIslandPixels: 512
+  structures:
+  - artwork: {fileID: 2800000, guid: 71c7fc3928f041e44996a9cb73b5d510, type: 3}
+    bottomCenter: {x: 704, y: 0}
+    heightPixels: 768
+    maximumWidthPixels: 1344
+    flipX: 0
+  artworkCutouts:
+  - subtract: 1
+    points:
+    - {x: 704, y: 188.16}
+    - {x: 736, y: 192}
+    - {x: 768, y: 198.4}
+    - {x: 800, y: 204.8}
+    - {x: 832, y: 211.2}
+    - {x: 864, y: 217.6}
+    - {x: 896, y: 216}
+    - {x: 896, y: 300.8}
+    - {x: 864, y: 294.4}
+    - {x: 832, y: 292.8}
+    - {x: 800, y: 297.6}
+    - {x: 768, y: 296}
+    - {x: 736, y: 300.8}
+    - {x: 704, y: 304}
+  bakedTerrain: {fileID: 2800000, guid: 000b2973647ae744484e59e33ed7edc6, type: 3}

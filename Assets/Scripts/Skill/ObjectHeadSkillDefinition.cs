@@ -13,6 +13,7 @@ public sealed class ObjectHeadSkillDefinition : ScriptableObject
     public ObjectHeadSkillSettings Resolve(CharacterVisual visual)
     {
         var result=settings;
+        if(result.vacuum!=null)result.vacuum.ApplySheet();
         var table=ObjectHeadBalanceTable.Load();
         if(table!=null)
         {

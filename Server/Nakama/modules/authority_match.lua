@@ -1,5 +1,6 @@
 local nk = require("nakama")
 local rules = require("authority_rules")
+local access = require("authority_access")
 local M = {}
 
 local function decode(raw)
@@ -40,8 +41,8 @@ local function ordered(state)
   return result
 end
 local function label(state)
-  return nk.json_encode({game="object_head_authority",ruleset=rules.ruleset,roomCode=state.code,
-    mode=state.settings.mode,phase=state.phase,public=state.public,players=#ordered(state),
+  return nk.json_encode({game="object_head_authority",ruleset=rules.ruleset,roomCode=state.private and "" or state.code,private=state.private,
+    visibility=state.public and "public" or "private",mode=state.settings.mode,phase=state.phase,public=state.public,players=#ordered(state),
     capacity=state.settings.maxPlayers,mapId=state.settings.fixedMapId,worker=state.worker~=nil})
 end
 local function send(dispatcher,op,data,targets,sender)
@@ -54,7 +55,7 @@ local function lobby(state,dispatcher)
   dispatcher.match_label_update(label(state))
   send(dispatcher,2,{protocolVersion=rules.protocol,revision=state.revision,matchId=state.id,
     roomCode=state.code,hostUserId=state.owner,settings=state.settings,players=ordered(state),
-    dedicatedAuthority=true,authorityReady=state.worker~=nil})
+    dedicatedAuthority=true,authorityReady=state.worker~=nil,isPrivate=state.private})
 end
 local function failure(dispatcher,presence,reason)
   send(dispatcher,8,{reason=reason},{presence})
@@ -63,6 +64,7 @@ function M.match_init(ctx,params)
   local settings=M.settings(params.settings)
   if not settings then error("invalid_settings") end
   local state={id=ctx.match_id,owner=params.owner,code=params.code,public=params.public==true,
+    private=params.private==true,admissions={},
     settings=settings,players={},presences={},reservations={},phase="lobby",revision=0,
     created=nk.time(),empty_since=0,worker_tick=0,last_sequence=0,expected=params.expected}
   return state,rules.tick_rate,label(state)
@@ -75,12 +77,17 @@ function M.match_join_attempt(ctx,dispatcher,tick,state,presence,metadata)
   if presence.user_id==state.worker_id then return state,false,"invalid_worker_ticket" end
   if state.phase~="lobby" then return state,false,"match_in_progress" end
   if state.expected and not state.expected[presence.user_id] then return state,false,"reserved_match" end
+  if state.private then
+    local permit=state.admissions[presence.user_id]
+    if not permit or permit.expires<nk.time() or not metadata or metadata.admissionTicket~=permit.ticket or (permit.sessionId and permit.sessionId~=presence.session_id) then return state,false,"room_password_required" end
+  end
   if state.players[presence.user_id] or state.reservations[presence.user_id] then return state,false,"duplicate_player" end
   local occupied=0
   for _ in pairs(state.players) do occupied=occupied+1 end
   for _,at in pairs(state.reservations) do if tick-at<rules.tick_rate*10 then occupied=occupied+1 end end
   if occupied>=state.settings.maxPlayers then return state,false,"room_full" end
   state.reservations[presence.user_id]=tick
+  state.admissions[presence.user_id]=nil -- Single use, bound to this authenticated account/session.
   return state,true
 end
 function M.match_join(ctx,dispatcher,tick,state,presences)
@@ -101,10 +108,10 @@ function M.match_leave(ctx,dispatcher,tick,state,presences)
   for _,p in ipairs(presences) do
     if state.worker and p.session_id==state.worker.session_id then
       state.worker=nil
-      if state.phase~="lobby" then send(dispatcher,9,{reason="combat_server_lost"});return nil end
+      if state.phase~="lobby" then send(dispatcher,9,{reason="combat_server_lost"});access.remove(state.id,state.code);return nil end
     elseif state.presences[p.user_id] and state.presences[p.user_id].session_id==p.session_id then
       state.players[p.user_id]=nil;state.presences[p.user_id]=nil
-      if state.phase~="lobby" then send(dispatcher,9,{reason="player_disconnected"});return nil end
+      if state.phase~="lobby" then send(dispatcher,9,{reason="player_disconnected"});access.remove(state.id,state.code);return nil end
     end
   end
   if not state.players[state.owner] then local players=ordered(state);state.owner=players[1] and players[1].userId or "" end
@@ -174,7 +181,8 @@ local function player_message(state,dispatcher,tick,presence,op,data)
     if state.turn.actionUsed or not finite(data.normalizedPower) or data.normalizedPower<0 or data.normalizedPower>1 then return end
     if not finite(data.aimX) or not finite(data.aimY) or data.aimX*data.aimX+data.aimY*data.aimY<0.0001 then return end
     if data.kind==2 and (not integer(data.selectedSkillIndex) or data.selectedSkillIndex<0 or data.selectedSkillIndex>2) then return end
-    if data.kind==5 and (not integer(data.commonSlot) or data.commonSlot<0 or data.commonSlot>2) then return end
+    if data.kind==5 and (not integer(data.commonSlot) or data.commonSlot<0 or data.commonSlot>=rules.common_slots) then return end
+    if data.gourdChoiceId~=nil and (type(data.gourdChoiceId)~="string" or #data.gourdChoiceId>80) then return end
   elseif data.kind==7 then
     if not finite(data.moveX) or math.abs(data.moveX)>1 or type(data.jumpHeld)~="boolean" then return end
     if data.jumpPressed~=nil and type(data.jumpPressed)~="boolean" then return end
@@ -184,15 +192,15 @@ local function player_message(state,dispatcher,tick,presence,op,data)
 end
 function M.match_loop(ctx,dispatcher,tick,state,messages)
   if state.phase=="loading" and nk.time()-state.loading_started>rules.loading_timeout_seconds*1000000 then
-    send(dispatcher,9,{reason="loading_timeout"});return nil
+    send(dispatcher,9,{reason="loading_timeout"});access.remove(state.id,state.code);return nil
   end
   if #ordered(state)==0 then
     state.empty_since=state.empty_since or tick
-    if tick-state.empty_since>rules.empty_timeout_seconds*rules.tick_rate then send(dispatcher,9,{reason="room_empty"});return nil end
+    if tick-state.empty_since>rules.empty_timeout_seconds*rules.tick_rate then send(dispatcher,9,{reason="room_empty"});access.remove(state.id,state.code);return nil end
   else state.empty_since=nil end
-  if nk.time()-state.created>rules.max_room_seconds*1000000 then send(dispatcher,9,{reason="session_expired"});return nil end
+  if nk.time()-state.created>rules.max_room_seconds*1000000 then send(dispatcher,9,{reason="session_expired"});access.remove(state.id,state.code);return nil end
   if state.worker and tick-state.worker_tick>rules.worker_timeout_seconds*rules.tick_rate then
-    send(dispatcher,9,{reason="combat_server_timeout"});return nil
+    send(dispatcher,9,{reason="combat_server_timeout"});access.remove(state.id,state.code);return nil
   end
   for id,at in pairs(state.reservations) do if tick-at>=rules.tick_rate*10 then state.reservations[id]=nil end end
   local rates={}
@@ -222,6 +230,17 @@ function M.match_loop(ctx,dispatcher,tick,state,messages)
 end
 function M.match_signal(ctx,dispatcher,tick,state,raw)
   local data=decode(raw)
+  if data and data.grantAdmission then
+    if not state.private or state.phase~="lobby" then return state,nk.json_encode({error="match_in_progress"}) end
+    local count=0
+    for id,permit in pairs(state.admissions) do
+      if permit.expires<nk.time() then state.admissions[id]=nil else count=count+1 end
+    end
+    if count>=256 then return state,nk.json_encode({error="room_password_rate_limited"}) end
+    local ticket=nk.uuid_v4()
+    state.admissions[data.userId]={ticket=ticket,sessionId=data.sessionId,expires=nk.time()+rules.admission_ticket_seconds*1000000}
+    return state,nk.json_encode({admissionTicket=ticket})
+  end
   if data and data.claimWorker and state.phase=="lobby" and not state.worker and not state.players[data.userId] then
     if state.worker_id and tick<(state.claim_tick or 0)+rules.tick_rate*30 then return state,nk.json_encode({error="worker_reserved"}) end
     state.worker_id=data.userId;state.worker_ticket=nk.uuid_v4();state.claim_tick=tick
@@ -230,6 +249,7 @@ function M.match_signal(ctx,dispatcher,tick,state,raw)
   return state,nk.json_encode({error="worker_unavailable"})
 end
 function M.match_terminate(ctx,dispatcher,tick,state,grace)
+  access.remove(state.id,state.code)
   send(dispatcher,9,{reason="server_shutdown"})
   return state
 end

@@ -25,7 +25,7 @@ public sealed class ObjectHeadExpansionSmoke:MonoBehaviour
         yield return new WaitForSeconds(.3f);
         var catalog=ObjectHeadContent.Load();
         Check(catalog.characters.Length>=6,"six selectable characters");
-        Check(catalog.commonHeads.Length>=7,"seven common head definitions");
+        Check(catalog.commonHeads.Length>=8,"eight common head definitions including lock");
         var many=Enumerable.Range(0,80).Select(i=>new ObjectHeadCharacterDefinition{kind=(ObjectHeadCharacterKind)i,nameKey="head_"+i,roleKey=i%2==0?"role_support":"role_damage"}).ToArray();
         Check(ObjectHeadCharacterBrowser.Filter(many,"","role_all",s=>s).Length==80,"80 character catalog");
         Check(ObjectHeadCharacterBrowser.Filter(many,"","role_support",s=>s).Length==40,"80 entry role filter");
@@ -39,8 +39,20 @@ public sealed class ObjectHeadExpansionSmoke:MonoBehaviour
         {
             var v=c.GetComponent<CharacterVisual>();var selector=c.GetComponent<DemoSkillSelector>();
             var head=c.transform.Find("HeadRenderer").GetComponent<SpriteRenderer>();
-            Check(Mathf.Max(head.bounds.size.x,head.bounds.size.y)<1.3f,c.name+" world head size");
-            for(int slot=0;slot<3;slot++){Check(v.GetSkillHeadSprite(slot)!=null,c.name+" head "+slot);selector.SetSkillIndex(slot);Check(selector.GetCurrentSkillSettings().skillId==((int)selector.CharacterKind+1)*10+slot+1,c.name+" skill ID "+slot);}
+            for(int slot=0;slot<3;slot++)
+            {
+                Check(v.GetSkillHeadSprite(slot)!=null,c.name+" head "+slot);
+                selector.SetSkillIndex(slot);
+                Check(Mathf.Abs(Mathf.Max(head.bounds.size.x,head.bounds.size.y)-catalog.characterHeadVisualSize)<.005f,c.name+" skill "+slot+" uniform head size");
+                Check(selector.GetCurrentSkillSettings().skillId==((int)selector.CharacterKind+1)*10+slot+1,c.name+" skill ID "+slot);
+                foreach(var common in catalog.commonHeads)
+                {
+                    v.SetTemporaryCommonHead(common.sprite);
+                    Check(Mathf.Abs(Mathf.Max(head.bounds.size.x,head.bounds.size.y)-catalog.characterHeadVisualSize)<.005f,c.name+" skill "+slot+" equip "+common.type+" size");
+                    v.RestoreUniqueHead();
+                    Check(Mathf.Abs(Mathf.Max(head.bounds.size.x,head.bounds.size.y)-catalog.characterHeadVisualSize)<.005f,c.name+" restored size");
+                }
+            }
         }
         foreach(var target in targets){target.TakeDamage(40);target.ApplyPendingDamage();}
         Vector2 center=targets[0].transform.position;
@@ -72,6 +84,7 @@ public sealed class ObjectHeadExpansionSmoke:MonoBehaviour
             use.CancelSelectionAndRestoreUniqueHead();inventory.TryConsume(index,out _);
             Destroy(item.gameObject);
         }
+        yield return CheckCaptivity(turns,targets);
         var terrain=FindAnyObjectByType<TerrainManager>();var at=center+Vector2.up*3;
         terrain.CreateCircle(at,30,TerrainType.Cloud,null);Check(terrain.IsSolidWorld(at),"cloud creates collidable terrain");terrain.DestroyCircle(at,40);Check(!terrain.IsSolidWorld(at),"cloud remains destructible");
         CheckTerrainReplay(terrain);
@@ -87,8 +100,48 @@ public sealed class ObjectHeadExpansionSmoke:MonoBehaviour
         Check(!inputTarget.ConsumeJumpPress(),"jump press consumed exactly once");
         UnityEngine.InputSystem.InputSystem.RemoveDevice(keyboard);
 #endif
-        Debug.Log(failed?"[EXPANSION_FAIL] checks failed":"[EXPANSION_PASS] catalog, 18 heads, heal factions, shield, magnet, cloud");
+        Debug.Log(failed?"[EXPANSION_FAIL] checks failed":$"[EXPANSION_PASS] {catalog.characters.Length} characters / {catalog.characters.Length*3} skill heads / {catalog.commonHeads.Length} common heads; uniform sizes, heal factions, shield, magnet, cloud, lock captivity");
         Application.Quit(failed?2:0);
+    }
+
+    private IEnumerator CheckCaptivity(TurnManager turns,CharacterCombat[] targets)
+    {
+        Vector2 center=new Vector2(0,8);
+        for(int i=0;i<targets.Length;i++)
+        {
+            targets[i].transform.position=center+Vector2.right*(i<2?(i==0?-.2f:.2f):6+i);
+            targets[i].GetComponent<Rigidbody2D>().linearVelocity=Vector2.zero;
+        }
+        Physics2D.SyncTransforms();
+        int firstHp=targets[0].CurrentHp,secondHp=targets[1].CurrentHp;
+        int captured=ObjectHeadCaptivity.CaptureArea(center,.85f);
+        var first=targets[0].GetComponent<ObjectHeadCaptivity>();
+        var second=targets[1].GetComponent<ObjectHeadCaptivity>();
+        Check(captured==2,"lock captures every faction inside radius only");
+        Check(first!=null && first.IsCaptured && second!=null && second.IsCaptured,"lock captures ally and opponent");
+        Check(!targets.Skip(2).Any(ObjectHeadCaptivity.Captured),"lock ignores characters outside radius");
+        Check(!first.Capture() && first.RemainingOwnTurns==2,"lock cannot extend an active capture");
+
+        int shield=targets[0].ShieldAbsorption;
+        targets[0].TakeDamage(50);targets[0].ApplyPendingDamage();
+        targets[0].ApplyKnockback(Vector2.right*10);
+        Check(targets[0].CurrentHp==firstHp && targets[0].ShieldAbsorption==shield,"captive blocks outside damage without consuming shield");
+        Check(targets[0].GetComponent<Rigidbody2D>().linearVelocity.sqrMagnitude<.001f,"captive blocks knockback");
+
+        float timeout=Time.realtimeSinceStartup+8;
+        while((first.IsCaptured || second.IsCaptured) && Time.realtimeSinceStartup<timeout)
+        {
+            var current=turns.CurrentCharacter;
+            // A direct smoke-test capture can land after this turn's TurnStarted
+            // event. End that one normally; once the captivity coroutine owns the
+            // turn, leave it alone so it can apply its pulse and advance itself.
+            if(current!=null && current.GetComponent<ObjectHeadCaptivity>()?.IsSkippingTurn!=true)
+                turns.EndCurrentTurn();
+            yield return null;
+        }
+        Check(!first.IsCaptured && !second.IsCaptured,"lock releases both targets after two rounds");
+        Check(targets[0].CurrentHp==firstHp-12 && targets[1].CurrentHp==secondHp-12,"lock applies six unavoidable damage per captured round");
+        Check((targets[0].GetComponent<Rigidbody2D>().constraints&RigidbodyConstraints2D.FreezeAll)!=RigidbodyConstraints2D.FreezeAll,"lock restores physics after release");
     }
 
     private void CheckTerrainReplay(TerrainManager terrain)

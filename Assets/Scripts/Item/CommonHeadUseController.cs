@@ -139,7 +139,7 @@ public class CommonHeadUseController : MonoBehaviour
     private void Update()
     {
         RefreshReferences();
-        if (inventory == null || turnManager == null || turnCharacter == null)
+        if (inventory == null || turnManager == null || turnCharacter == null || !turnCharacter.AcceptsLocalInput)
         {
             return;
         }
@@ -281,6 +281,24 @@ public class CommonHeadUseController : MonoBehaviour
         ExecuteUse(type,CommonHeadItem.GetDefaultSprite(type),normalizedPower,origin);
     }
 
+    public bool UseTrainingHead(CommonHeadType type,float power)
+    {
+        RefreshReferences();
+        if(!ObjectHeadTraining.Enabled || !ObjectHeadCommonAuthority.CanWrite || commonActionInProgress ||
+            ObjectHeadContent.Load()?.Common(type)==null || turnManager==null || !turnManager.TryBeginAction(turnCharacter))return false;
+        ExecuteUse(type,CommonHeadItem.GetDefaultSprite(type),Mathf.Clamp01(power),aimController.AimOrigin);
+        return true;
+    }
+
+    // Called only by the gourd's validated finite catalogue (or its confirmed remote action).
+    public bool UseBorrowedHead(CommonHeadType type,float power,bool publish)
+    {
+        RefreshReferences();
+        if(commonActionInProgress || ObjectHeadContent.Load()?.Common(type)==null || turnManager==null)return false;
+        if(!(publish?turnManager.TryBeginAction(turnCharacter):turnManager.TryBeginReplicatedAction(turnCharacter)))return false;
+        ExecuteUse(type,CommonHeadItem.GetDefaultSprite(type),Mathf.Clamp01(power),aimController.AimOrigin);return true;
+    }
+
     private void ExecuteUse(CommonHeadType consumedType,Sprite sprite,float normalizedPower,Vector2 origin)
     {
         approvedOrigin=origin;
@@ -296,9 +314,12 @@ public class CommonHeadUseController : MonoBehaviour
         Debug.Log($"{name} used {consumedType} common head at power {normalizedPower:0.00}.");
 
         var definition=ObjectHeadContent.Load()?.Common(consumedType);
+        if(definition!=null && definition.use==ObjectHeadCommonUse.EraseTerrain)
+        {StartCoroutine(EraseRoutine(definition,normalizedPower,origin));return;}
         if(definition!=null && definition.use==ObjectHeadCommonUse.SelfShield)
         {
             combat.GrantShield(ObjectHeadBalanceTable.Load()?.GetInt("common.helmet.absorption",definition.shieldAmount) ?? definition.shieldAmount);
+            ObjectHeadPresentation.Impact(106,transform.position,1f);
             CompleteCommonAction();turnManager.NotifyActionResolved();return;
         }
         if(definition?.skill!=null)
@@ -312,6 +333,7 @@ public class CommonHeadUseController : MonoBehaviour
                 FireProjectile(BuildAttackSettings(sprite), normalizedPower, "CommonHeadAttackProjectile");
                 break;
             case CommonHeadType.Mobility:
+                ObjectHeadPresentation.Impact(103,transform.position,.8f);
                 StartCoroutine(JetJumpRoutine(normalizedPower));
                 break;
             case CommonHeadType.TerrainCreation:
@@ -353,6 +375,20 @@ public class CommonHeadUseController : MonoBehaviour
             settings);
 
         IgnoreOwnerCollision(projectile.GetComponent<Collider2D>());
+    }
+
+    private IEnumerator EraseRoutine(ObjectHeadCommonDefinition definition,float power,Vector2 origin)
+    {
+        turnManager.NotifyResolving();
+        float radius=ObjectHeadEraserVisual.Radius(power,GetComponent<Collider2D>());
+        var art=ObjectHeadPresentation.Load();float duration=art!=null?art.eraserSweepSeconds:.7f;
+        ObjectHeadEraserVisual.Play(origin,radius,definition.sprite,duration);
+        yield return new WaitForSeconds(duration*.45f);
+        var terrain=FindAny<TerrainManager>();
+        // A single filled disk removes even isolated pixels. No damage or knockback is applied.
+        if(terrain!=null)terrain.DestroyCircle(origin,Mathf.CeilToInt(radius*terrain.PixelsPerUnit));
+        yield return new WaitForSeconds(duration*.55f);
+        CompleteCommonAction();turnManager.NotifyActionResolved();
     }
 
     private Vector2 CalculateThrowVelocity(Vector2 direction, float charge)
@@ -498,6 +534,7 @@ public class CommonHeadUseController : MonoBehaviour
         characterVisual?.ShowHeadAfterAction();
     }
 
+    public static string SlotLabel(int index) => index<5 ? ((index+6)%10).ToString() : index==5 ? "[" : "";
     private int ReadSlotInput()
     {
 #if ENABLE_INPUT_SYSTEM
@@ -510,10 +547,16 @@ public class CommonHeadUseController : MonoBehaviour
         if (keyboard.digit6Key.wasPressedThisFrame || keyboard.numpad6Key.wasPressedThisFrame) return 0;
         if (keyboard.digit7Key.wasPressedThisFrame || keyboard.numpad7Key.wasPressedThisFrame) return 1;
         if (keyboard.digit8Key.wasPressedThisFrame || keyboard.numpad8Key.wasPressedThisFrame) return 2;
+        if (keyboard.digit9Key.wasPressedThisFrame || keyboard.numpad9Key.wasPressedThisFrame) return 3;
+        if (keyboard.digit0Key.wasPressedThisFrame || keyboard.numpad0Key.wasPressedThisFrame) return 4;
+        if (keyboard.leftBracketKey.wasPressedThisFrame) return 5;
 #else
         if (Input.GetKeyDown(KeyCode.Alpha6) || Input.GetKeyDown(KeyCode.Keypad6)) return 0;
         if (Input.GetKeyDown(KeyCode.Alpha7) || Input.GetKeyDown(KeyCode.Keypad7)) return 1;
         if (Input.GetKeyDown(KeyCode.Alpha8) || Input.GetKeyDown(KeyCode.Keypad8)) return 2;
+        if (Input.GetKeyDown(KeyCode.Alpha9) || Input.GetKeyDown(KeyCode.Keypad9)) return 3;
+        if (Input.GetKeyDown(KeyCode.Alpha0) || Input.GetKeyDown(KeyCode.Keypad0)) return 4;
+        if (Input.GetKeyDown(KeyCode.LeftBracket)) return 5;
 #endif
         return -1;
     }

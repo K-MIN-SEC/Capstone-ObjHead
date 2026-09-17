@@ -26,7 +26,7 @@ public static class ObjectHeadExpansionAuthoring
     }
     public static void ApplyAndBuild(){Apply();ObjectHeadTitleSceneBuilder.BuildWindowsDemo();}
 
-    private static Sprite[] Slice(string name,int cols,int rows,string folder="Characters")
+    public static Sprite[] Slice(string name,int cols,int rows,string folder="Characters",bool largestConnectedShape=false,bool uniformCells=false)
     {
         string path="Assets/Art/"+folder+"/"+name+".png";
         AssetDatabase.ImportAsset(path,ImportAssetOptions.ForceSynchronousImport);
@@ -46,6 +46,8 @@ public static class ObjectHeadExpansionAuthoring
             {minX=Math.Min(minX,x);minY=Math.Min(minY,y);maxX=Math.Max(maxX,x);maxY=Math.Max(maxY,y);}
             if(minX>maxX)throw new Exception("Empty sprite cell: "+name+"/"+i);
             metadata[i]=new SpriteMetaData{name=name+"_"+i,rect=new Rect(x0+minX,y0+minY,maxX-minX+1,maxY-minY+1),pivot=new Vector2(.5f,.5f),alignment=(int)SpriteAlignment.Center};
+            if(largestConnectedShape)metadata[i].rect=LargestShapeBounds(texture,x0,y0,w,h);
+            if(uniformCells)metadata[i].rect=new Rect(x0,y0,w,h);
         }
         if(name=="UtilityHeads")
         {
@@ -55,6 +57,30 @@ public static class ObjectHeadExpansionAuthoring
         SetSpriteMetadata(importer,metadata);
         var sprites=AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().ToArray();
         return Enumerable.Range(0,metadata.Length).Select(i=>sprites.Single(s=>s.name==name+"_"+i)).ToArray();
+    }
+    // Only trims the Sprite Editor rectangle; the original transparent image is untouched.
+    private static Rect LargestShapeBounds(Texture2D texture,int x0,int y0,int w,int h)
+    {
+        var pixels=texture.GetPixels32();var visited=new bool[w*h];var queue=new int[w*h];
+        int best=0;Rect bounds=default;
+        for(int start=0;start<visited.Length;start++)
+        {
+            if(visited[start] || pixels[(y0+start/w)*texture.width+x0+start%w].a<13)continue;
+            int read=0,write=1,minX=w,minY=h,maxX=0,maxY=0;queue[0]=start;visited[start]=true;
+            while(read<write)
+            {
+                int at=queue[read++],x=at%w,y=at/w;
+                minX=Math.Min(minX,x);maxX=Math.Max(maxX,x);minY=Math.Min(minY,y);maxY=Math.Max(maxY,y);
+                for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+                {
+                    int nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h)continue;
+                    int next=ny*w+nx;if(visited[next])continue;visited[next]=true;
+                    if(pixels[(y0+ny)*texture.width+x0+nx].a>=13)queue[write++]=next;
+                }
+            }
+            if(write>best){best=write;bounds=new Rect(x0+minX,y0+minY,maxX-minX+1,maxY-minY+1);}
+        }
+        return bounds;
     }
     private static void SetSpriteMetadata(TextureImporter importer,SpriteMetaData[] metadata)
     {

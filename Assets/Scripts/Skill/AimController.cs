@@ -122,7 +122,7 @@ public class AimController : MonoBehaviour
         }
 
         bool canAim = turnCharacter != null &&
-            turnCharacter.HasControl &&
+            turnCharacter.AcceptsLocalInput &&
             (turnManager == null || turnManager.CanCharacterFire(turnCharacter));
         if (canAim && !hadAimControl)
         {

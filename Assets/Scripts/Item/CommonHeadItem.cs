@@ -18,7 +18,20 @@ public class CommonHeadItem : MonoBehaviour
     private bool registered;
     private bool pinnedToGround;
     private bool consumed;
+    private readonly RaycastHit2D[] supportHits = new RaycastHit2D[12];
+    private float supportCheckTime;
+    [SerializeField, Min(.01f)] private float supportCheckInterval = .1f;
+    [SerializeField, Min(.01f)] private float supportProbeDistance = .08f;
     private string networkId;
+    private CharacterCombat vacuumOwner;
+    private float vacuumSeconds,vacuumSpeed;
+    public bool IsVacuumPulled => vacuumSeconds>0 && vacuumOwner!=null;
+    public void BeginVacuumPull(CharacterCombat owner,float seconds,float speed)
+    {
+        if(consumed || owner==null || !ObjectHeadCommonAuthority.CanWrite)return;
+        vacuumOwner=owner;vacuumSeconds=Mathf.Max(0,seconds);vacuumSpeed=Mathf.Max(0,speed);
+        pinnedToGround=false;body.constraints=RigidbodyConstraints2D.FreezeRotation;body.gravityScale=1.5f;body.WakeUp();
+    }
     public string NetworkId=>networkId;
     public void ApplyReplica(ObjectHeadWorldItemState state)
     {
@@ -96,6 +109,8 @@ public class CommonHeadItem : MonoBehaviour
         item.groundCollider = groundCollider;
         item.pickupTrigger = pickupTrigger;
         item.RefreshIgnoredCharacterCollisions();
+        foreach (var projectile in FindObjectsByType<SkillProjectile>(FindObjectsSortMode.None))
+            item.IgnoreProjectile(projectile.GetComponent<Collider2D>());
         item.Register();
         return item;
     }
@@ -108,6 +123,43 @@ public class CommonHeadItem : MonoBehaviour
         }
 
         RefreshIgnoredCharacterCollisions();
+    }
+
+    // Pickup triggers and terrain contacts remain intact; projectiles never hit loot.
+    public void IgnoreProjectile(Collider2D projectile)
+    {
+        if (projectile == null) return;
+        foreach (var collider in GetComponents<Collider2D>())
+            Physics2D.IgnoreCollision(collider, projectile, true);
+    }
+
+    private void FixedUpdate()
+    {
+        if(IsVacuumPulled && body!=null && body.simulated && ObjectHeadCommonAuthority.CanWrite)
+        {
+            vacuumSeconds=Mathf.Max(0,vacuumSeconds-Time.fixedDeltaTime);
+            var destination=vacuumOwner.KnockbackCenter;
+            if(ObjectHeadVacuum.Clear(FindAnyObjectByType<TerrainManager>(),transform.position,destination))
+                body.linearVelocity=(destination-(Vector2)transform.position).normalized*vacuumSpeed;
+            else vacuumSeconds=0;
+            if(vacuumSeconds<=0)vacuumOwner=null;
+            return;
+        }
+        if (!pinnedToGround || consumed || body == null || !body.simulated || !ObjectHeadCommonAuthority.CanWrite) return;
+        supportCheckTime -= Time.fixedDeltaTime;
+        if (supportCheckTime > 0) return;
+        supportCheckTime = supportCheckInterval;
+        var filter = new ContactFilter2D { useTriggers = false };
+        int count = groundCollider.Cast(Vector2.down, filter, supportHits, supportProbeDistance);
+        for (int i = 0; i < count; i++)
+        {
+            var hit = supportHits[i];
+            if (hit.collider != null && hit.collider.attachedRigidbody == null && hit.normal.y > .15f) return;
+        }
+        pinnedToGround = false;
+        body.constraints = RigidbodyConstraints2D.FreezeRotation;
+        body.gravityScale = 1.5f;
+        body.WakeUp();
     }
 
     public void RefreshIgnoredCharacterCollisions()
@@ -199,12 +251,12 @@ public class CommonHeadItem : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        TryPinToStaticSurface(collision.collider);
+        TryPinToStaticSurface(collision);
     }
 
     private void OnCollisionStay2D(Collision2D collision)
     {
-        TryPinToStaticSurface(collision.collider);
+        TryPinToStaticSurface(collision);
     }
 
     private void OnDestroy()
@@ -225,8 +277,10 @@ public class CommonHeadItem : MonoBehaviour
         registered = true;
     }
 
-    private void TryPinToStaticSurface(Collider2D other)
+    private void TryPinToStaticSurface(Collision2D collision)
     {
+        if(IsVacuumPulled)return;
+        Collider2D other = collision.collider;
         if (pinnedToGround ||
             other == null ||
             other.isTrigger ||
@@ -235,7 +289,8 @@ public class CommonHeadItem : MonoBehaviour
             return;
         }
 
-        PinToGround();
+        for (int i = 0; i < collision.contactCount; i++)
+            if (collision.GetContact(i).normal.y > .15f) { PinToGround(); break; }
     }
 
     private void PinToGround()
