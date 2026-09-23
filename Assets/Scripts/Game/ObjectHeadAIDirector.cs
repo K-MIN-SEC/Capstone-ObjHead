@@ -20,6 +20,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     public static int JumpsRequested {get;private set;}
     public static int MovementCandidates {get;private set;}
     private Vector2 movementGoal;
+    private float movementScore;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Boot()
@@ -81,13 +82,17 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         var planner=new ObjectHeadAIPlanner(actor,turns.Characters,terrain);
         yield return planner.Search(difficulty,()=>StillCurrent(actor,serial));
         CandidatesEvaluated+=planner.Evaluated;
-        // A valid safe shot should not be thrown away by walking first.
-        if(!planner.Best.valid)
+        // Compare a shot from here, a reachable firing position and nearby team loot.
+        // A legal shot is no longer an unconditional order to stand still and fire.
+        yield return FindFiringPosition(actor,target,terrain,difficulty,serial);
+        FindPickupGoal(actor,terrain);
+        float currentScore=planner.Best.valid?planner.Best.score:0f;
+        if(movementScore>currentScore+tuning.moveDecisionMargin)
         {
-            yield return FindFiringPosition(actor,target,terrain,difficulty,serial);
             yield return MoveToFiringPosition(actor,target,serial);
             float landingDeadline=Time.time+tuning.landingWaitSeconds;
             while(StillCurrent(actor,serial) && !actor.IsGrounded && Time.time<landingDeadline)yield return null;
+            if(!StillCurrent(actor,serial)){decision=null;yield break;}
             yield return planner.Search(difficulty,()=>StillCurrent(actor,serial));
             CandidatesEvaluated+=planner.Evaluated;
         }
@@ -99,21 +104,39 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
             {yield return ObjectHeadAIHover.Move(actor,hoverGoal,turns,serial);decision=null;yield break;}
             actor.SetNetworkInput(0,false);turns.EndCurrentTurn();decision=null;yield break;
         }
-        selector.SetSkillIndex(shot.skill,false);
-        if(shot.gourdChoice!=null)actor.GetComponent<ObjectHeadGourd>()?.Select(shot.gourdChoice);
+        if(shot.commonType==CommonHeadType.None)
+        {
+            selector.SetSkillIndex(shot.skill,false);
+            if(shot.gourdChoice!=null)actor.GetComponent<ObjectHeadGourd>()?.Select(shot.gourdChoice);
+        }
         AimController aim=actor.GetComponent<AimController>();
-        float error=((float)random.NextDouble()*2f-1f)*profile.aimErrorDegrees;
-        Vector2 direction=Quaternion.Euler(0,0,error)*shot.direction;
-        float power=Mathf.Clamp01(shot.power+((float)random.NextDouble()*2f-1f)*profile.powerError);
-        // Difficulty adds bounded error, never hidden damage or a larger legal launch speed.
-        // Normal/pro reject an error sample that turns a good shot into friendly fire.
-        if(difficulty!=ObjectHeadAIDifficulty.Beginner && !ObjectHeadGourd.IsMeta(shot.settings.effectType) && shot.settings.effectType!=SkillEffectType.Airflow &&
-            (!planner.Trace(shot.settings,direction,power,out var noisyImpact) || planner.Score(shot.settings,noisyImpact)<=0))
-        { direction=shot.direction;power=shot.power; }
+        Vector2 direction=shot.direction;
+        float power=shot.power;
+        if(difficulty!=ObjectHeadAIDifficulty.Pro)
+        {
+            float safest=float.NegativeInfinity;
+            // Keep execution error for both beginner and normal. Retry only to avoid
+            // obvious self/team hits; a miss is allowed and never snaps to perfect aim.
+            for(int attempt=0;attempt<tuning.aimSafetySamples;attempt++)
+            {
+                float error=((float)random.NextDouble()*2f-1f)*profile.aimErrorDegrees;
+                Vector2 candidateDirection=Quaternion.Euler(0,0,error)*shot.direction;
+                float candidatePower=Mathf.Clamp01(shot.power+((float)random.NextDouble()*2f-1f)*profile.powerError);
+                float safety=planner.Trace(shot.settings,candidateDirection,candidatePower,out var impact,shot.commonType)
+                    ? planner.Score(shot.settings,impact) : 0f;
+                if(safety>safest){safest=safety;direction=candidateDirection;power=candidatePower;}
+                if(safety>=0f)break;
+            }
+        }
         aim.SetAimDirection(direction);
         yield return new WaitForSeconds(profile.decisionDelay*.45f);
         if(!StillCurrent(actor,serial)){decision=null;yield break;}
-        actor.GetComponent<SkillFireController>().Fire(power);
+        if(shot.commonType!=CommonHeadType.None)
+        {
+            var common=actor.GetComponent<CommonHeadUseController>();
+            if(common!=null && common.TrySelectCommonHeadSlot(shot.commonSlot))common.UseSelectedHead(power);
+        }
+        else actor.GetComponent<SkillFireController>().Fire(power);
         if(turns.ActionUsedThisTurn)
         {
             ActionsTaken++;
@@ -161,21 +184,49 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     private IEnumerator FindFiringPosition(TurnCharacterController actor,TurnCharacterController target,TerrainManager terrain,ObjectHeadAIDifficulty difficulty,int serial)
     {
         var tuning=ObjectHeadAITuning.Load();var nav=new ObjectHeadAINavigation(actor,terrain);
-        Vector2 start=actor.transform.position;movementGoal=start;float best=float.NegativeInfinity;
+        Vector2 start=actor.transform.position;movementGoal=start;movementScore=float.NegativeInfinity;
         float deadline=Time.realtimeSinceStartup+tuning.navigationBudgetSeconds;
         for(int sample=1;sample<=tuning.navigationPositionSamples;sample++)foreach(float sign in new[]{-1f,1f})
         {
             if(!StillCurrent(actor,serial)||Time.realtimeSinceStartup>=deadline)yield break;
             float distance=sample*tuning.navigationStepWorld;
             if(!nav.GroundAt(start.x+sign*distance,start.y,out var candidate))continue;
+            if(!nav.CanStartToward(sign))continue;
             // Never teleport the actor for planning. Trace from a virtual launch origin.
             var probe=new ObjectHeadAIPlanner(actor,turns.Characters,terrain,candidate);
             yield return probe.Search(difficulty,()=>StillCurrent(actor,serial)&&Time.realtimeSinceStartup<deadline,.12f);
             MovementCandidates++;CandidatesEvaluated+=probe.Evaluated;
-            float score=probe.Best.valid?100+probe.Best.score:0;
-            score-=Vector2.Distance(candidate,target.transform.position)*.4f+distance*.25f;
-            score+=Mathf.Clamp(candidate.y-start.y,-1,2)*.3f;
-            if(score>best){best=score;movementGoal=candidate;}
+            if(!probe.Best.valid)continue;
+            float score=probe.Best.score-distance*tuning.travelCostPerWorldUnit;
+            score+=Mathf.Clamp(candidate.y-start.y,-1,2)*tuning.heightAdvantageWeight;
+            if(score>movementScore){movementScore=score;movementGoal=candidate;}
+        }
+    }
+
+    private void FindPickupGoal(TurnCharacterController actor,TerrainManager terrain)
+    {
+        if(terrain==null)return;
+        var manager=FindAnyObjectByType<PlayerInventoryManager>();
+        var inventory=manager?.GetInventoryFor(actor.gameObject);
+        if(inventory==null || inventory.Count>=CommonHeadInventory.SlotCount)return;
+        var tuning=ObjectHeadAITuning.Load();
+        var navigation=new ObjectHeadAINavigation(actor,terrain);
+        Vector2 start=actor.transform.position;
+        float travelLimit=actor.NavigationMoveSpeed*tuning.movementSearchSeconds*tuning.pickupTravelTimeFraction;
+        foreach(var item in FindObjectsByType<CommonHeadItem>())
+        {
+            if(item==null || item.ItemType==CommonHeadType.None || item.IsVacuumPulled)continue;
+            float distance=Mathf.Abs(item.transform.position.x-start.x);
+            if(distance<tuning.minimumPickupDistance || distance>travelLimit)continue;
+            if(!navigation.GroundAt(item.transform.position.x,start.y,out var landing))continue;
+            if(!navigation.CanStartToward(Mathf.Sign(item.transform.position.x-start.x)))continue;
+            if(Mathf.Abs(landing.y-item.transform.position.y)>tuning.pickupVerticalReach)continue;
+            bool duplicate=false;
+            for(int slot=0;slot<CommonHeadInventory.SlotCount;slot++)
+                if(inventory.GetSlot(slot)==item.ItemType){duplicate=true;break;}
+            MovementCandidates++;
+            float score=tuning.pickupUtility*(duplicate?tuning.duplicatePickupMultiplier:1f)-distance*tuning.travelCostPerWorldUnit;
+            if(score>movementScore){movementScore=score;movementGoal=landing;}
         }
     }
 

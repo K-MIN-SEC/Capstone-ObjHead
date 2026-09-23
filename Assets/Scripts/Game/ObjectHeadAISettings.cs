@@ -30,12 +30,14 @@ public static class ObjectHeadAISettings
         ObjectHeadBalanceTable balance = ObjectHeadBalanceTable.Load();
         string key = difficulty.ToString().ToLowerInvariant();
         float fallbackDelay = difficulty == ObjectHeadAIDifficulty.Beginner ? 1.25f : difficulty == ObjectHeadAIDifficulty.Normal ? .7f : .32f;
-        float fallbackAim = difficulty == ObjectHeadAIDifficulty.Beginner ? 12f : difficulty == ObjectHeadAIDifficulty.Normal ? 5f : 1.5f;
-        float fallbackPower = difficulty == ObjectHeadAIDifficulty.Beginner ? .14f : difficulty == ObjectHeadAIDifficulty.Normal ? .06f : .02f;
+        float fallbackAim = difficulty == ObjectHeadAIDifficulty.Beginner ? 12f : difficulty == ObjectHeadAIDifficulty.Normal ? 5f : 0f;
+        float fallbackPower = difficulty == ObjectHeadAIDifficulty.Beginner ? .14f : difficulty == ObjectHeadAIDifficulty.Normal ? .06f : 0f;
+        // Difficulty changes execution accuracy and reaction time, not tactical options.
+        // Pro is exact even when an older balance sheet still contains non-zero values.
         return new ObjectHeadAIProfile(
             balance != null ? balance.GetFloat($"ai.{key}.decision_delay", fallbackDelay) : fallbackDelay,
-            balance != null ? balance.GetFloat($"ai.{key}.aim_error_degrees", fallbackAim) : fallbackAim,
-            balance != null ? balance.GetFloat($"ai.{key}.power_error", fallbackPower) : fallbackPower);
+            difficulty == ObjectHeadAIDifficulty.Pro ? 0f : Math.Max(0f,balance != null ? balance.GetFloat($"ai.{key}.aim_error_degrees", fallbackAim) : fallbackAim),
+            difficulty == ObjectHeadAIDifficulty.Pro ? 0f : Math.Max(0f,balance != null ? balance.GetFloat($"ai.{key}.power_error", fallbackPower) : fallbackPower));
     }
 
     public static ObjectHeadCharacterKind[] CreateRoster(ObjectHeadContent content, int players, Random random, bool randomized)

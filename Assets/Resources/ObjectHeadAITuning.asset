@@ -12,14 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 85864c75c70a035418e83afd3b993f05, type: 3}
   m_Name: ObjectHeadAITuning
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadAITuning
-  beginnerPowerSamples: 4
-  normalPowerSamples: 7
-  proPowerSamples: 11
+  powerSamples: 7
   minimumPower: 0.2
   trajectoryStep: 0.04
   trajectorySeconds: 4
   candidatesPerFrame: 8
   planningBudgetSeconds: 1.2
+  checksPerHead: 18
   friendlyFirePenalty: 1.8
   selfDamagePenalty: 2.4
   killBonus: 18
@@ -28,6 +27,15 @@ MonoBehaviour:
   controlWeight: 12
   cooldownCost: 0.6
   minimumShotUtility: 0.5
+  pickupUtility: 24
+  duplicatePickupMultiplier: 0.65
+  travelCostPerWorldUnit: 1.3
+  moveDecisionMargin: 6
+  pickupVerticalReach: 1.4
+  minimumPickupDistance: 1
+  pickupTravelTimeFraction: 0.8
+  heightAdvantageWeight: 0.3
+  aimSafetySamples: 3
   retreatSeconds: 1.1
   dangerClearance: 0.6
   landingWaitSeconds: 0.7

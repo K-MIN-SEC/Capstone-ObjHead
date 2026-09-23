@@ -6,8 +6,10 @@ public class CommonHeadInventory : MonoBehaviour
 {
     public static int SlotCount => Mathf.Clamp(ObjectHeadContent.Load()?.commonInventoryCapacity ?? 6,1,12);
     [SerializeField, Min(1)] private int playerIndex = 1;
-    [SerializeField] private CommonHeadType[] slots = new CommonHeadType[SlotCount];
-    [SerializeField] private Sprite[] slotSprites = new Sprite[SlotCount];
+    // Unity constructs MonoBehaviours before Resources.Load is legal. Resize from
+    // the editable content capacity in EnsureSlots once gameplay is initialized.
+    [SerializeField] private CommonHeadType[] slots = Array.Empty<CommonHeadType>();
+    [SerializeField] private Sprite[] slotSprites = Array.Empty<Sprite>();
 
     public event Action InventoryChanged;
     public int PlayerIndex => playerIndex;

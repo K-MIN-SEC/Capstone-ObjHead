@@ -29,7 +29,10 @@ public sealed class ObjectHeadAISmoke : MonoBehaviour
         ObjectHeadAIProfile pro=ObjectHeadAISettings.Profile(ObjectHeadAIDifficulty.Pro);
         bool optionsPass=roster.Length==catalog.CharactersPerPlayer(2) && roster.All(kind=>catalog.Character(kind)!=null) &&
             beginner.decisionDelay>normal.decisionDelay && normal.decisionDelay>pro.decisionDelay &&
-            beginner.aimErrorDegrees>normal.aimErrorDegrees && normal.aimErrorDegrees>pro.aimErrorDegrees;
+            beginner.aimErrorDegrees>normal.aimErrorDegrees && normal.aimErrorDegrees>pro.aimErrorDegrees &&
+            beginner.powerError>normal.powerError && pro.aimErrorDegrees==0 && pro.powerError==0 &&
+            ObjectHeadAITuning.Load().PowerSamples(ObjectHeadAIDifficulty.Beginner)==ObjectHeadAITuning.Load().PowerSamples(ObjectHeadAIDifficulty.Normal) &&
+            ObjectHeadAITuning.Load().PowerSamples(ObjectHeadAIDifficulty.Normal)==ObjectHeadAITuning.Load().PowerSamples(ObjectHeadAIDifficulty.Pro);
         GameStartData.Apply(new GameStartData{localMatch=true,mode=ObjectHeadMatchMode.Duel,playerCount=2,mapId=catalog.maps[0].id,mapSeed=160916,characterSpawnSeed=160916,startingPlayerIndex=2,
             players=new[]{
                 new ObjectHeadPlayerAssignment{playerIndex=1,allianceId=1,username="Player",characters=catalog.DefaultSelection(2)},
@@ -76,6 +79,10 @@ public sealed class ObjectHeadAISmoke : MonoBehaviour
         bool pass=optionsPass && inputPass && aiFired && ObjectHeadAIDirector.ActionsTaken>0 && turns?.ActionUsedThisTurn==true && ownership && ObjectHeadAIDirector.CandidatesEvaluated>0;
         Debug.Log($"[AI_DETAIL] moved={ObjectHeadAIDirector.DistanceMoved:F3}, humanInputBlocked={ownership}");
         Debug.Log(pass?"[AI_PASS] random roster, three difficulty profiles, real skill action":"[AI_FAIL] AI options or combat action failed");
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.Exit(pass?0:2);
+#else
         Application.Quit(pass?0:2);
+#endif
     }
 }

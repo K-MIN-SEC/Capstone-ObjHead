@@ -73,5 +73,18 @@ public sealed class ObjectHeadAINavigation
         if(!floor && actor.IsGrounded){Stop();return false;}
         actor.SetNetworkInput(direction,jumping);return true;
     }
+    public bool CanStartToward(float direction)
+    {
+        if(actor==null || terrain==null || Mathf.Abs(direction)<.1f)return false;
+        if(!actor.IsGrounded)return true;
+        direction=Mathf.Sign(direction);
+        Vector2 center=actor.GetComponent<Collider2D>().bounds.center;
+        float ahead=extent.x+content.aiGroundLookAhead;
+        bool floor=terrain.TryCheckTerrainHit(center+new Vector2(direction*ahead,.15f),
+            center+new Vector2(direction*ahead,-extent.y-content.aiMaxSafeDrop),out var ground);
+        bool blocked=!Clear(center+Vector2.right*direction*(extent.x+.18f));
+        bool stepUp=floor && ground.point.y>center.y-extent.y+tuning.walkStepHeight;
+        return (!blocked && floor && !stepUp) || TryJump(direction,out _);
+    }
     public void Stop(){if(actor!=null)actor.SetNetworkInput(0,false);}
 }

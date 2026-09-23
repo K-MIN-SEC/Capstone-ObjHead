@@ -15,6 +15,8 @@ public sealed class ObjectHeadAIPlanner
         public float power, score;
         public ObjectHeadSkillSettings settings;
         public string gourdChoice;
+        public int commonSlot;
+        public CommonHeadType commonType;
     }
     public Shot Best { get; private set; }
     public int Evaluated { get; private set; }
@@ -26,6 +28,8 @@ public sealed class ObjectHeadAIPlanner
     private readonly SkillFireController fire;
     private readonly DemoSkillSelector selector;
     private readonly AimController aim;
+    private readonly CommonHeadUseController commonUse;
+    private readonly CommonHeadInventory inventory;
     private readonly ContactFilter2D filter;
     private readonly Vector2 originShift;
     private Vector2 PlanningOrigin => aim.AimOrigin + originShift;
@@ -35,6 +39,8 @@ public sealed class ObjectHeadAIPlanner
         this.actor = actor; this.characters = characters; this.terrain = terrain;
         tuning = ObjectHeadAITuning.Load(); fire = actor.GetComponent<SkillFireController>();
         selector = actor.GetComponent<DemoSkillSelector>(); aim = actor.GetComponent<AimController>();
+        commonUse = actor.GetComponent<CommonHeadUseController>();
+        inventory = UnityEngine.Object.FindAnyObjectByType<PlayerInventoryManager>()?.GetInventoryFor(actor.gameObject);
         originShift=planningPosition.HasValue?planningPosition.Value-(Vector2)actor.transform.position:Vector2.zero;
         filter = new ContactFilter2D { useTriggers = false };
     }
@@ -72,10 +78,29 @@ public sealed class ObjectHeadAIPlanner
             }
             else candidates.Add(new Shot{skill=index,settings=effect});
         }
+        if(commonUse!=null && inventory!=null)
+        {
+            var catalog=ObjectHeadContent.Load();
+            int commonCandidateCount=0;
+            for(int slot=0;slot<CommonHeadInventory.SlotCount;slot++)
+            {
+                CommonHeadType type=inventory.GetSlot(slot);
+                var definition=type!=CommonHeadType.None?catalog?.Common(type):null;
+                if(definition==null || definition.use!=ObjectHeadCommonUse.Projectile || definition.skill==null)continue;
+                var settings=definition.skill.Resolve(null);
+                settings.headSprite=definition.sprite;
+                // Interleave inventory with character skills so a time budget cannot
+                // always starve the common heads at the end of the catalogue.
+                candidates.Insert(Mathf.Min(commonCandidateCount*2+1,candidates.Count),
+                    new Shot{commonSlot=slot,commonType=type,settings=settings});
+                commonCandidateCount++;
+            }
+        }
         foreach(var candidateShot in candidates)
         {
+            int checksForHead=0;
             int skill=candidateShot.skill;
-            if (selector.GetRemainingCooldown(skill) > 0) continue;
+            if (candidateShot.commonType==CommonHeadType.None && selector.GetRemainingCooldown(skill) > 0) continue;
             var settings = candidateShot.settings;
             if(settings.effectType==SkillEffectType.Hover)continue; // Mobility needs a safe destination, not an artillery arc.
             if(settings.effectType==SkillEffectType.Airflow)
@@ -93,47 +118,54 @@ public sealed class ObjectHeadAIPlanner
                         if(ObjectHeadVacuum.InBeam(PlanningOrigin,direction,center,vacuum.Range(1),vacuum.beamWidth) && ObjectHeadVacuum.Clear(terrain,PlanningOrigin,center))
                             score+=SameTeam(actor,candidate)?-vacuum.Force(1):vacuum.Force(1);
                     }
-                    score-=selector.GetCooldownDuration(skill)*tuning.cooldownCost;
+                    if(candidateShot.commonType==CommonHeadType.None)score-=selector.GetCooldownDuration(skill)*tuning.cooldownCost;
                     if(score>tuning.minimumShotUtility && (!Best.valid || score>Best.score))
-                        Best=new Shot{valid=true,skill=skill,direction=direction,power=1,impact=point,score=score,settings=settings,gourdChoice=candidateShot.gourdChoice};
+                        Best=new Shot{valid=true,skill=skill,direction=direction,power=1,impact=point,score=score,settings=settings,gourdChoice=candidateShot.gourdChoice,commonSlot=candidateShot.commonSlot,commonType=candidateShot.commonType};
                 }
                 continue;
             }
             // Bridge construction requires path planning, not ballistic firing.
             if (settings.effectType == SkillEffectType.CreateTerrainBridge) continue;
-            foreach (var target in characters)
+            foreach (var target in characters.OrderBy(c=>c==null?float.MaxValue:Vector2.Distance(PlanningOrigin,c.transform.position)))
             {
+                if(checksForHead>=tuning.checksPerHead)break;
                 if (target == null || target.GetComponent<CharacterCombat>()?.IsDead != false) continue;
                 bool friendly = SameTeam(actor, target);
                 bool healing = settings.effectType == SkillEffectType.HealBurst;
                 if (healing ? !friendly : friendly) continue;
                 if (healing && target.GetComponent<CharacterCombat>().CurrentHp >= target.GetComponent<CharacterCombat>().MaxHp) continue;
                 Vector2 targetPoint = target.GetComponent<Collider2D>()?.bounds.center ?? target.transform.position;
-                for (int p = 0; p < (settings.straightShot ? 1 : samples); p++)
+                bool straight=settings.straightShot && candidateShot.commonType==CommonHeadType.None;
+                for (int p = 0; p < (straight ? 1 : samples); p++)
                 {
-                    float power = settings.straightShot ? 1f : Mathf.Lerp(tuning.minimumPower, 1f, p / (float)(samples - 1));
-                    for (int arc = 0; arc < (settings.straightShot ? 1 : 2); arc++)
+                    if(checksForHead>=tuning.checksPerHead)break;
+                    float power = straight ? 1f : Mathf.Lerp(tuning.minimumPower, 1f, p / (float)(samples - 1));
+                    for (int arc = 0; arc < (straight ? 1 : 2); arc++)
                     {
+                        if(checksForHead>=tuning.checksPerHead)break;
                         if (!canContinue()) yield break;
                         Vector2 direction = (targetPoint - PlanningOrigin).normalized;
                         bool reachable = true;
-                        float speed = settings.straightShot ? settings.straightSpeed : fire.LaunchSpeed * power;
+                        float speed = candidateShot.commonType!=CommonHeadType.None ? commonUse.AIThrowSpeed*power :
+                            settings.straightShot ? settings.straightSpeed : fire.LaunchSpeed * power;
                         // Account for the spawn offset, rather than aiming from the character centre.
                         for (int refine = 0; refine < 3; refine++)
                         {
-                            Vector2 delta = targetPoint - (PlanningOrigin + direction * fire.LaunchOffset);
-                            if (settings.straightShot) direction = delta.sqrMagnitude > .001f ? delta.normalized : Vector2.up;
-                            else if (!SolveArc(delta, speed, -Physics2D.gravity.y * fire.ProjectileGravity, arc == 1, out direction))
+                            Vector2 delta = targetPoint - (PlanningOrigin + direction * (candidateShot.commonType!=CommonHeadType.None?commonUse.AISpawnDistance:fire.LaunchOffset));
+                            if (settings.straightShot && candidateShot.commonType==CommonHeadType.None) direction = delta.sqrMagnitude > .001f ? delta.normalized : Vector2.up;
+                            else if (!SolveArc(delta, speed, -Physics2D.gravity.y * (candidateShot.commonType!=CommonHeadType.None?commonUse.AIProjectileGravity:fire.ProjectileGravity), arc == 1, out direction))
                             { reachable = false; break; }
                         }
-                        if (reachable && Trace(settings, direction, power, out Vector2 impact))
+                        if (reachable && Trace(settings, direction, power, out Vector2 impact,candidateShot.commonType))
                         {
-                            float score = Score(settings, impact) - selector.GetCooldownDuration(skill) * tuning.cooldownCost;
+                            float score = Score(settings, impact) - (candidateShot.commonType==CommonHeadType.None?selector.GetCooldownDuration(skill)*tuning.cooldownCost:0);
                             if (score > tuning.minimumShotUtility && (!Best.valid || score > Best.score))
                                 Best = new Shot { valid = true, skill = skill, direction = direction, power = power,
-                                    impact = impact, score = score, settings = settings,gourdChoice=candidateShot.gourdChoice };
+                                    impact = impact, score = score, settings = settings,gourdChoice=candidateShot.gourdChoice,
+                                    commonSlot=candidateShot.commonSlot,commonType=candidateShot.commonType };
                         }
                         Evaluated++;
+                        checksForHead++;
                         if (Evaluated % Mathf.Max(1, tuning.candidatesPerFrame) == 0)
                         {
                             yield return null;
@@ -166,15 +198,16 @@ public sealed class ObjectHeadAIPlanner
         return true;
     }
 
-    public bool Trace(ObjectHeadSkillSettings settings, Vector2 direction, float power, out Vector2 impact)
+    public bool Trace(ObjectHeadSkillSettings settings, Vector2 direction, float power, out Vector2 impact,CommonHeadType commonType=CommonHeadType.None)
     {
-        Vector2 position = PlanningOrigin + direction.normalized * fire.LaunchOffset;
-        Vector2 velocity = direction.normalized * (settings.straightShot ? settings.straightSpeed : fire.LaunchSpeed * power);
-        Vector2 gravity = settings.straightShot ? Vector2.zero : Physics2D.gravity * fire.ProjectileGravity;
+        bool common=commonType!=CommonHeadType.None && commonUse!=null;
+        Vector2 position = PlanningOrigin + direction.normalized * (common?commonUse.AISpawnDistance:fire.LaunchOffset);
+        Vector2 velocity = direction.normalized * (common?commonUse.AIThrowSpeed*power:settings.straightShot ? settings.straightSpeed : fire.LaunchSpeed * power);
+        Vector2 gravity = common?Physics2D.gravity*commonUse.AIProjectileGravity:settings.straightShot ? Vector2.zero : Physics2D.gravity * fire.ProjectileGravity;
         float step = Mathf.Clamp(tuning.trajectoryStep, .01f, .1f);
         float spriteSize=settings.headSprite!=null?Mathf.Max(settings.headSprite.bounds.size.x,settings.headSprite.bounds.size.y):1f;
-        float radius = .5f*Mathf.Max(.01f,settings.projectileVisualDiameter/Mathf.Max(.01f,spriteSize));
-        for (float time = 0; time < Mathf.Min(fire.ProjectileLifetime, tuning.trajectorySeconds); time += step)
+        float radius = common?commonUse.AIProjectileRadius:.5f*Mathf.Max(.01f,settings.projectileVisualDiameter/Mathf.Max(.01f,spriteSize));
+        for (float time = 0; time < Mathf.Min(common?commonUse.AIProjectileLifetime:fire.ProjectileLifetime, tuning.trajectorySeconds); time += step)
         {
             Vector2 next = position + velocity * step + gravity * (.5f * step * step);
             velocity += gravity * step;

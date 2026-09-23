@@ -66,6 +66,12 @@ public class CommonHeadUseController : MonoBehaviour
     public Sprite SelectedSprite => selectedSprite;
     public float MinJetJumpSpeed => minJetJumpSpeed;
     public float MaxJetJumpSpeed => maxJetJumpSpeed;
+    // Read-only launch parameters let the AI predict the same projectile that gameplay fires.
+    public float AIThrowSpeed => maxThrowSpeedPxPerSecond * throwSpeedMultiplier / ResolvePixelsPerUnit();
+    public float AIProjectileGravity => projectileGravityScale;
+    public float AIProjectileLifetime => projectileLifetime;
+    public float AISpawnDistance => spawnDistanceFromCharacter;
+    public float AIProjectileRadius => projectileRadius;
 
     public bool HasCommonHeadInSlot(int slotIndex)
     {

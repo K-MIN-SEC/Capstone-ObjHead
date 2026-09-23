@@ -4,14 +4,13 @@ using UnityEngine;
 public sealed class ObjectHeadAITuning : ScriptableObject
 {
     [Header("Bounded shot search (per target / skill)")]
-    [Range(3, 18)] public int beginnerPowerSamples = 4;
-    [Range(3, 18)] public int normalPowerSamples = 7;
-    [Range(3, 18)] public int proPowerSamples = 11;
+    [Range(3, 18)] public int powerSamples = 7;
     [Range(.05f, .9f)] public float minimumPower = .2f;
     [Min(.02f)] public float trajectoryStep = .04f;
     [Min(.2f)] public float trajectorySeconds = 4f;
     [Min(1)] public int candidatesPerFrame = 8;
     [Min(.1f)] public float planningBudgetSeconds = 1.2f;
+    [Min(1)] public int checksPerHead = 18;
     [Header("Tactical utility")]
     [Min(1)] public float friendlyFirePenalty = 1.8f;
     [Min(1)] public float selfDamagePenalty = 2.4f;
@@ -21,6 +20,16 @@ public sealed class ObjectHeadAITuning : ScriptableObject
     [Min(0)] public float controlWeight = 12f;
     [Min(0)] public float cooldownCost = .6f;
     [Min(0)] public float minimumShotUtility = .5f;
+    [Header("Shared movement and pickup decisions")]
+    [Min(0)] public float pickupUtility = 24f;
+    [Range(0,1)] public float duplicatePickupMultiplier = .65f;
+    [Min(0)] public float travelCostPerWorldUnit = 1.3f;
+    [Min(0)] public float moveDecisionMargin = 6f;
+    [Min(.1f)] public float pickupVerticalReach = 1.4f;
+    [Min(0)] public float minimumPickupDistance = 1f;
+    [Range(.1f,1f)] public float pickupTravelTimeFraction = .8f;
+    [Min(0)] public float heightAdvantageWeight = .3f;
+    [Range(1,8)] public int aimSafetySamples = 3;
     [Header("Movement and post-shot escape")]
     [Min(0)] public float retreatSeconds = 1.1f;
     [Min(0)] public float dangerClearance = .6f;
@@ -40,7 +49,5 @@ public sealed class ObjectHeadAITuning : ScriptableObject
         if (loaded == null) loaded = CreateInstance<ObjectHeadAITuning>();
         return loaded;
     }
-    public int PowerSamples(ObjectHeadAIDifficulty difficulty) => Mathf.Clamp(
-        difficulty == ObjectHeadAIDifficulty.Beginner ? beginnerPowerSamples :
-        difficulty == ObjectHeadAIDifficulty.Pro ? proPowerSamples : normalPowerSamples, 3, 18);
+    public int PowerSamples(ObjectHeadAIDifficulty difficulty) => Mathf.Clamp(powerSamples, 3, 18);
 }

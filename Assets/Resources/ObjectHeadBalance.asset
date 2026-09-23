@@ -730,11 +730,11 @@ MonoBehaviour:
     unit: "\uCD08"
     description: "\uD310\uB2E8 \uC804 \uB300\uAE30 \uC2DC\uAC04"
   - key: ai.pro.aim_error_degrees
-    value: 1.5
+    value: 0
     unit: "\uB3C4"
     description: "\uCD5C\uB300 \uC870\uC900 \uC624\uCC28"
   - key: ai.pro.power_error
-    value: 0.02
+    value: 0
     unit: "\uBE44\uC728"
     description: "\uCD5C\uB300 \uD22C\uCC99 \uC138\uAE30 \uC624\uCC28"
   - key: common.eraser.min_radius
