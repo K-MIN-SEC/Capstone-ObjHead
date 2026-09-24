@@ -25,7 +25,7 @@ public sealed class ObjectHeadRoomAccessPanel:MonoBehaviour
     public void ClearPasswords(){createPassword.text="";joinPassword.text="";}
     public static string ErrorKey(string message)
     {
-        foreach(var key in new[]{"room_password_required","room_password_incorrect","room_password_invalid","room_password_rate_limited","private_requires_authority","incompatible_ruleset","room_not_found","room_full","match_in_progress"})
+        foreach(var key in new[]{"eos_setup_required","room_password_required","room_password_incorrect","room_password_invalid","room_password_rate_limited","private_requires_authority","incompatible_ruleset","room_not_found","room_full","match_in_progress"})
             if(message?.IndexOf(key,StringComparison.Ordinal)>=0)return key;
         return message??"connection_help";
     }

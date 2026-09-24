@@ -8,7 +8,7 @@ using UnityEngine;
 public sealed partial class ObjectHeadNetworkManager
 {
     public const string AuthorityRuleset="authority-0916-v2";
-    public bool UseDedicatedAuthority => config.UseDedicatedAuthority || HasCommandLineFlag("-objectHeadAuthority") || IsDedicatedWorker;
+    public bool UseDedicatedAuthority => (config != null && config.UseDedicatedAuthority) || HasCommandLineFlag("-objectHeadAuthority") || IsDedicatedWorker;
     public bool IsDedicatedWorker => HasCommandLineFlag("-objectHeadWorker");
     public bool IsCombatAuthority => UseDedicatedAuthority ? IsDedicatedWorker : IsHost;
     [Serializable] public sealed class AuthorityRoom { public string matchId,roomCode,workerTicket,admissionTicket,error,mapId; public int players,capacity,mode; public bool requiresPassword; }
@@ -22,7 +22,27 @@ public sealed partial class ObjectHeadNetworkManager
     {
         EnsureConnected();var result=await client.RpcAsync(session,name,JsonUtility.ToJson(data));return JsonUtility.FromJson<T>(result.Payload);
     }
-    public Task<AuthorityRooms> FindPublicRoomsAsync()=>AuthorityRpc<AuthorityRooms>("objecthead_authority_find",new ObjectHeadReadyRequest());
+    public Task<AuthorityRooms> FindPublicRoomsAsync()=>UseEpicOnlineServices
+        ? FindEpicPublicRoomsAsync()
+        : AuthorityRpc<AuthorityRooms>("objecthead_authority_find",new ObjectHeadReadyRequest());
+    private async Task<AuthorityRooms> FindEpicPublicRoomsAsync()
+    {
+        EnsureConnected();
+        var rooms = await eos.FindRoomsAsync();
+        return new AuthorityRooms
+        {
+            rooms = rooms.Select(room => new AuthorityRoom
+            {
+                matchId = room.lobbyId,
+                roomCode = room.code,
+                players = room.players,
+                capacity = room.capacity,
+                mode = (int)room.mode,
+                mapId = room.mapId,
+                requiresPassword = false
+            }).ToArray()
+        };
+    }
     private async Task CreateAuthoritativeRoomAsync(ObjectHeadRoomSettings settings,bool isPrivate=false,string password=null)
     {
         EnsureConnected();await LeaveCurrentMatchAsync();settings=settings.Copy();settings.rulesetVersion=AuthorityRuleset;

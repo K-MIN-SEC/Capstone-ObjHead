@@ -50,6 +50,7 @@ public sealed class ObjectHeadMapRecipeEditor : Editor
             colors[at] = c;
         }
         if(recipe.structures!=null)foreach(var stamp in recipe.structures)Stamp(colors,recipe.width,recipe.height,stamp);
+        Color32[] foreground = new Color32[colors.Length];
         if(recipe.artworkCutouts!=null && recipe.artworkCutouts.Length>0)
         {
             var removed=new bool[colors.Length];
@@ -59,7 +60,12 @@ public sealed class ObjectHeadMapRecipeEditor : Editor
                 for(int y=0;y<recipe.height;y++)for(int x=0;x<recipe.width;x++)
                 {
                     int at=y*recipe.width+x;
-                    if(colors[at].a>0 && Inside(cut.points,x+.5f,y+.5f)){colors[at]=default;removed[at]=true;}
+                    if(colors[at].a>0 && Inside(cut.points,x+.5f,y+.5f))
+                    {
+                        foreground[at]=colors[at];
+                        colors[at]=default;
+                        removed[at]=true;
+                    }
                 }
             }
             for(int y=1;y<recipe.height-1;y++)for(int x=1;x<recipe.width-1;x++)
@@ -89,6 +95,28 @@ public sealed class ObjectHeadMapRecipeEditor : Editor
         importer.textureCompression = TextureImporterCompression.Uncompressed;
         importer.SaveAndReimport();
         recipe.bakedTerrain = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        string foregroundPath = "Assets/Art/Maps/" + recipe.mapId + "_tunnel_foreground.png";
+        var foregroundTexture = new Texture2D(recipe.width, recipe.height, TextureFormat.RGBA32, false);
+        foregroundTexture.SetPixels32(foreground);
+        foregroundTexture.Apply();
+        File.WriteAllBytes(foregroundPath, foregroundTexture.EncodeToPNG());
+        DestroyImmediate(foregroundTexture);
+        AssetDatabase.ImportAsset(foregroundPath, ImportAssetOptions.ForceSynchronousImport);
+        var foregroundImporter = (TextureImporter)AssetImporter.GetAtPath(foregroundPath);
+        foregroundImporter.textureType = TextureImporterType.Sprite;
+        foregroundImporter.spriteImportMode = SpriteImportMode.Single;
+        foregroundImporter.spritePixelsPerUnit = recipe.pixelsPerUnit;
+        var foregroundSettings = new TextureImporterSettings();
+        foregroundImporter.ReadTextureSettings(foregroundSettings);
+        foregroundSettings.spriteAlignment = (int)SpriteAlignment.BottomLeft;
+        foregroundImporter.SetTextureSettings(foregroundSettings);
+        foregroundImporter.isReadable = true;
+        foregroundImporter.alphaIsTransparency = true;
+        foregroundImporter.filterMode = FilterMode.Bilinear;
+        foregroundImporter.mipmapEnabled = false;
+        foregroundImporter.textureCompression = TextureImporterCompression.Uncompressed;
+        foregroundImporter.SaveAndReimport();
+        recipe.bakedTunnelForeground = AssetDatabase.LoadAssetAtPath<Sprite>(foregroundPath);
         EditorUtility.SetDirty(recipe);
         return recipe.bakedTerrain;
     }

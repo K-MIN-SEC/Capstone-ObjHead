@@ -20,7 +20,7 @@ public static class ObjectHeadExpansionAuthoring
         catalog=ObjectHeadContent.Load();font=catalog.uiFont;
         panelSprite=AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/InkPanel.png");
         ObjectHeadSpreadsheetImporter.ImportAndGetLocalization();
-        Characters();CommonAndEffects();Audio();Title();Maps();
+        Characters();CommonAndEffects();Audio();Title();ObjectHeadTitlePolishAuthoring.Apply();Maps();
         EditorUtility.SetDirty(catalog);AssetDatabase.SaveAssets();
         Debug.Log("[EXPANSION] Six characters, authored skills, motion frames, front end and catalog browser saved.");
     }

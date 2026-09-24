@@ -7,6 +7,37 @@ using UnityEngine;
 /// <summary>Explicit one-map authoring command. Never runs when entering play mode or during normal builds.</summary>
 public static class ObjectHeadHarborAuthoring
 {
+    [MenuItem("Object Head/Maps/Bake Harbor Layered Tunnels")]
+    public static void BakeLayeredTunnels()
+    {
+        var recipe=AssetDatabase.LoadAssetAtPath<ObjectHeadMapRecipe>("Assets/GameData/Maps/twin_citadels.asset");
+        var baked=ObjectHeadMapRecipeEditor.Bake(recipe);
+        var scene=EditorSceneManager.OpenScene("Assets/Scenes/TwinCitadels.unity");
+        var terrain=UnityEngine.Object.FindAnyObjectByType<TerrainManager>();
+        var serialized=new SerializedObject(terrain);
+        serialized.FindProperty("visualSourceTexture").objectReferenceValue=baked;
+        serialized.FindProperty("collisionMaskTexture").objectReferenceValue=baked;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        terrain.GetComponent<SpriteRenderer>().sprite=AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/Maps/twin_citadels.png");
+        WireTunnelLayer(terrain,recipe);
+        EditorSceneManager.SaveScene(scene);
+        AssetDatabase.SaveAssets();
+    }
+
+    public static void WireTunnelLayer(TerrainManager terrain,ObjectHeadMapRecipe recipe)
+    {
+        var child=terrain.transform.Find("Tunnel Foreground");
+        if(child==null)
+        {
+            var go=new GameObject("Tunnel Foreground",typeof(SpriteRenderer),typeof(ObjectHeadTunnelForeground));
+            go.transform.SetParent(terrain.transform,false);
+            child=go.transform;
+        }
+        child.localPosition=Vector3.zero;
+        child.GetComponent<ObjectHeadTunnelForeground>().Configure(terrain,recipe);
+        EditorUtility.SetDirty(child.gameObject);
+    }
+
     public static void ApplyAndBuild(){Apply();ObjectHeadTitleSceneBuilder.BuildWindowsDemo();}
     [MenuItem("Object Head/Maps/Install Hand-drawn Harbor Revision")]
     public static void Apply()
@@ -32,6 +63,7 @@ public static class ObjectHeadHarborAuthoring
         var terrain=UnityEngine.Object.FindAnyObjectByType<TerrainManager>();var settings=new SerializedObject(terrain);
         settings.FindProperty("visualSourceTexture").objectReferenceValue=baked;settings.FindProperty("collisionMaskTexture").objectReferenceValue=baked;
         settings.FindProperty("terrainOriginWorld").vector2Value=new Vector2(-22,-6);settings.ApplyModifiedPropertiesWithoutUndo();
+        WireTunnelLayer(terrain,recipe);
         var layout=UnityEngine.Object.FindAnyObjectByType<ObjectHeadSpawnLayout>();
         layout.useMarkerLocalSurface=true;layout.heightTolerance=.2f;layout.maximumSpawnHeightSpread=7;layout.maximumPlayerMeanHeightDifference=1.3f;
         var four=new[]{

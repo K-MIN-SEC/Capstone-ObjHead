@@ -19,6 +19,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     private ISocket socket;
     private IMatch currentMatch;
     private IMatchmakerTicket matchmakerTicket;
+    private ObjectHeadEosTransport eos;
+    private bool eosMatchmaking;
     private int pendingMatchPlayerCount = 2;
     private ObjectHeadLobbyState lobbyState;
     private string displayName = "Player";
@@ -42,19 +44,20 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     public event Action<string> SessionInterrupted;
 
     public string Status => status;
-    public string MatchId => currentMatch != null ? currentMatch.Id : string.Empty;
+    public bool UseEpicOnlineServices => config != null && config.UseEpicOnlineServices && !UseDedicatedAuthority;
+    public string MatchId => UseEpicOnlineServices ? eos != null ? eos.LobbyId : string.Empty : currentMatch != null ? currentMatch.Id : string.Empty;
     public string RoomCode => !string.IsNullOrWhiteSpace(roomCode)
         ? roomCode
         : lobbyState != null && !string.IsNullOrWhiteSpace(lobbyState.roomCode)
             ? lobbyState.roomCode
             : MatchId;
-    public string LocalUserId => session != null ? session.UserId : string.Empty;
+    public string LocalUserId => UseEpicOnlineServices ? eos != null ? eos.LocalUserId : string.Empty : session != null ? session.UserId : string.Empty;
     public string HostUserId => lobbyState != null ? lobbyState.hostUserId : string.Empty;
     public ObjectHeadLobbyState LobbyState => lobbyState;
-    public bool IsConnected => socket != null && socket.IsConnected;
-    public bool IsInMatch => currentMatch != null;
+    public bool IsConnected => UseEpicOnlineServices ? eos != null && eos.Connected : socket != null && socket.IsConnected;
+    public bool IsInMatch => UseEpicOnlineServices ? eos != null && eos.InRoom : currentMatch != null;
     public bool IsHost => !string.IsNullOrEmpty(LocalUserId) && LocalUserId == HostUserId;
-    public bool IsMatchmaking => matchmakerTicket != null;
+    public bool IsMatchmaking => UseEpicOnlineServices ? eosMatchmaking : matchmakerTicket != null;
     public bool IsGameStarting => gameStarting;
     public ObjectHeadNetworkConfig Config => config;
 
@@ -153,6 +156,21 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
         displayName = SanitizeDisplayName(requestedDisplayName);
         localProfileId = string.IsNullOrWhiteSpace(requestedProfileId) ? "A" : requestedProfileId.Trim();
+        if (UseEpicOnlineServices)
+        {
+            SetStatus("Connecting to Epic Online Services...");
+            eos = GetComponent<ObjectHeadEosTransport>();
+            if (eos == null) eos = gameObject.AddComponent<ObjectHeadEosTransport>();
+            eos.MessageReceived -= HandleEosMessage;
+            eos.MessageReceived += HandleEosMessage;
+            eos.MemberLeft -= HandleEosMemberLeft;
+            eos.MemberLeft += HandleEosMemberLeft;
+            eos.Disconnected -= HandleEosDisconnected;
+            eos.Disconnected += HandleEosDisconnected;
+            try { await eos.ConnectAsync(displayName); SetStatus("Connected to Epic Online Services."); }
+            catch (Exception exception) { SetStatus("EOS connection failed: " + exception.Message); throw; }
+            return;
+        }
         SetStatus($"Connecting to {scheme}://{host}:{port}...");
 
         try
@@ -176,6 +194,18 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task DisconnectAsync()
     {
+        if (UseEpicOnlineServices)
+        {
+            if (eos != null) await eos.DisconnectAsync();
+            eosMatchmaking = false;
+            lobbyState = null;
+            roomCode = string.Empty;
+            gameStarting = false;
+            GameStartData.Clear();
+            SetStatus("Offline");
+            LobbyChanged?.Invoke(null);
+            return;
+        }
         try
         {
             if (matchmakerTicket != null && socket != null && socket.IsConnected)
@@ -208,6 +238,25 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task CreateRoomAsync(ObjectHeadRoomSettings requestedSettings,bool isPrivate=false,string password=null)
     {
+        if (UseEpicOnlineServices)
+        {
+            EnsureConnected();
+            ObjectHeadRoomSettings normalized = NormalizeSettings(requestedSettings);
+            ObjectHeadEosTransport.Room room = await eos.CreateRoomAsync(normalized, isPrivate, password);
+            roomCode = room.code;
+            lobbyState = new ObjectHeadLobbyState
+            {
+                revision = 1,
+                matchId = room.lobbyId,
+                roomCode = room.code,
+                hostUserId = LocalUserId,
+                settings = normalized,
+                players = new[] { CreateLocalLobbyPlayer(false) }
+            };
+            SetStatus("EOS room created: " + room.code);
+            NotifyLobbyChanged();
+            return;
+        }
         if (UseDedicatedAuthority) { await CreateAuthoritativeRoomAsync(requestedSettings,isPrivate,password); return; }
         if(isPrivate)throw new InvalidOperationException("private_requires_authority");
         EnsureConnected();
@@ -232,6 +281,17 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task JoinRoomAsync(string roomCodeOrMatchId,string password=null)
     {
+        if (UseEpicOnlineServices)
+        {
+            EnsureConnected();
+            if (string.IsNullOrWhiteSpace(roomCodeOrMatchId)) throw new ArgumentException("A room code is required.");
+            ObjectHeadEosTransport.Room room = await eos.JoinRoomAsync(roomCodeOrMatchId.Trim(), password);
+            roomCode = room.code;
+            lobbyState = null;
+            SetStatus("EOS room joined. Synchronizing host state...");
+            await SendAsync(ObjectHeadNetworkProtocol.PlayerHello, new ObjectHeadPlayerHello { username = displayName });
+            return;
+        }
         if (UseDedicatedAuthority) { await JoinAuthoritativeRoomAsync(roomCodeOrMatchId,password); return; }
         if(!string.IsNullOrEmpty(password))throw new InvalidOperationException("private_requires_authority");
         EnsureConnected();
@@ -256,6 +316,29 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     private ObjectHeadMatchMode pendingMatchMode;
     public async Task StartQuickMatchAsync(ObjectHeadMatchMode mode)
     {
+        if (UseEpicOnlineServices)
+        {
+            EnsureConnected();
+            await LeaveCurrentMatchAsync();
+            eosMatchmaking = true;
+            NotifyStateChanged();
+            try
+            {
+                ObjectHeadEosTransport.Room room = (await eos.FindRoomsAsync())
+                    .Where(candidate => candidate.mode == mode)
+                    .OrderByDescending(candidate => candidate.players)
+                    .FirstOrDefault();
+                if (room != null) await JoinRoomAsync(room.code);
+                else
+                {
+                    ObjectHeadRoomSettings settings = config.DefaultRoomSettings;
+                    settings.mode = mode;
+                    await CreateRoomAsync(settings);
+                }
+            }
+            finally { eosMatchmaking = false; NotifyStateChanged(); }
+            return;
+        }
         EnsureConnected();
         await LeaveCurrentMatchAsync();
 
@@ -281,6 +364,13 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     public async Task CancelQuickMatchAsync()
     {
+        if (UseEpicOnlineServices)
+        {
+            eosMatchmaking = false;
+            await LeaveCurrentMatchAsync();
+            SetStatus("Matchmaking cancelled.");
+            return;
+        }
         if (matchmakerTicket == null || socket == null || !socket.IsConnected)
         {
             return;
@@ -296,7 +386,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         if(UseDedicatedAuthority){await SendAsync(6,new ObjectHeadSelectionRequest{characters=selection});return;}
         EnsureInMatch();
         if (GameStartData.Instance != null) throw new InvalidOperationException("match_in_progress");
-        if (!ObjectHeadContent.Load().ValidSelection(selection, lobbyState.settings.maxPlayers))
+        if (lobbyState == null || !ObjectHeadContent.Load().ValidSelection(selection, lobbyState.settings.maxPlayers))
             throw new InvalidOperationException("selection_required");
         if (IsHost)
         {
@@ -321,6 +411,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         if(UseDedicatedAuthority){await SendAsync(7,new ObjectHeadReadyRequest());return;}
         EnsureInMatch();
         if (!IsHost) throw new InvalidOperationException("host_only");
+        if (UseEpicOnlineServices) await eos.SetRoomOpenAsync(true);
         await SendAsync(ObjectHeadNetworkProtocol.ReturnToLobby, new ObjectHeadReadyRequest());
         ApplyReturnToLobby();
         await BroadcastLobbyStateAsync();
@@ -363,6 +454,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         {
             if (normalized.maxPlayers < lobbyState.players.Length)
                 throw new InvalidOperationException("room_capacity_too_small");
+            if (UseEpicOnlineServices) await eos.UpdateRoomAsync(normalized);
             lobbyState.settings = normalized;
             foreach (ObjectHeadLobbyPlayer player in lobbyState.players)
             {
@@ -394,6 +486,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         }
 
         GameStartData startData = BuildGameStartData();
+        if (UseEpicOnlineServices) await eos.SetRoomOpenAsync(false);
         await SendAsync(ObjectHeadNetworkProtocol.GameStart, startData);
         ApplyGameStart(startData);
     }
@@ -595,12 +688,45 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             return;
         }
 
+        string json = Encoding.UTF8.GetString(matchState.State);
+        string senderUserId = matchState.UserPresence != null ? matchState.UserPresence.UserId : string.Empty;
+        await HandleIncomingMessageAsync(matchState.OpCode, senderUserId, json);
+    }
+
+    private async void HandleEosMessage(long opCode, string senderUserId, string json)
+    {
+        if (eos == null || !eos.InRoom) return;
+        await HandleIncomingMessageAsync(opCode, senderUserId, json);
+    }
+
+    private async void HandleEosMemberLeft(string userId)
+    {
+        if (lobbyState == null ||
+            !(lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>()).Any(player => player.userId == userId)) return;
+        if (GameStartData.Instance != null) SessionInterrupted?.Invoke("player_disconnected");
+        if (!IsHost) return;
+        RemovePlayer(userId);
+        IncrementLobbyRevision();
+        NotifyLobbyChanged();
+        await BroadcastLobbyStateAsync();
+    }
+
+    private async void HandleEosDisconnected(string reason)
+    {
+        lobbyState = null;
+        roomCode = string.Empty;
+        NotifyLobbyChanged();
+        SessionInterrupted?.Invoke(reason);
+        try { if (eos != null && eos.InRoom) await eos.LeaveRoomAsync(); }
+        catch (Exception exception) { Log("EOS room cleanup failed: " + exception.Message); }
+    }
+
+    private async Task HandleIncomingMessageAsync(long opCode, string senderUserId, string json)
+    {
+
         try
         {
-            string json = Encoding.UTF8.GetString(matchState.State);
-            string senderUserId = matchState.UserPresence != null ? matchState.UserPresence.UserId : string.Empty;
-
-            switch (matchState.OpCode)
+            switch (opCode)
             {
                 case ObjectHeadNetworkProtocol.PlayerHello:
                     if (IsHost)
@@ -679,9 +805,9 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
                     break;
 
                 default:
-                    if (matchState.OpCode >= ObjectHeadNetworkProtocol.GameplayCommand)
+                    if (opCode >= ObjectHeadNetworkProtocol.GameplayCommand)
                     {
-                        GameplayMessageReceived?.Invoke(matchState.OpCode, senderUserId, json);
+                        GameplayMessageReceived?.Invoke(opCode, senderUserId, json);
                     }
                     break;
             }
@@ -707,7 +833,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     {
         EnsureInMatch();
         string json = JsonUtility.ToJson(payload);
-        await socket.SendMatchStateAsync(currentMatch.Id, opCode, json);
+        if (UseEpicOnlineServices) await eos.SendAsync(opCode, json);
+        else await socket.SendMatchStateAsync(currentMatch.Id, opCode, json);
     }
 
     private GameStartData BuildGameStartData()
@@ -730,7 +857,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
         return new GameStartData
         {
-            matchId = currentMatch.Id,
+            matchId = MatchId,
             rulesetVersion = settings.rulesetVersion,
             mode = settings.mode,
             playerCount = orderedPlayers.Length,
@@ -776,6 +903,15 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     private async Task LeaveCurrentMatchAsync()
     {
+        if (UseEpicOnlineServices)
+        {
+            if (eos != null) await eos.LeaveRoomAsync();
+            lobbyState = null;
+            roomCode = string.Empty;
+            GameStartData.Clear();
+            NotifyLobbyChanged();
+            return;
+        }
         if (matchmakerTicket != null)
         {
             await socket.RemoveMatchmakerAsync(matchmakerTicket);
@@ -947,6 +1083,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     private string FindPresenceUsername(string userId)
     {
+        if (UseEpicOnlineServices)
+            return lobbyState?.players?.FirstOrDefault(player => player.userId == userId)?.username ?? "Player";
         IUserPresence presence = GetAllPresences().FirstOrDefault(item => item.UserId == userId);
         return presence != null ? presence.Username : "Player";
     }
@@ -999,14 +1137,14 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     {
         if (!IsConnected)
         {
-            throw new InvalidOperationException("Connect to Nakama first.");
+            throw new InvalidOperationException(UseEpicOnlineServices ? "Connect to Epic Online Services first." : "Connect to Nakama first.");
         }
     }
 
     private void EnsureInMatch()
     {
         EnsureConnected();
-        if (currentMatch == null)
+        if (!IsInMatch)
         {
             throw new InvalidOperationException("Join a room first.");
         }

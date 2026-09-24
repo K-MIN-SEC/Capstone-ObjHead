@@ -24,7 +24,11 @@ public sealed class ObjectHeadRoomBrowser : MonoBehaviour
         foreach (var row in rows) { row.gameObject.SetActive(false); Destroy(row.gameObject); }
         rows.Clear();
     }
-    private void Status(string key) => statusLabel.text=title.Translate(key);
+    private void Status(string key)
+    {
+        statusLabel.gameObject.SetActive(true);
+        statusLabel.text=title.Translate(key);
+    }
     public async void Refresh()
     {
         if(busy || !isActiveAndEnabled) return;
@@ -33,7 +37,7 @@ public sealed class ObjectHeadRoomBrowser : MonoBehaviour
         try
         {
             var network=ObjectHeadNetworkManager.Instance;
-            if(!network.UseDedicatedAuthority){Status("rooms_legacy");return;}
+            if(!network.UseDedicatedAuthority && !network.UseEpicOnlineServices){Status("rooms_legacy");return;}
             await title.EnsureConnectedAsync();
             var result=await network.FindPublicRoomsAsync();
             if(this==null || request!=generation || !isActiveAndEnabled)return;
@@ -49,11 +53,16 @@ public sealed class ObjectHeadRoomBrowser : MonoBehaviour
                 row.onClick.AddListener(()=>Join(room.roomCode));row.gameObject.SetActive(true);rows.Add(row);
             }
             if(rows.Count==0)Status("rooms_empty");
-            else statusLabel.text=string.Format(title.Translate("rooms_count"),rows.Count);
+            else statusLabel.gameObject.SetActive(false);
         }
         catch(Exception e)
         {
-            if(this!=null && request==generation){Status("rooms_failed");Debug.LogWarning("[RoomBrowser] "+e.Message);}
+            if(this!=null && request==generation)
+            {
+                string key=ObjectHeadRoomAccessPanel.ErrorKey(e.Message);
+                Status(title.Translate(key)==key?"rooms_failed":key);
+                Debug.LogWarning("[RoomBrowser] "+key);
+            }
         }
         finally
         {

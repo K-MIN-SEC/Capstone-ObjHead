@@ -33,6 +33,8 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
     [Header("Server profiles")]
     [SerializeField] private bool useDedicatedAuthority;
     public bool UseDedicatedAuthority => useDedicatedAuthority;
+    [SerializeField] private bool useEpicOnlineServices;
+    public bool UseEpicOnlineServices => useEpicOnlineServices;
     [SerializeField] private string defaultProfileId = "local";
     [SerializeField] private ObjectHeadServerProfile[] profiles =
     {

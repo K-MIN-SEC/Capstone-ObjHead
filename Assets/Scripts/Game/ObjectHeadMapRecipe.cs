@@ -53,4 +53,6 @@ public sealed class ObjectHeadMapRecipe : ScriptableObject
     [Header("Editable openings cut through artwork after stamping (pixel coordinates)")]
     public ObjectHeadTerrainPolygon[] artworkCutouts = Array.Empty<ObjectHeadTerrainPolygon>();
     public Texture2D bakedTerrain;
+    [Tooltip("Visual-only soil covering passable tunnels. The terrain collider uses bakedTerrain, not this layer.")]
+    public Sprite bakedTunnelForeground;
 }

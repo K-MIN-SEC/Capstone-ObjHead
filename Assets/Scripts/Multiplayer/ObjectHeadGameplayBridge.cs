@@ -419,7 +419,9 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         if (!charactersById.TryGetValue(message.characterId, out TurnCharacterController character) ||
             GetPlayerIndex(character) != senderPlayerIndex ||
             senderPlayerIndex == localPlayerIndex ||
-            message.turnSerial != turnManager.TurnSerial)
+            message.turnSerial != turnManager.TurnSerial ||
+            senderPlayerIndex != turnManager.CurrentPlayerIndex ||
+            character != turnManager.CurrentCharacter)
         {
             return;
         }

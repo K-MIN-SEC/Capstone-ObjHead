@@ -49,6 +49,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     [Header("Panels")]
     public GameObject mainMenuPanel;
     public GameObject lobbyPanel;
+    [Tooltip("Title decorations hidden while the room / team setup screen is open.")]
+    public GameObject[] menuOnlyDecorations;
 
     [Header("Main menu")]
     public InputField nicknameInput;
@@ -73,6 +75,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public Text lobbyTitleText;
     public Text lobbyRoomCodeText;
     public Text lobbyPlayerListText;
+    public Text[] lobbyPlayerRows;
+    public Image[] lobbyPlayerTeamMarks;
+    public Color[] lobbyTeamColors;
     public Text lobbyCapacityText;
     public Text lobbyMapModeText;
     public Button copyRoomCodeButton;
@@ -437,6 +442,9 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         bool inMatch = localLobby || (network != null && network.IsInMatch);
         mainMenuPanel?.SetActive(!inMatch);
         lobbyPanel?.SetActive(inMatch);
+        if (menuOnlyDecorations != null)
+            foreach (var decoration in menuOnlyDecorations)
+                if (decoration != null) decoration.SetActive(!inMatch);
         frontEnd?.Sync(inMatch);
         cancelMatchmakingButton?.gameObject.SetActive(network != null && network.IsMatchmaking);
 
@@ -471,12 +479,15 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
             lobbyRoomCodeText.text = L("local_shared_screen");
             lobbyCapacityText.text = string.Format(L("player_count_value"), roomSize, roomSize);
             lobbyMapModeText.text = L(selectedMapMode == ObjectHeadMapSelectionMode.Fixed ? "map_fixed" : "map_random");
-            lobbyPlayerListText.text = string.Join("\n", localPlayers.Select((p, i) =>
-            {
-                string team=p.characters.Length>0?string.Join(" / ",p.characters.Select(kind=>L(content.Character(kind).nameKey))):L("not_ready_state");
-                string controller=p.isAi?" · "+L("ai_difficulty_"+p.aiDifficulty.ToString().ToLowerInvariant()):string.Empty;
-                return $"P{i+1}  {p.username}{controller}\n{team}";
-            }));
+            var localRoster = localPlayers.OrderBy(p => selectedMode == ObjectHeadMatchMode.Teams ? p.allianceId : p.playerIndex)
+                .ThenBy(p => p.playerIndex).Select(p => new LobbyRosterLine
+                {
+                    playerIndex = p.playerIndex, allianceId = p.allianceId,
+                    name = p.username,
+                    detail = p.isAi ? L("ai_difficulty_" + p.aiDifficulty.ToString().ToLowerInvariant()) : L("not_ready_state"),
+                    characters = p.characters
+                }).ToArray();
+            DisplayRoster(localRoster);
             readyButtonText.text = L("confirm_team");
             readyButton.interactable = !busy;
             startGameButton.gameObject.SetActive(true);
@@ -514,10 +525,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         {
             lobbyMapModeText.text = L(selectedMapMode == ObjectHeadMapSelectionMode.Fixed ? "map_fixed" : "map_random");
         }
-        if (lobbyPlayerListText != null)
-        {
-            lobbyPlayerListText.text = BuildPlayerList(lobby);
-        }
+        DisplayRoster(BuildPlayerRoster(lobby));
 
         ObjectHeadLobbyPlayer localPlayer = FindLocalPlayer();
         bool localReady = localPlayer != null && localPlayer.ready;
@@ -538,23 +546,59 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         startGameButton.interactable = !busy && network.CanStartMatch(out _);
     }
 
-    private string BuildPlayerList(ObjectHeadLobbyState lobby)
+    private sealed class LobbyRosterLine
     {
-        if (lobby == null || lobby.players == null || lobby.players.Length == 0)
-        {
-            return L("waiting_for_players");
-        }
+        public int playerIndex, allianceId;
+        public string name, detail;
+        public ObjectHeadCharacterKind[] characters;
+    }
 
-        return string.Join("\n", lobby.players
-            .OrderBy(player => player.playerIndex)
-            .Select(player =>
+    private LobbyRosterLine[] BuildPlayerRoster(ObjectHeadLobbyState lobby)
+    {
+        if (lobby?.players == null) return Array.Empty<LobbyRosterLine>();
+        return lobby.players.OrderBy(p => selectedMode == ObjectHeadMatchMode.Teams
+                ? content.Mode(selectedMode).Alliance(p.playerIndex) : p.playerIndex)
+            .ThenBy(p => p.playerIndex).Select(p => new LobbyRosterLine
             {
-                string hostMark = player.userId == lobby.hostUserId ? "  " + L("host_mark") : string.Empty;
-                string readyMark = L(player.ready ? "ready_state" : "not_ready_state");
-                string team = string.Join(" / ", player.characters.Select(k => L(content.Character(k).nameKey)));
-                string alliance = selectedMode == ObjectHeadMatchMode.Teams ? string.Format(L("alliance_label"), content.Mode(selectedMode).Alliance(player.playerIndex)) + "  " : "";
-                return $"{alliance}P{player.playerIndex}  {player.username}   {readyMark}{hostMark}\n{team}\n";
-            }));
+                playerIndex = p.playerIndex,
+                allianceId = content.Mode(selectedMode).Alliance(p.playerIndex),
+                name = p.username,
+                detail = L(p.ready ? "ready_state" : "not_ready_state") +
+                         (p.userId == lobby.hostUserId ? " · " + L("host_mark") : ""),
+                characters = p.characters
+            }).ToArray();
+    }
+
+    private void DisplayRoster(LobbyRosterLine[] players)
+    {
+        string[] lines = players.Select(p =>
+        {
+            string team = selectedMode == ObjectHeadMatchMode.Teams
+                ? string.Format(L("alliance_label"), p.allianceId) + " · " : "";
+            string characters = p.characters != null && p.characters.Length > 0
+                ? string.Join(" / ", p.characters.Select(k => L(content.Character(k).nameKey)))
+                : L("not_ready_state");
+            return $"{team}P{p.playerIndex}  {p.name}\n{p.detail} · {characters}";
+        }).ToArray();
+        bool cards = lobbyPlayerRows != null && lobbyPlayerRows.Length > 0;
+        if (lobbyPlayerListText != null)
+        {
+            lobbyPlayerListText.gameObject.SetActive(!cards);
+            lobbyPlayerListText.text = lines.Length == 0 ? L("waiting_for_players") : string.Join("\n", lines);
+        }
+        if (!cards) return;
+        for (int i = 0; i < lobbyPlayerRows.Length; i++)
+        {
+            Text row = lobbyPlayerRows[i];
+            if (row == null) continue;
+            bool visible = i < lines.Length;
+            row.transform.parent.gameObject.SetActive(visible);
+            if (!visible) continue;
+            row.text = lines[i];
+            if (lobbyPlayerTeamMarks != null && i < lobbyPlayerTeamMarks.Length && lobbyPlayerTeamMarks[i] != null &&
+                lobbyTeamColors != null && lobbyTeamColors.Length > 0)
+                lobbyPlayerTeamMarks[i].color = lobbyTeamColors[(Mathf.Max(1, players[i].allianceId) - 1) % lobbyTeamColors.Length];
+        }
     }
 
     private ObjectHeadLobbyPlayer FindLocalPlayer()

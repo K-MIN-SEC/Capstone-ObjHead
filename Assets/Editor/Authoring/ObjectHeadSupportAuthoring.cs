@@ -85,7 +85,9 @@ public static class ObjectHeadSupportAuthoring
         recipe.artworkCutouts=recipe.artworkCutouts.Take(1).Concat(new[]{Cut(
             new Vector2(-18,.9f),new Vector2(-14,.5f),new Vector2(-10,-.4f),new Vector2(-6,-1.4f),new Vector2(-1.5f,-2.6f),
             new Vector2(-1.5f,-.1f),new Vector2(-6,1.1f),new Vector2(-10,2.1f),new Vector2(-14,3),new Vector2(-18,3.4f))}).ToArray();
-        var baked=ObjectHeadMapRecipeEditor.Bake(recipe);AssignTerrain("TwinCitadels",baked);EditorUtility.SetDirty(recipe);
+        var baked=ObjectHeadMapRecipeEditor.Bake(recipe);AssignTerrain("TwinCitadels",baked);
+        ObjectHeadHarborAuthoring.WireTunnelLayer(UnityEngine.Object.FindAnyObjectByType<TerrainManager>(),recipe);
+        EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());EditorUtility.SetDirty(recipe);
     }
     private static void CreateCavern(ObjectHeadContent content)
     {

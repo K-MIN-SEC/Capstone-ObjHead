@@ -251,21 +251,11 @@ MonoBehaviour:
   - players: 4
     charactersPerPlayer: 2
   maps:
-  - id: wind_meadow
-    nameKey: map_meadow
-    descriptionKey: map_meadow_desc
-    sceneName: WindMeadow
-    preview: {fileID: 21300000, guid: 763f3cec20a21ef41a7290a5085d2891, type: 3}
   - id: twin_citadels
     nameKey: map_citadel
     descriptionKey: map_citadel_desc
     sceneName: TwinCitadels
     preview: {fileID: 21300000, guid: ee731a6f0bd5e1041a992481f535a3f7, type: 3}
-  - id: shattered_reef
-    nameKey: map_reef
-    descriptionKey: map_reef_desc
-    sceneName: ShatteredReef
-    preview: {fileID: 21300000, guid: 10abefd5e8462bf4294012661f320c88, type: 3}
   - id: tidal_caverns
     nameKey: map_tidal_caverns
     descriptionKey: map_tidal_caverns_description

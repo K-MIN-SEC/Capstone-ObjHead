@@ -8,7 +8,10 @@ public sealed class ObjectHeadSettingsPanel : MonoBehaviour
 {
     public ObjectHeadTitleScreen title;
     public Dropdown resolution,windowMode,language;
+    public Text resolutionValue,windowModeValue,languageValue;
+    public Button resolutionPrev,resolutionNext,windowModePrev,windowModeNext,languagePrev,languageNext;
     public Slider bgm,sfx;
+    public Text bgmValue,sfxValue;
     public Button apply,confirm;
     public Text status;
     public ObjectHeadResolution[] resolutions;
@@ -20,9 +23,15 @@ public sealed class ObjectHeadSettingsPanel : MonoBehaviour
     private void Start()
     {
         apply.onClick.AddListener(Apply);confirm.onClick.AddListener(Confirm);
-        bgm.onValueChanged.AddListener(v=>{ObjectHeadAudio.BgmVolume=v;});
-        sfx.onValueChanged.AddListener(v=>{ObjectHeadAudio.SfxVolume=v;});
+        bgm.onValueChanged.AddListener(v=>{ObjectHeadAudio.BgmVolume=v;RefreshVolumeLabels();});
+        sfx.onValueChanged.AddListener(v=>{ObjectHeadAudio.SfxVolume=v;RefreshVolumeLabels();});
         language.onValueChanged.AddListener(v=>{title.SetLanguage((ObjectHeadLanguage)v);Localize();});
+        resolutionPrev?.onClick.AddListener(()=>Cycle(resolution,-1));
+        resolutionNext?.onClick.AddListener(()=>Cycle(resolution,1));
+        windowModePrev?.onClick.AddListener(()=>Cycle(windowMode,-1));
+        windowModeNext?.onClick.AddListener(()=>Cycle(windowMode,1));
+        languagePrev?.onClick.AddListener(()=>Cycle(language,-1));
+        languageNext?.onClick.AddListener(()=>Cycle(language,1));
     }
     public void Load()
     {
@@ -32,12 +41,37 @@ public sealed class ObjectHeadSettingsPanel : MonoBehaviour
         windowMode.SetValueWithoutNotify(Screen.fullScreenMode==FullScreenMode.Windowed?0:Screen.fullScreenMode==FullScreenMode.FullScreenWindow?1:2);
         language.SetValueWithoutNotify((int)title.Language);
         bgm.SetValueWithoutNotify(ObjectHeadAudio.BgmVolume);sfx.SetValueWithoutNotify(ObjectHeadAudio.SfxVolume);
-        Localize();confirm.gameObject.SetActive(pending);
+        Localize();RefreshVolumeLabels();RefreshSelectorLabels();confirm.gameObject.SetActive(pending);
+    }
+    private void RefreshVolumeLabels()
+    {
+        if(bgmValue!=null)bgmValue.text=Mathf.RoundToInt(bgm.value*100f)+"%";
+        if(sfxValue!=null)sfxValue.text=Mathf.RoundToInt(sfx.value*100f)+"%";
     }
     private void Localize()
     {
         int selected=windowMode.value;windowMode.ClearOptions();windowMode.AddOptions(new System.Collections.Generic.List<string>{title.Translate("windowed"),title.Translate("borderless"),title.Translate("fullscreen")});windowMode.SetValueWithoutNotify(selected);
         language.ClearOptions();language.AddOptions(new System.Collections.Generic.List<string>{"한국어","English"});language.SetValueWithoutNotify((int)title.Language);
+        RefreshSelectorLabels();
+    }
+    private void Cycle(Dropdown dropdown,int step)
+    {
+        if(dropdown.options.Count==0)return;
+        int next=(dropdown.value+step+dropdown.options.Count)%dropdown.options.Count;
+        dropdown.SetValueWithoutNotify(next);
+        if(dropdown==language){title.SetLanguage((ObjectHeadLanguage)next);Localize();}
+        RefreshSelectorLabels();
+    }
+    private void RefreshSelectorLabels()
+    {
+        SetSelectorLabel(resolution,resolutionValue);
+        SetSelectorLabel(windowMode,windowModeValue);
+        SetSelectorLabel(language,languageValue);
+    }
+    private static void SetSelectorLabel(Dropdown dropdown,Text label)
+    {
+        if(dropdown==null || label==null || dropdown.options.Count==0)return;
+        label.text=dropdown.options[Mathf.Clamp(dropdown.value,0,dropdown.options.Count-1)].text;
     }
     private void Apply()
     {

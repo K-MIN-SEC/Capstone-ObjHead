@@ -272,6 +272,9 @@ MonoBehaviour:
 
       Common
       heads are single-use items shared by your squad.'
+  - key: eos_setup_required
+    korean: "EOS \uC0C1\uD488\u00B7\uD074\uB77C\uC774\uC5B8\uD2B8\u00B7\uBC30\uD3EC \uC124\uC815\uC774 \uD544\uC694\uD574\uC694. \uAC1C\uBC1C\uC790 \uD3EC\uD138 \uC5F0\uACB0\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694."
+    english: Epic Online Services product, client and deployment configuration is required.
   - key: connection_help
     korean: "\uC11C\uBC84 \uC5F0\uACB0 \uC0C1\uD0DC\uB97C \uD655\uC778\uD55C \uD6C4
       \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694."

@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: ObjectHeadNetworkConfig
   m_EditorClassIdentifier: Assembly-CSharp::ObjectHeadNetworkConfig
   useDedicatedAuthority: 0
+  useEpicOnlineServices: 1
   defaultProfileId: local
   profiles:
   - id: local
@@ -27,23 +28,17 @@ MonoBehaviour:
     minPlayers: 2
     maxPlayers: 2
     mapSelectionMode: 0
-    fixedMapId: wind_meadow
+    fixedMapId: twin_citadels
     randomMapPool:
-    - wind_meadow
     - twin_citadels
-    - shattered_reef
     - tidal_caverns
     - sky_terraces
     - low_cavern
-  fallbackMapId: wind_meadow
+  fallbackMapId: twin_citadels
   titleSceneName: ObjectHeadTitle
   mapScenes:
-  - mapId: wind_meadow
-    sceneName: WindMeadow
   - mapId: twin_citadels
     sceneName: TwinCitadels
-  - mapId: shattered_reef
-    sceneName: ShatteredReef
   - mapId: tidal_caverns
     sceneName: TidalCaverns
   - mapId: sky_terraces

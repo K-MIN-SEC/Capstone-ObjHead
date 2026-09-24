@@ -36,26 +36,11 @@ MonoBehaviour:
   polygons: []
   minimumIslandPixels: 512
   structures:
-  - artwork: {fileID: 2800000, guid: 71c7fc3928f041e44996a9cb73b5d510, type: 3}
+  - artwork: {fileID: 2800000, guid: 5fef15862dc778b43a586979402c4629, type: 3}
     bottomCenter: {x: 704, y: 0}
-    heightPixels: 768
-    maximumWidthPixels: 1344
+    heightPixels: 728
+    maximumWidthPixels: 1360
     flipX: 0
-  artworkCutouts:
-  - subtract: 1
-    points:
-    - {x: 704, y: 188.16}
-    - {x: 736, y: 192}
-    - {x: 768, y: 198.4}
-    - {x: 800, y: 204.8}
-    - {x: 832, y: 211.2}
-    - {x: 864, y: 217.6}
-    - {x: 896, y: 216}
-    - {x: 896, y: 300.8}
-    - {x: 864, y: 294.4}
-    - {x: 832, y: 292.8}
-    - {x: 800, y: 297.6}
-    - {x: 768, y: 296}
-    - {x: 736, y: 300.8}
-    - {x: 704, y: 304}
+  artworkCutouts: []
   bakedTerrain: {fileID: 2800000, guid: 000b2973647ae744484e59e33ed7edc6, type: 3}
+  bakedTunnelForeground: {fileID: 21300000, guid: dbf282071b349ec459af8d89aa5a5534, type: 3}

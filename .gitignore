@@ -108,3 +108,8 @@ InitTestScene*.unity*
 # Local Nakama secrets and database files
 /Server/Nakama/.env
 /Server/Nakama/data/
+
+# EOS Unity plugin generates deployment/client credentials here. Configure locally
+# through EOS Plugin > EOS Configuration; do not commit these files.
+/Assets/StreamingAssets/EOS/*.json
+/Assets/StreamingAssets/EOS/*.json.meta
