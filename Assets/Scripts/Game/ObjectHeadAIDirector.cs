@@ -21,6 +21,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     public static int MovementCandidates {get;private set;}
     private Vector2 movementGoal;
     private float movementScore;
+    private bool movementIsPickup;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Boot()
@@ -86,8 +87,18 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         // A legal shot is no longer an unconditional order to stand still and fire.
         yield return FindFiringPosition(actor,target,terrain,difficulty,serial);
         FindPickupGoal(actor,terrain);
+        // A distant opening spawn can have no hittable target from any nearby probe.
+        // Do not spend that turn standing still: advance to a safe waypoint and try again.
+        if(!planner.Best.valid && movementScore<=tuning.moveDecisionMargin)
+            FindAdvanceGoal(actor,target,terrain);
         float currentScore=planner.Best.valid?planner.Best.score:0f;
-        if(movementScore>currentScore+tuning.moveDecisionMargin)
+#if UNITY_EDITOR
+        Debug.Log($"[AI_CHOICE] {actor.name} shot={currentScore:F1} valid={planner.Best.valid} move={movementScore:F1} pickup={movementIsPickup} goal={movementGoal} from={actor.transform.position}");
+#endif
+        // Pickup utility already includes the travel cost; requiring an extra
+        // firing-position margin made nearby team loot lose to mediocre shots.
+        float moveMargin=movementIsPickup?0f:tuning.moveDecisionMargin;
+        if(movementScore>currentScore+moveMargin)
         {
             yield return MoveToFiringPosition(actor,target,serial);
             float landingDeadline=Time.time+tuning.landingWaitSeconds;
@@ -184,7 +195,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     private IEnumerator FindFiringPosition(TurnCharacterController actor,TurnCharacterController target,TerrainManager terrain,ObjectHeadAIDifficulty difficulty,int serial)
     {
         var tuning=ObjectHeadAITuning.Load();var nav=new ObjectHeadAINavigation(actor,terrain);
-        Vector2 start=actor.transform.position;movementGoal=start;movementScore=float.NegativeInfinity;
+        Vector2 start=actor.transform.position;movementGoal=start;movementScore=float.NegativeInfinity;movementIsPickup=false;
         float deadline=Time.realtimeSinceStartup+tuning.navigationBudgetSeconds;
         for(int sample=1;sample<=tuning.navigationPositionSamples;sample++)foreach(float sign in new[]{-1f,1f})
         {
@@ -199,7 +210,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
             if(!probe.Best.valid)continue;
             float score=probe.Best.score-distance*tuning.travelCostPerWorldUnit;
             score+=Mathf.Clamp(candidate.y-start.y,-1,2)*tuning.heightAdvantageWeight;
-            if(score>movementScore){movementScore=score;movementGoal=candidate;}
+            if(score>movementScore){movementScore=score;movementGoal=candidate;movementIsPickup=false;}
         }
     }
 
@@ -226,7 +237,41 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
                 if(inventory.GetSlot(slot)==item.ItemType){duplicate=true;break;}
             MovementCandidates++;
             float score=tuning.pickupUtility*(duplicate?tuning.duplicatePickupMultiplier:1f)-distance*tuning.travelCostPerWorldUnit;
-            if(score>movementScore){movementScore=score;movementGoal=landing;}
+            if(score>movementScore){movementScore=score;movementGoal=landing;movementIsPickup=true;}
+        }
+    }
+
+    private void FindAdvanceGoal(TurnCharacterController actor,TurnCharacterController target,TerrainManager terrain)
+    {
+        if(actor==null || target==null || terrain==null)return;
+        var tuning=ObjectHeadAITuning.Load();
+        var navigation=new ObjectHeadAINavigation(actor,terrain);
+        Vector2 start=actor.transform.position;
+        Vector2 destination=target.transform.position;
+        float originalDistance=Vector2.Distance(start,destination);
+        float maxTravel=actor.NavigationMoveSpeed*tuning.movementSearchSeconds*.8f;
+        float direction=Mathf.Sign(destination.x-start.x);
+        if(Mathf.Abs(destination.x-start.x)<.1f)direction=1f;
+        if(!navigation.CanStartToward(direction))return;
+
+        for(int sample=1;sample<=tuning.navigationPositionSamples;sample++)
+        {
+            float distance=sample*tuning.navigationStepWorld;
+            if(distance>maxTravel)break;
+            if(!navigation.GroundAt(start.x+direction*distance,start.y,out var waypoint))continue;
+            float progress=originalDistance-Vector2.Distance(waypoint,destination);
+            if(progress<=.1f)continue;
+            float score=tuning.moveDecisionMargin+1f+progress;
+            if(score>movementScore){movementScore=score;movementGoal=waypoint;movementIsPickup=false;}
+        }
+        if(movementScore>tuning.moveDecisionMargin)return;
+        // Gaps may have no walkable intermediate probe, but a tested jump can cross them.
+        if(navigation.TryJump(direction,out var landing) &&
+            Vector2.Distance(landing,destination)<originalDistance-.1f)
+        {
+            movementGoal=landing;
+            movementScore=tuning.moveDecisionMargin+1f;
+            movementIsPickup=false;
         }
     }
 

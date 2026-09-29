@@ -124,15 +124,15 @@ MonoBehaviour:
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
     warningPrefab: {fileID: 0}
     impactScale: 0.9
-    cameraImpulse: 0.13
+    cameraImpulse: 0.12
   - skillId: 32
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
     flightPrefab: {fileID: 8107623904070405756, guid: e78ee788441b2a7438e0482cf2eb8fa2, type: 3}
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
     warningPrefab: {fileID: 0}
-    impactScale: 0.9
-    cameraImpulse: 0.13
+    impactScale: 1.1
+    cameraImpulse: 0.25
   - skillId: 33
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 4280963666402664758, guid: ff291709357e0694cb4efd10925196e0, type: 3}
@@ -140,7 +140,7 @@ MonoBehaviour:
     impactPrefab: {fileID: 1356617763751462342, guid: d95d3e90d01b49c48b6bee2e6d7cb3b4, type: 3}
     warningPrefab: {fileID: 0}
     impactScale: 1.05
-    cameraImpulse: 0.13
+    cameraImpulse: 0.17
   - skillId: 41
     zoneSprite: {fileID: 0}
     launchPrefab: {fileID: 1940547686651648947, guid: 60b7f7d2c408b2643a3c293018a70ec6, type: 3}

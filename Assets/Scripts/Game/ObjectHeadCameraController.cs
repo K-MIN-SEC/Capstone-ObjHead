@@ -55,9 +55,18 @@ public class ObjectHeadCameraController : MonoBehaviour
     }
     private void OnImpact(Vector2 point,float radius,float impulse)
     {
-        if(cinematic==null || manualControl || overviewMode)return;
+        if(cinematic==null)return;
         confirmedImpact=point;impactUntil=Time.unscaledTime+cinematic.impactHoldSeconds;
-        shakeAmplitude=Mathf.Min(.22f,impulse)*cinematic.shakeStrength;
+        // A short visual punch separates a heavy detonation from a small hit.
+        // Keep it on the client camera only; simulation time and aim stay unchanged.
+        if(impulse>0f && targetCamera!=null && !manualControl && !overviewMode)
+        {
+            float zoomKick=Mathf.Clamp01(impulse/.3f)*.055f;
+            targetCamera.orthographicSize=Mathf.Clamp(targetCamera.orthographicSize*(1f-zoomKick),minSize,maxSize);
+        }
+        // Store a screen-height fraction, not world units, so overview zoom keeps its punch.
+        float nextShake=.03f*Mathf.Clamp01(impulse/.3f)*cinematic.shakeStrength;
+        shakeAmplitude=Time.unscaledTime<shakeUntil?Mathf.Max(shakeAmplitude,nextShake):nextShake;
         shakeUntil=Time.unscaledTime+cinematic.shakeSeconds;
     }
     private void OnDamagePresented(Vector2 point,float popupDuration)
@@ -102,6 +111,7 @@ public class ObjectHeadCameraController : MonoBehaviour
         if (overviewMode || manualControl)
         {
             transform.position = ClampToTerrain(transform.position);
+            ApplyImpactShake();
             return;
         }
 
@@ -133,10 +143,16 @@ public class ObjectHeadCameraController : MonoBehaviour
         {
             transform.position = ClampToTerrain(transform.position);
         }
+        ApplyImpactShake();
+    }
+
+    private void ApplyImpactShake()
+    {
         if(cinematic!=null && Time.unscaledTime<shakeUntil && Time.timeScale>0)
         {
             float fade=(shakeUntil-Time.unscaledTime)/Mathf.Max(.01f,cinematic.shakeSeconds);
-            shakeOffset=new Vector3(Mathf.Sin(Time.unscaledTime*73),Mathf.Sin(Time.unscaledTime*91),0)*shakeAmplitude*fade;
+            shakeOffset=new Vector3(Mathf.Sin(Time.unscaledTime*73),Mathf.Sin(Time.unscaledTime*91),0)
+                *(shakeAmplitude*targetCamera.orthographicSize*fade);
             transform.position+=shakeOffset;
         }
     }

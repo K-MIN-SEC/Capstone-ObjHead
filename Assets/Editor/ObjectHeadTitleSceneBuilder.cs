@@ -54,6 +54,20 @@ public static class ObjectHeadTitleSceneBuilder
         ObjectHeadReleaseAuthoring.Validate();
         AssetDatabase.SaveAssets();
 
+        BuildWindowsPlayer();
+    }
+
+    // For an already-authored playtest: do not regenerate balance, localization or
+    // the server catalogue just to compile a Windows executable.
+    public static void BuildWindowsPlaytest()
+    {
+        ValidateEditableTitleAssets();
+        ObjectHeadReleaseAuthoring.Validate();
+        BuildWindowsPlayer();
+    }
+
+    private static void BuildWindowsPlayer()
+    {
         string outputPath = GetCommandLineValue("-objectHeadBuildPath");
         if (string.IsNullOrWhiteSpace(outputPath))
         {

@@ -493,7 +493,7 @@ public class CharacterCombat : MonoBehaviour
 
     private void ShowDamagePopup(int damage)
     {
-        if(damage>0)DamagePresented?.Invoke(transform.position,damagePopupSeconds);
+        if(damage>0)DamagePresented?.Invoke(transform.position,Mathf.Max(.9f,damagePopupSeconds));
         if (!showHealthLabel || damage <= 0)
         {
             return;
@@ -549,8 +549,10 @@ public class CharacterCombat : MonoBehaviour
 
     private IEnumerator DamagePopupRoutine(Vector3 startPosition)
     {
-        float duration = Mathf.Max(0.01f, damagePopupSeconds);
+        float duration = Mathf.Max(.9f, damagePopupSeconds);
         float elapsed = 0f;
+        Camera view = Camera.main;
+        float normalView = ObjectHeadCameraTuning.Load()?.characterViewSize ?? 5.5f;
 
         while (elapsed < duration)
         {
@@ -558,8 +560,12 @@ public class CharacterCombat : MonoBehaviour
             float t = Mathf.Clamp01(elapsed / duration);
             if (damagePopupRoot != null)
             {
-                damagePopupRoot.position = startPosition + Vector3.up * (damagePopupRiseDistance * t);
+                // Readable pop-and-settle instead of a constant-speed number flying away.
+                float rise = Mathf.Sin(t * Mathf.PI * .5f);
+                damagePopupRoot.position = startPosition + Vector3.up * (damagePopupRiseDistance * rise);
                 damagePopupRoot.rotation = Quaternion.identity;
+                float viewScale = view != null ? Mathf.Clamp(view.orthographicSize / normalView, 1f, 2.5f) : 1f;
+                damagePopupRoot.localScale = Vector3.one * viewScale * (1f + .2f * (1f - Mathf.Clamp01(t / .2f)));
             }
 
             yield return null;

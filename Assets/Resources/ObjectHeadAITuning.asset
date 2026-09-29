@@ -42,7 +42,7 @@ MonoBehaviour:
   navigationBudgetSeconds: 1.6
   navigationPositionSamples: 6
   navigationStepWorld: 1.25
-  movementSearchSeconds: 3
+  movementSearchSeconds: 5
   jumpTraceStep: 0.035
   jumpTraceSeconds: 1.7
   walkStepHeight: 0.22

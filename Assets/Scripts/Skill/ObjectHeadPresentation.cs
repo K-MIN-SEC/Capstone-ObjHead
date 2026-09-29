@@ -106,6 +106,11 @@ public sealed class ObjectHeadPresentation : ScriptableObject
         var library=Load(); var profile=library != null ? library.Find(id) : null;
         if(profile?.impactPrefab==null)return false;
         Spawn(profile.impactPrefab,point,Mathf.Max(.3f,radius)*profile.impactScale);
+        // Reuse the game's hand-drawn hit fragments for weightier impacts.
+        // This remains cosmetic and is emitted only after a confirmed collision.
+        if(profile.cameraImpulse>=.1f)
+            ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Hit,point,Vector2.up,
+                Mathf.Lerp(1f,2f,Mathf.Clamp01(profile.cameraImpulse/.3f)));
         ImpactPresented?.Invoke(point,radius,profile.cameraImpulse);
         return true;
     }

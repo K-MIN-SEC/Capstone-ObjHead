@@ -210,12 +210,23 @@ public class SkillProjectile : MonoBehaviour
         DisablePhysicsAtImpact(impactPoint);
 
         SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
-        if (spriteRenderer != null)
+        Vector3 restingScale = transform.localScale;
+        float delay = Mathf.Max(.01f, skillSettings.delaySeconds);
+        float elapsed = 0f;
+        float pulsePhase = 0f;
+        while (elapsed < delay)
         {
-            spriteRenderer.color = skillSettings.projectileColor;
+            float urgency = Mathf.Clamp01(elapsed / delay);
+            pulsePhase += Time.deltaTime * Mathf.Lerp(2.5f, 6.5f, urgency) * Mathf.PI * 2f;
+            float pulse = .5f + .5f * Mathf.Sin(pulsePhase);
+            transform.localScale = restingScale * (1f + .1f * pulse);
+            if (spriteRenderer != null)
+                spriteRenderer.color = Color.Lerp(skillSettings.projectileColor, Color.white, .24f * pulse);
+            elapsed += Time.deltaTime;
+            yield return null;
         }
-
-        yield return new WaitForSeconds(skillSettings.delaySeconds);
+        transform.localScale = restingScale;
+        if (spriteRenderer != null) spriteRenderer.color = skillSettings.projectileColor;
 
         turnManager?.NotifyResolving();
         yield return ResolveSkillEffectRoutine(impactPoint);
