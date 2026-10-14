@@ -30,7 +30,10 @@ public sealed class ObjectHeadMotionFeedback:MonoBehaviour
             distance=0;return;
         }
         if(airborne && fallSpeed>=config.landingSpeed)
+        {
             ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Land,foot,Vector2.up,Mathf.Clamp(fallSpeed/5,.6f,1.5f));
+            ObjectHeadCombatAudio.Play("land",foot,Mathf.Clamp(fallSpeed/6,.4f,1));
+        }
         airTime=0;fallSpeed=0;airborne=false;
         distance+=moved;
         if(Mathf.Abs(body.linearVelocity.x)>.2f && distance>=config.footstepDistance && Time.time-lastStep>=config.footstepInterval)

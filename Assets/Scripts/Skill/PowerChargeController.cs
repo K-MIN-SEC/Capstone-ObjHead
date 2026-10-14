@@ -18,6 +18,7 @@ public class PowerChargeController : MonoBehaviour
     private bool suppressReleaseFireUntilSpaceUp;
     private float currentPower;
     private float releasedPower;
+    private int chargeFeedbackStep;
 
     public bool IsCharging => isCharging;
     public float CurrentPower => currentPower;
@@ -46,6 +47,12 @@ public class PowerChargeController : MonoBehaviour
 
     private void Update()
     {
+        if (!Application.isFocused || Time.timeScale <= 0f)
+        {
+            if (isCharging) CancelChargeFromInput();
+            else CancelCharge();
+            return;
+        }
         if (turnManager == null)
         {
             turnManager = FindTurnManager();
@@ -85,12 +92,19 @@ public class PowerChargeController : MonoBehaviour
         {
             isCharging = true;
             currentPower = 0f;
+            chargeFeedbackStep = 0;
         }
 
         if (isCharging && held)
         {
             currentPower = Mathf.Clamp01(currentPower + Time.deltaTime / chargeSeconds);
             aimController?.SetChargePower(currentPower);
+            int step = Mathf.FloorToInt(currentPower * 4f);
+            if (step > chargeFeedbackStep)
+            {
+                chargeFeedbackStep = step;
+                ObjectHeadCombatAudio.Play(step == 4 ? "charge_full" : "charge_tick", transform.position);
+            }
         }
 
         if (isCharging && released)

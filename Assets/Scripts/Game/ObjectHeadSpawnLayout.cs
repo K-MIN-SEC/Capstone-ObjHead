@@ -28,6 +28,7 @@ public sealed class ObjectHeadSpawnLayout : MonoBehaviour
             for (int i = seats.Length - 1; i > 0; i--) { int j = random.Next(i + 1); (seats[i], seats[j]) = (seats[j], seats[i]); }
         else if (randomizeSeats && random.Next(2) == 1)
             for (int i = 0; i < seats.Length; i++) seats[i] = seats.Length - 1 - seats[i];
+        var placed = new System.Collections.Generic.List<Vector2>();
         foreach (var character in characters)
         {
             var member = character.GetComponent<ObjectHeadTeamMember>();
@@ -44,12 +45,34 @@ public sealed class ObjectHeadSpawnLayout : MonoBehaviour
             bool valid=useMarkerLocalSurface
                 ? TryLocalSurface(terrain,marker,request.colliderExtents,heightTolerance,out point)
                 : terrain.FindValidCharacterSpawn(request,new System.Random(seed),out point,out _);
-            if (!valid || Mathf.Abs(point.y-marker.y)>heightTolerance)
+            if (!valid || Mathf.Abs(point.y-marker.y)>heightTolerance || placed.Any(p => Vector2.Distance(p,point)<.85f))
+                valid = TryResolveNearbyMarker(terrain,marker,request.colliderExtents,heightTolerance,placed,out point);
+            if (!valid)
                 throw new InvalidOperationException($"Unsafe spawn marker: {slots[member.TeamSlotIndex-1].name}, marker={marker}, extents={request.colliderExtents}, candidate={point}");
             character.transform.position=point;
             character.GetComponent<Rigidbody2D>().linearVelocity=Vector2.zero;
+            placed.Add(point);
         }
         return true;
+    }
+
+    // Baked art and collision sampling can differ by a few pixels. Repair locally and
+    // deterministically; never silently move a player to another side of the map.
+    public static bool TryResolveNearbyMarker(TerrainManager terrain, Vector2 marker, Vector2 extents,
+        float tolerance, System.Collections.Generic.List<Vector2> occupied, out Vector2 point)
+    {
+        point = default;
+        float best = float.PositiveInfinity;
+        for (int iy=-4; iy<=4; iy++)
+        for (int ix=-24; ix<=24; ix++)
+        {
+            Vector2 candidate = marker + new Vector2(ix*.1f, iy*.2f);
+            float cost = (candidate-marker).sqrMagnitude + Mathf.Abs(iy)*.1f;
+            if (cost >= best || !TryLocalSurface(terrain,candidate,extents,tolerance,out var safe) ||
+                occupied.Any(p => Mathf.Abs(p.x-safe.x)<extents.x*2+.12f && Mathf.Abs(p.y-safe.y)<extents.y*2)) continue;
+            best=cost; point=safe;
+        }
+        return !float.IsPositiveInfinity(best);
     }
     public static bool TryLocalSurface(TerrainManager terrain,Vector2 marker,Vector2 extents,float tolerance,out Vector2 point)
     {

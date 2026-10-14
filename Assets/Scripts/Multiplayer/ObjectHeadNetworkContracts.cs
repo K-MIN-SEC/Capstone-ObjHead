@@ -41,6 +41,8 @@ public sealed class ObjectHeadLobbyPlayer
     public string username;
     public bool ready;
     public int playerIndex;
+    public bool isAi;
+    public ObjectHeadAIDifficulty aiDifficulty = ObjectHeadAIDifficulty.Normal;
     public ObjectHeadCharacterKind[] characters = Array.Empty<ObjectHeadCharacterKind>();
 }
 
@@ -100,9 +102,16 @@ public sealed class ObjectHeadSettingsRequest
     public ObjectHeadRoomSettings settings;
 }
 
+[Serializable]
+public sealed class ObjectHeadLobbyRejection
+{
+    public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
+    public string reason;
+}
+
 public static class ObjectHeadNetworkProtocol
 {
-    public const int ProtocolVersion = 3;
+    public const int ProtocolVersion = 7;
 
     public const long PlayerHello = 1;
     public const long LobbyState = 2;
@@ -111,10 +120,12 @@ public static class ObjectHeadNetworkProtocol
     public const long GameStart = 5;
     public const long SelectionRequest = 6;
     public const long ReturnToLobby = 7;
+    public const long LobbyJoinRejected = 8;
 
     // Gameplay opcodes are reserved now so lobby work never collides with them.
     public const long GameplayCommand = 100;
     public const long GameplayEvent = 101;
     public const long TerrainOperation = 110;
+    public const long TerrainSync = 111;
     public const long StateSnapshot = 120;
 }

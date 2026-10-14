@@ -866,3 +866,54 @@ MonoBehaviour:
       \uD30C\uAD34\uD558\uACE0 \uBAA8\uB450\uC5D0\uAC8C \uD53C\uD574\uB97C \uC90D\uB2C8\uB2E4."
     english: A rainbow cat sweeps left to right at impact height, destroying terrain
       and damaging both sides.
+  - key: online_ai_add
+    korean: AI 추가
+    english: ADD AI
+  - key: online_ai_remove
+    korean: AI 제거
+    english: REMOVE AI
+  - key: status_adding_ai
+    korean: 빈자리에 AI를 추가하는 중
+    english: Adding AI to an empty seat
+  - key: status_removing_ai
+    korean: AI를 제거하는 중
+    english: Removing AI
+  - key: status_ai_difficulty
+    korean: AI 난이도를 변경하는 중
+    english: Updating AI difficulty
+  - key: lobby_three_ffa_hint
+    korean: 모두 준비하면 3명으로 시작 가능 · 빈자리에 AI 추가 가능 · 2인 전환 잠김
+    english: Ready up to start with 3. Add AI for 4. Two-player mode is locked.
+  - key: lobby_three_team_hint
+    korean: 모두 준비하면 2대1 시작 가능 · AI 추가 시 2대2 · 2인 전환 잠김
+    english: Ready up for 2 vs 1. Add AI for 2 vs 2. Two-player mode is locked.
+  - key: lobby_need_opponent
+    korean: 참가자를 기다리거나 빈자리에 AI를 추가해 주세요.
+    english: Wait for another player or add AI to an empty seat.
+  - key: lobby_ready_hint
+    korean: 머리를 선택하고 모두 준비하면 시작할 수 있어요.
+    english: Choose your heads. Everyone must be ready to start.
+  - key: lobby_can_start
+    korean: 모두 준비됐어요. 방장이 게임을 시작할 수 있어요.
+    english: Everyone is ready. The host can start the match.
+  - key: lobby_not_ready
+    korean: 방 정보를 받는 중이에요. 잠시 후 다시 시도해 주세요.
+    english: Receiving room information. Please try again shortly.
+  - key: not_enough_players
+    korean: 최소 2명이 필요해요. 참가자를 기다리거나 AI를 추가해 주세요.
+    english: At least 2 players are needed. Wait for a player or add AI.
+  - key: all_players_ready_required
+    korean: 모든 참가자가 준비해야 시작할 수 있어요.
+    english: Every player must be ready before the match can start.
+  - key: room_update_in_progress
+    korean: 방 설정을 변경하는 중이에요. 잠시 후 다시 시도해 주세요.
+    english: Room settings are being updated. Please try again shortly.
+  - key: room_join_in_progress
+    korean: 참가자의 연결을 확인하는 중이에요. 잠시만 기다려 주세요.
+    english: A player is connecting. Please wait a moment.
+  - key: ai_host_only
+    korean: 호스트 방식의 방에서 방장만 AI를 관리할 수 있어요.
+    english: Only the room host can manage AI in a hosted match.
+  - key: ai_not_found
+    korean: 방에 AI가 없어요. 먼저 빈자리에 AI를 추가해 주세요.
+    english: There is no AI in this room. Add AI to an empty seat first.

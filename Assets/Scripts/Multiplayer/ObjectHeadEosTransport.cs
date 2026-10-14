@@ -38,7 +38,11 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
     private string hostId;
     private string password;
     private bool privateRoom;
+    private bool acceptingMembers;
     private TaskCompletionSource<string> admissionReply;
+    private readonly Dictionary<string, float> pendingConnections = new Dictionary<string, float>();
+    private float nextConnectionRetry;
+    private bool closeListenerAdded;
 
     public event Action<long, string, string> MessageReceived;
     public event Action<string> MemberLeft;
@@ -50,6 +54,9 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
     public string LocalUserId => localUser != null && localUser.IsValid() ? localUser.ToString() : string.Empty;
     public string LobbyId => lobbyId ?? string.Empty;
     public string HostUserId => hostId ?? string.Empty;
+    // Includes peers which joined EOS but have not sent their game-level hello yet.
+    // AI seats are local host actors and never appear in this count.
+    public int LiveMemberCount => RefreshMemberCount();
 
     private sealed class Reassembly
     {
@@ -76,6 +83,7 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         public int capacity;
         public ObjectHeadMatchMode mode;
         public string mapId;
+        public int protocolVersion;
     }
 
     public async Task ConnectAsync(string displayName)
@@ -85,9 +93,21 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         if (product == null || product.ProductId == Guid.Empty)
             throw new InvalidOperationException("eos_setup_required");
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        // This Device-ID/P2P game has no social/store overlay. Set the flag before
+        // platform creation as well as in the local config (which contains secrets and is not versioned).
+        PlatformManager.GetPlatformConfig().platformOptionsFlags |= WrappedPlatformFlags.DisableOverlay;
+#endif
         if (FindAnyObjectByType<EOSManager>() == null)
             new GameObject("EpicOnlineServices").AddComponent<EOSManager>();
         var eos = EOSManager.Instance;
+        if (!closeListenerAdded)
+        {
+            // The SDK calls this BEFORE releasing native interfaces. OnDestroy can run afterwards.
+            var weak = new WeakReference<ObjectHeadEosTransport>(this);
+            eos.AddApplicationCloseListener(() => { if (weak.TryGetTarget(out var owner)) owner.ReleaseNotifications(); });
+            closeListenerAdded = true;
+        }
         if (eos.GetEOSPlatformInterface() == null)
             throw new InvalidOperationException("EOS 초기화에 실패했습니다. Epic 배포 설정을 확인해 주세요.");
 
@@ -155,6 +175,7 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         hostId = LocalUserId;
         password = isPrivate ? requestedPassword : null;
         privateRoom = isPrivate;
+        acceptingMembers = true;
         members.Add(LocalUserId);
         admitted.Add(LocalUserId);
         try
@@ -163,8 +184,10 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
             {
                 ["game"] = Bucket,
                 ["rules"] = ObjectHeadRoomSettings.CurrentRulesetVersion,
+                ["protocol"] = ObjectHeadNetworkProtocol.ProtocolVersion.ToString(),
                 ["code"] = code,
                 ["private"] = isPrivate ? "1" : "0",
+                ["reserved_ai"] = "0",
                 ["mode"] = settings.mode.ToString(),
                 ["map"] = settings.fixedMapId ?? string.Empty,
                 ["open"] = "1"
@@ -187,6 +210,8 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         List<Room> found = await SearchAsync(isId ? null : "code", isId ? null : codeOrId.ToUpperInvariant(), isId ? codeOrId : null);
         Room room = found.FirstOrDefault();
         if (room == null) throw new InvalidOperationException("room_not_found");
+        if (room.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion) throw new InvalidOperationException("incompatible_ruleset");
+        if (room.players >= room.capacity) throw new InvalidOperationException("room_full");
         if (room.isPrivate && string.IsNullOrEmpty(suppliedPassword))
             throw new InvalidOperationException("room_password_required");
 
@@ -204,17 +229,25 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         privateRoom = room.isPrivate;
         members.Add(LocalUserId);
         members.Add(hostId);
-        if (room.isPrivate)
+        QueuePeerAcceptance(hostId);
+        // An EOS lobby membership is not proof of a working host P2P connection.
+        // Public rooms use the same explicit, bounded admission handshake as private rooms.
+        admissionReply = new TaskCompletionSource<string>();
+        var reply = admissionReply;
+        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!reply.Task.IsCompleted && InRoom && DateTime.UtcNow < deadline)
         {
-            admissionReply = new TaskCompletionSource<string>();
-            await SendRawAsync(hostId, -1, suppliedPassword);
-            Task winner = await Task.WhenAny(admissionReply.Task, Task.Delay(10000));
-            string answer = winner == admissionReply.Task ? admissionReply.Task.Result : string.Empty;
-            if (answer != "ok")
-            {
-                await LeaveRoomAsync();
-                throw new InvalidOperationException(answer == "rate_limited" ? "room_password_rate_limited" : "room_password_incorrect");
-            }
+            await SendRawAsync(hostId, -1, room.isPrivate ? suppliedPassword : string.Empty);
+            await Task.WhenAny(reply.Task, Task.Delay(1000));
+        }
+        string answer = reply.Task.IsCompleted ? await reply.Task : "timeout";
+        admissionReply = null;
+        if (answer != "ok")
+        {
+            await LeaveRoomAsync();
+            throw new InvalidOperationException(answer == "timeout" || answer == "left" ? "connection_help" :
+                answer == "closed" ? "match_in_progress" :
+                answer == "rate_limited" ? "room_password_rate_limited" : "room_password_incorrect");
         }
         admitted.Add(hostId);
         return room;
@@ -223,31 +256,67 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
     public async Task<List<Room>> FindRoomsAsync() => (await SearchAsync("game", Bucket, null))
         .Where(room => !room.isPrivate && room.players < room.capacity).ToList();
 
-    public Task UpdateRoomAsync(ObjectHeadRoomSettings settings)
+    public Task UpdateRoomAsync(ObjectHeadRoomSettings settings, int reservedAiSeats = 0)
     {
         if (!IsHost) throw new InvalidOperationException("방장만 방 설정을 변경할 수 있습니다.");
+        if (settings == null) throw new InvalidOperationException("room_capacity_too_small");
+        int humanCapacity = HumanCapacityFor(settings.maxPlayers, reservedAiSeats, RefreshMemberCount());
         return SetAttributesAsync(new Dictionary<string, string>
         {
             ["mode"] = settings.mode.ToString(),
-            ["map"] = settings.fixedMapId ?? string.Empty
-        }, settings.maxPlayers);
+            ["map"] = settings.fixedMapId ?? string.Empty,
+            ["reserved_ai"] = reservedAiSeats.ToString()
+        }, humanCapacity);
     }
 
-    public Task SetRoomOpenAsync(bool open)
+    public async Task SetRoomOpenAsync(bool open)
     {
         if (!IsHost) throw new InvalidOperationException("방장만 방을 열거나 닫을 수 있습니다.");
-        return SetAttributesAsync(new Dictionary<string, string> { ["open"] = open ? "1" : "0" });
+        bool previous = acceptingMembers;
+        acceptingMembers = open;
+        try { await SetAttributesAsync(new Dictionary<string, string> { ["open"] = open ? "1" : "0" }); }
+        catch { acceptingMembers = previous; throw; }
     }
 
     public async Task SendAsync(long opCode, string json)
     {
         if (!InRoom) throw new InvalidOperationException("방에 참가하지 않았습니다.");
         if (IsHost)
-        {
-            foreach (string peer in admitted.ToArray())
-                if (peer != LocalUserId) await SendRawAsync(peer, opCode, json);
-        }
+            await BroadcastToPeersAsync(admitted.Where(peer => peer != LocalUserId).ToArray(),
+                peer => SendRawAsync(peer, opCode, json));
         else await SendRawAsync(hostId, opCode, json);
+    }
+
+    private static async Task BroadcastToPeersAsync(IEnumerable<string> peers, Func<string, Task> send)
+    {
+        List<Exception> failures = null;
+        foreach (string peer in peers)
+        {
+            try { await send(peer); }
+            catch (Exception exception)
+            {
+                // A stale/failed second peer must not prevent the third or fourth
+                // peer from receiving their initial lobby state or battle updates.
+                if (failures == null) failures = new List<Exception>();
+                failures.Add(exception);
+            }
+        }
+        if (failures != null) throw new AggregateException("EOS 일부 참가자에게 전송하지 못했습니다.", failures);
+    }
+
+    private static int HumanCapacityFor(int totalCapacity, int reservedAiSeats, int liveMembers)
+    {
+        if (totalCapacity < 1 || reservedAiSeats < 0 || reservedAiSeats >= totalCapacity ||
+            liveMembers > totalCapacity - reservedAiSeats)
+            throw new InvalidOperationException("room_capacity_too_small");
+        return totalCapacity - reservedAiSeats;
+    }
+
+    public Task SendToPeerAsync(string peerId, long opCode, string json)
+    {
+        if (!IsHost || !admitted.Contains(peerId) || !IsMemberInLobby(peerId))
+            throw new InvalidOperationException("승인된 방 참가자에게만 전송할 수 있습니다.");
+        return SendRawAsync(peerId, opCode, json);
     }
 
     public async Task LeaveRoomAsync()
@@ -255,14 +324,17 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         if (!InRoom) return;
         string leaving = lobbyId;
         bool owner = IsHost;
+        ClosePeerConnections();
         lobbyId = null;
         hostId = null;
         password = null;
         privateRoom = false;
+        acceptingMembers = false;
         members.Clear();
         admitted.Clear();
         passwordAttempts.Clear();
         partialMessages.Clear();
+        pendingConnections.Clear();
         admissionReply?.TrySetResult("left");
         admissionReply = null;
         var finished = new TaskCompletionSource<Result>();
@@ -282,14 +354,35 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
 
     public async Task DisconnectAsync()
     {
-        await LeaveRoomAsync();
-        if (memberNotification != 0) lobbies.RemoveNotifyLobbyMemberStatusReceived(memberNotification);
-        if (connectionNotification != 0) p2p.RemoveNotifyPeerConnectionRequest(connectionNotification);
+        try { await LeaveRoomAsync(); }
+        finally { ReleaseNotifications(); }
+    }
+
+    private void ClosePeerConnections()
+    {
+        if (p2p == null || localUser == null) return;
+        var close = new CloseConnectionsOptions { LocalUserId = localUser, SocketId = new SocketId { SocketName = SocketName } };
+        p2p.CloseConnections(ref close);
+    }
+
+    private void ReleaseNotifications()
+    {
+        ClosePeerConnections();
+        if (lobbies != null && memberNotification != 0) lobbies.RemoveNotifyLobbyMemberStatusReceived(memberNotification);
+        if (p2p != null && connectionNotification != 0) p2p.RemoveNotifyPeerConnectionRequest(connectionNotification);
         memberNotification = 0;
         connectionNotification = 0;
         lobbies = null;
         p2p = null;
         localUser = null;
+        lobbyId = hostId = password = null;
+        acceptingMembers = false;
+        members.Clear();
+        admitted.Clear();
+        passwordAttempts.Clear();
+        partialMessages.Clear();
+        pendingConnections.Clear();
+        admissionReply?.TrySetResult("left");
     }
 
     private async Task SetAttributesAsync(Dictionary<string, string> values, int maxMembers = 0)
@@ -393,15 +486,19 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         if (details.CopyInfo(ref copy, out LobbyDetailsInfo? info) != Result.Success || !info.HasValue) return null;
         var raw = info.Value;
         Enum.TryParse(GetAttribute(details, "mode"), out ObjectHeadMatchMode mode);
+        int.TryParse(GetAttribute(details, "protocol"), out int protocol);
+        int.TryParse(GetAttribute(details, "reserved_ai"), out int reservedAiSeats);
+        reservedAiSeats = Math.Max(0, Math.Min(3, reservedAiSeats));
         return new Room
         {
             lobbyId = raw.LobbyId,
             code = GetAttribute(details, "code"),
             hostId = raw.LobbyOwnerUserId.ToString(),
             isPrivate = GetAttribute(details, "private") == "1",
-            players = (int)(raw.MaxMembers - raw.AvailableSlots),
-            capacity = (int)raw.MaxMembers,
+            players = (int)(raw.MaxMembers - raw.AvailableSlots) + reservedAiSeats,
+            capacity = (int)raw.MaxMembers + reservedAiSeats,
             mode = mode,
+            protocolVersion = protocol,
             mapId = GetAttribute(details, "map")
         };
     }
@@ -449,6 +546,13 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
 
     private void Update()
     {
+        if (Connected && InRoom && Time.realtimeSinceStartup >= nextConnectionRetry)
+        {
+            nextConnectionRetry = Time.realtimeSinceStartup + .25f;
+            foreach (var peer in pendingConnections.ToArray())
+                if (Time.realtimeSinceStartup - peer.Value > 15f) pendingConnections.Remove(peer.Key);
+                else if (IsMemberInLobby(peer.Key) && AcceptPeer(ProductUserId.FromString(peer.Key))) pendingConnections.Remove(peer.Key);
+        }
         if (!Connected || !InRoom) return;
         var sizeOptions = new GetNextReceivedPacketSizeOptions { LocalUserId = localUser, RequestedChannel = 0 };
         for (int handled = 0; handled < 128; handled++)
@@ -509,14 +613,6 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         string body = text.Substring(delimiter + 1);
         if (opCode == -1 && IsHost) { _ = AdmitSafelyAsync(sender, body); return; }
         if (opCode == -2 && !IsHost && sender == hostId) { admissionReply?.TrySetResult(body); return; }
-        if (!admitted.Contains(sender) && IsHost && !privateRoom && opCode == ObjectHeadNetworkProtocol.PlayerHello)
-        {
-            ObjectHeadPlayerHello hello = null;
-            try { hello = JsonUtility.FromJson<ObjectHeadPlayerHello>(body); }
-            catch (ArgumentException) { }
-            if (hello != null && hello.protocolVersion == ObjectHeadNetworkProtocol.ProtocolVersion)
-                admitted.Add(sender);
-        }
         if (!admitted.Contains(sender)) return;
         if (!IsHost && sender != hostId) return;
         MessageReceived?.Invoke(opCode, sender, body);
@@ -530,6 +626,13 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
 
     private async Task AdmitAsync(string sender, string supplied)
     {
+        if (admitted.Contains(sender)) { await SendRawAsync(sender, -2, "ok"); return; }
+        string admissionRoom = lobbyId;
+        if (!acceptingMembers)
+        {
+            await SendRawAsync(sender, -2, "closed");
+            return;
+        }
         if (!passwordAttempts.TryGetValue(sender, out Queue<float> attempts))
         {
             attempts = new Queue<float>();
@@ -538,13 +641,13 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
         while (attempts.Count > 0 && Time.realtimeSinceStartup - attempts.Peek() > 60f) attempts.Dequeue();
         bool rateLimited = attempts.Count >= 5;
         if (!rateLimited) attempts.Enqueue(Time.realtimeSinceStartup);
-        bool valid = !rateLimited && privateRoom && members.Contains(sender) && supplied == password;
+        bool valid = !rateLimited && IsMemberInLobby(sender) && (!privateRoom || supplied == password);
         if (valid) admitted.Add(sender);
         await SendRawAsync(sender, -2, valid ? "ok" : rateLimited ? "rate_limited" : "denied");
         if (!valid)
         {
             await Task.Delay(250); // Give EOS reliable delivery a tick before removing this peer.
-            if (!InRoom || !IsHost) return;
+            if (!InRoom || !IsHost || lobbyId != admissionRoom || admitted.Contains(sender)) return;
             var kick = new KickMemberOptions { LobbyId = lobbyId, LocalUserId = localUser,
                 TargetUserId = ProductUserId.FromString(sender) };
             lobbies.KickMember(ref kick, null, (ref KickMemberCallbackInfo data) => { });
@@ -555,21 +658,50 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
     {
         if (data.LobbyId != lobbyId) return;
         string userId = data.TargetUserId.ToString();
-        if (data.CurrentStatus == LobbyMemberStatus.Joined) { members.Add(userId); return; }
+        if (data.CurrentStatus == LobbyMemberStatus.Joined)
+        {
+            members.Add(userId);
+            // Proactively accept verified lobby peers. This also recovers a connection
+            // request received before the EOS member callback/local join callback.
+            if (userId != LocalUserId && (IsHost || userId == hostId)) QueuePeerAcceptance(userId);
+            return;
+        }
         if (data.CurrentStatus == LobbyMemberStatus.Promoted) return;
         members.Remove(userId);
         admitted.Remove(userId);
+        pendingConnections.Remove(userId);
+        passwordAttempts.Remove(userId);
         if (userId == LocalUserId || userId == hostId) Disconnected?.Invoke("player_disconnected");
         else MemberLeft?.Invoke(userId);
     }
 
     private void OnConnectionRequest(ref OnIncomingConnectionRequestInfo data)
     {
-        if (!InRoom || data.SocketId?.SocketName != SocketName || !IsMemberInLobby(data.RemoteUserId.ToString())) return;
-        var accept = new AcceptConnectionOptions { LocalUserId = localUser, RemoteUserId = data.RemoteUserId,
+        if (!InRoom || data.SocketId?.SocketName != SocketName) return;
+        string peer = data.RemoteUserId.ToString();
+        if (!IsHost && peer != hostId) return;
+        QueuePeerAcceptance(peer);
+    }
+
+    private void QueuePeerAcceptance(string peer)
+    {
+        if (IsMemberInLobby(peer) && AcceptPeer(ProductUserId.FromString(peer)))
+        {
+            pendingConnections.Remove(peer);
+            return;
+        }
+        if (pendingConnections.Count < 16 && !pendingConnections.ContainsKey(peer))
+            pendingConnections[peer] = Time.realtimeSinceStartup;
+    }
+
+    private bool AcceptPeer(ProductUserId peer)
+    {
+        if (p2p == null || localUser == null || peer == null || !peer.IsValid()) return false;
+        var accept = new AcceptConnectionOptions { LocalUserId = localUser, RemoteUserId = peer,
             SocketId = new SocketId { SocketName = SocketName } };
         Result result = p2p.AcceptConnection(ref accept);
         if (result != Result.Success) Debug.LogWarning("[EOS] P2P accept: " + result);
+        return result == Result.Success;
     }
 
     private static string NewRoomCode()
@@ -593,9 +725,15 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
     private bool IsMemberInLobby(string userId)
     {
         if (members.Contains(userId)) return true;
-        if (!InRoom) return false;
+        RefreshMemberCount();
+        return members.Contains(userId);
+    }
+
+    public int RefreshMemberCount()
+    {
+        if (!InRoom || lobbies == null || localUser == null) return 0;
         var copy = new CopyLobbyDetailsHandleOptions { LobbyId = lobbyId, LocalUserId = localUser };
-        if (lobbies.CopyLobbyDetailsHandle(ref copy, out LobbyDetails details) != Result.Success) return false;
+        if (lobbies.CopyLobbyDetailsHandle(ref copy, out LobbyDetails details) != Result.Success) return members.Count;
         try
         {
             var countOptions = new LobbyDetailsGetMemberCountOptions();
@@ -606,7 +744,7 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
                 ProductUserId member = details.GetMemberByIndex(ref memberOptions);
                 if (member != null && member.IsValid()) members.Add(member.ToString());
             }
-            return members.Contains(userId);
+            return Math.Max((int)count, members.Count);
         }
         finally { details.Release(); }
     }
@@ -620,7 +758,6 @@ public sealed class ObjectHeadEosTransport : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (lobbies != null && memberNotification != 0) lobbies.RemoveNotifyLobbyMemberStatusReceived(memberNotification);
-        if (p2p != null && connectionNotification != 0) p2p.RemoveNotifyPeerConnectionRequest(connectionNotification);
+        ReleaseNotifications();
     }
 }

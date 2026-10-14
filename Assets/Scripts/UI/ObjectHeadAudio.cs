@@ -7,7 +7,7 @@ public sealed class ObjectHeadAudio : MonoBehaviour
     private AudioSource music;
     private ObjectHeadAudioLibrary library;
     public static float BgmVolume {get=>PlayerPrefs.GetFloat("Audio.BGM",.3f);set{float volume=Mathf.Clamp01(value);PlayerPrefs.SetFloat("Audio.BGM",volume);if(instance!=null && instance.music!=null)instance.music.volume=volume;}}
-    // Retain the user's SFX preference for future clips; the provisional throw/impact clips were removed.
+    // Shared volume for supplied combat SFX and existing special-weapon loops.
     public static float SfxVolume {get=>PlayerPrefs.GetFloat("Audio.SFX",.65f);set=>PlayerPrefs.SetFloat("Audio.SFX",Mathf.Clamp01(value));}
     public static void Save()=>PlayerPrefs.Save();
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

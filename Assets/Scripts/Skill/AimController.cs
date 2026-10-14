@@ -122,6 +122,7 @@ public class AimController : MonoBehaviour
         }
 
         bool canAim = turnCharacter != null &&
+            Application.isFocused && Time.timeScale > 0f &&
             turnCharacter.AcceptsLocalInput &&
             (turnManager == null || turnManager.CanCharacterFire(turnCharacter));
         if (canAim && !hadAimControl)
@@ -205,8 +206,10 @@ public class AimController : MonoBehaviour
     private void ReadAimInput()
     {
         float verticalInput = 0f;
+        bool fineAim = false;
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
+        fineAim = keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
 
         if (keyboard != null && keyboard.leftArrowKey.isPressed)
         {
@@ -231,6 +234,7 @@ public class AimController : MonoBehaviour
             return;
         }
 #else
+        fineAim = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         if (Input.GetKey(KeyCode.LeftArrow))
         {
             SetFacingSign(-1);
@@ -245,7 +249,7 @@ public class AimController : MonoBehaviour
         if (Input.GetKey(KeyCode.DownArrow)) verticalInput -= 1f;
 #endif
         localAimAngleDegrees = Mathf.Clamp(
-            localAimAngleDegrees + verticalInput * rotateSpeedDegrees * Time.deltaTime,
+            localAimAngleDegrees + verticalInput * rotateSpeedDegrees * (fineAim ? .25f : 1f) * Time.deltaTime,
             -90f,
             90f);
     }
@@ -423,7 +427,8 @@ public class AimController : MonoBehaviour
             directionAngle + chargingSpriteAngleOffset);
         if (chargingImage != null)
         {
-            chargingImage.localScale = Vector3.one;
+            float fullPulse = chargePower >= .999f ? 1.06f + Mathf.Sin(Time.unscaledTime * 16f) * .025f : 1f;
+            chargingImage.localScale = Vector3.one * fullPulse;
             chargingImage.localPosition = Vector3.zero;
         }
 

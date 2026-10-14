@@ -113,8 +113,8 @@ public class SkillFireController : MonoBehaviour
             FindAnyObjectByType<ObjectHeadDedicatedGameplay>()?.RequestFire(this,normalizedPower);
             return;
         }
-        if(ObjectHeadCommonAuthority.Online && !ObjectHeadCommonAuthority.CanWrite && ObjectHeadGourd.IsMeta(skillSelector.GetCurrentSkillSettings().effectType))
-        {FindAnyObjectByType<ObjectHeadGameplayBridge>()?.RequestGourdFire(this,normalizedPower);return;}
+        if(ObjectHeadCommonAuthority.Online && !ObjectHeadCommonAuthority.CanWrite)
+        {FindAnyObjectByType<ObjectHeadGameplayBridge>()?.RequestFire(this,normalizedPower);return;}
         FireInternal(normalizedPower, true);
     }
 
@@ -147,7 +147,7 @@ public class SkillFireController : MonoBehaviour
 
         aimController.ConfirmFacingFromAim();
 
-        if (skillSelector != null && !skillSelector.CanUseSelectedSkill())
+        if (ObjectHeadCommonAuthority.CanWrite && skillSelector != null && !skillSelector.CanUseSelectedSkill())
         {
             Debug.Log($"{name} cannot fire skill {skillSelector.SelectedSkillIndex + 1}: cooldown {skillSelector.GetRemainingCooldown(skillSelector.SelectedSkillIndex)}.");
             return false;

@@ -93,9 +93,7 @@ public sealed class ObjectHeadNetworkConfig : ScriptableObject
             return binding.sceneName.Trim();
         }
 
-        binding = (mapScenes ?? Array.Empty<ObjectHeadMapSceneBinding>())
-            .FirstOrDefault(candidate => candidate != null && !string.IsNullOrWhiteSpace(candidate.sceneName));
-        return binding != null ? binding.sceneName.Trim() : "SampleScene";
+        throw new InvalidOperationException("Unknown map scene: " + requested);
     }
 
     public static ObjectHeadNetworkConfig LoadOrCreateRuntimeDefault()

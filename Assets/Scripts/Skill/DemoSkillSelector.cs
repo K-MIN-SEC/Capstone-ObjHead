@@ -245,6 +245,13 @@ public class DemoSkillSelector : MonoBehaviour
         return remainingCooldowns[Mathf.Clamp(skillIndex, 0, 2)];
     }
 
+    public void ApplyNetworkCooldowns(int[] cooldowns)
+    {
+        if (cooldowns == null || cooldowns.Length != remainingCooldowns.Length) return;
+        for (int i = 0; i < remainingCooldowns.Length; i++)
+            remainingCooldowns[i] = Mathf.Max(0, cooldowns[i]);
+    }
+
     public int GetCooldownDuration(int skillIndex)
     {
         skillIndex = Mathf.Clamp(skillIndex, 0, 2);

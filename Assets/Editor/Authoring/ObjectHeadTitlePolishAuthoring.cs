@@ -15,7 +15,130 @@ public static class ObjectHeadTitlePolishAuthoring
     private static Sprite panelSprite;
     private static Font font;
 
-    [MenuItem("Object Head/0923/Polish Title UI")]
+    [MenuItem("Object Head/1014/Add Online Lobby AI Controls")]
+    public static void ApplyOnlineLobbyControls()
+    {
+        panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/InkPanel.png");
+        font = AssetDatabase.LoadAssetAtPath<Font>("Assets/Art/Fonts/NotoSansCJKkr-Regular.otf");
+        var root = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            var title = root.GetComponentInChildren<ObjectHeadTitleScreen>(true);
+            StyleOnlineLobbyControls(title);
+            EditorUtility.SetDirty(title);
+            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+        AssetDatabase.SaveAssets();
+        Debug.Log("[LOBBY_UI_AUTHORED] Online AI controls and visible lobby status are saved in the title prefab.");
+    }
+
+    private static void StyleOnlineLobbyControls(ObjectHeadTitleScreen title)
+    {
+        var lobby = title.lobbyPanel.transform;
+        // Keep all four 53px roster cards readable, with an 8px gap between cards.
+        // The old 58px stride left only 5px and crowded the new online controls.
+        for (int i = 0; i < title.lobbyPlayerRows.Length; i++)
+            if (title.lobbyPlayerRows[i] != null)
+                Place(title.lobbyPlayerRows[i].transform.parent, -530, 36 - i * 61, 350, 53);
+        title.onlineAIAddButton = OnlineLobbyButton(title, "OnlineAIAdd", -624, -201, 162, 38, "online_ai_add", out _);
+        title.onlineAIRemoveButton = OnlineLobbyButton(title, "OnlineAIRemove", -436, -201, 162, 38, "online_ai_remove", out _);
+        title.onlineAIDifficultyButton = OnlineLobbyButton(title, "OnlineAIDifficulty", -530, -247, 350, 36, null, out Text difficulty);
+        title.onlineAIDifficultyText = difficulty;
+        difficulty.text = title.localization.Get("ai_difficulty_normal", ObjectHeadLanguage.Korean);
+        // Noto's 16px text needs a 33px line box. Give the hint real space between
+        // the map controls and start buttons instead of shrinking or clipping it.
+        Place(title.mapPreview.transform, -116, -218, 212, 84);
+        Place(title.mapName.transform, 230, -218, 320, 70);
+        Place(title.previousMapButton.transform, -249, -218, 39, 48);
+        Place(title.nextMapButton.transform, 17, -218, 39, 48);
+        Place(title.toggleMapModeButton.transform, 545, -197, 176, 38);
+        Place(title.applySettingsButton.transform, 545, -241, 176, 38);
+        Place(title.readyButton.transform, -12, -334, 410, 54);
+        Place(title.startGameButton.transform, 438, -334, 410, 54);
+        var rightPane = lobby.Find("LobbyRightPane");
+        if (rightPane != null) Place(rightPane, 208, -20, 936, 725);
+        title.lobbyStartHint = PlainText(lobby, "LobbyStartHint", 208, -282, 900, 35, 16, Muted);
+        title.lobbyStartHint.text = title.localization.Get("lobby_ready_hint", ObjectHeadLanguage.Korean);
+        title.lobbyStartHint.horizontalOverflow = HorizontalWrapMode.Wrap;
+        title.lobbyStartHint.verticalOverflow = VerticalWrapMode.Truncate;
+        title.lobbyStartHint.resizeTextForBestFit = true;
+        title.lobbyStartHint.resizeTextMinSize = 12;
+        title.lobbyStartHint.resizeTextMaxSize = 16;
+        title.lobbyStartHint.gameObject.SetActive(false);
+    }
+
+    private static Button OnlineLobbyButton(ObjectHeadTitleScreen title, string name, float x, float y,
+        float width, float height, string key, out Text label)
+    {
+        var parent = title.lobbyPanel.transform;
+        var button = parent.Find(name)?.GetComponent<Button>();
+        if (button == null)
+        {
+            button = Object.Instantiate(title.toggleMapModeButton, parent);
+            button.name = name;
+            button.onClick = new Button.ButtonClickedEvent();
+        }
+        Place(button.transform, x, y, width, height);
+        StyleButton(button, Blue, 17, false);
+        label = button.GetComponentInChildren<Text>(true);
+        // The glyphs are compact, but Noto's line metrics need the full 35px.
+        label.rectTransform.offsetMin = new Vector2(10, 0);
+        label.rectTransform.offsetMax = new Vector2(-10, 0);
+        var localized = label.GetComponent<ObjectHeadLocalizedLabel>();
+        if (key == null)
+        {
+            if (localized != null) Object.DestroyImmediate(localized);
+        }
+        else
+        {
+            localized ??= label.gameObject.AddComponent<ObjectHeadLocalizedLabel>();
+            localized.LocalizationKey = key;
+            label.text = title.localization.Get(key, ObjectHeadLanguage.Korean);
+        }
+        button.gameObject.SetActive(false);
+        return button;
+    }
+
+    public static void AddConnectionProgress()
+    {
+        panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/InkPanel.png");
+        font = AssetDatabase.LoadAssetAtPath<Font>("Assets/Art/Fonts/NotoSansCJKkr-Regular.otf");
+        var root = PrefabUtility.LoadPrefabContents(PrefabPath);
+        try
+        {
+            var title = root.GetComponentInChildren<ObjectHeadTitleScreen>(true);
+            var overlay = title.transform.Find("ConnectionProgress");
+            if (overlay == null)
+            {
+                var go = new GameObject("ConnectionProgress", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(title.transform, false); overlay = go.transform;
+            }
+            var rect = (RectTransform)overlay;
+            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            var dim = overlay.GetComponent<Image>(); dim.color = new Color32(6,18,25,225); dim.raycastTarget = true;
+            Decoration(overlay,"ProgressCard",0,0,700,280,Ink);
+            Decoration(overlay,"ProgressAccent",0,138,700,4,Gold);
+            var oldSpinnerText=overlay.Find("Spinner")?.GetComponent<Text>();
+            if(oldSpinnerText!=null)UnityEngine.Object.DestroyImmediate(oldSpinnerText);
+            Decoration(overlay,"Spinner",0,66,44,44,Gold);
+            var spinner=overlay.Find("Spinner").GetComponent<Image>();
+            spinner.sprite=AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+            spinner.type=Image.Type.Filled;spinner.fillMethod=Image.FillMethod.Radial360;spinner.fillAmount=.75f;
+            title.loadingTitle = PlainText(overlay,"Heading",0,-5,650,54,30,Cream);
+            title.loadingTitle.text = "방에 참가하는 중…";
+            title.loadingDetail = PlainText(overlay,"Detail",0,-74,650,55,20,Muted);
+            title.loadingDetail.text = "잠시만 기다려 주세요.";
+            title.loadingSpinner = spinner.rectTransform;
+            title.loadingOverlay = overlay.gameObject;
+            overlay.SetAsLastSibling(); overlay.gameObject.SetActive(false);
+            PrefabUtility.SaveAsPrefabAsset(root,PrefabPath);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+    }
+
+    [MenuItem("Object Head/0930/Polish Title UI")]
     public static void Apply()
     {
         panelSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/InkPanel.png");
@@ -28,8 +151,8 @@ public static class ObjectHeadTitlePolishAuthoring
             var settings = front.settingsController;
             var main = title.mainMenuPanel.transform;
 
-            foreach (var card in new[] {front.home, front.play, front.quick, front.create, front.find, front.settings})
-                StyleCard(card);
+            foreach (var card in new[] {front.home, front.play, front.quick, front.create, front.settings})
+                StyleCard(card, card == front.home);
 
             StyleTop(title);
             StyleHome(title, front, main);
@@ -41,11 +164,10 @@ public static class ObjectHeadTitlePolishAuthoring
             StyleLobby(title);
 
             StyleButton(front.backButton, Blue, 21, false);
-            Place(front.backButton.transform, -260, -356, 200, 49);
-            front.compactBackPosition = new Vector2(-260, -356);
-            front.roomBrowserBackPosition = new Vector2(-540, -347);
+            Place(front.backButton.transform, -660, -350, 166, 52);
+            front.compactBackPosition = new Vector2(-660, -350);
+            front.roomBrowserBackPosition = front.compactBackPosition;
             if (title.helpButton != null) StyleButton(title.helpButton, Blue, 18, false);
-            if (title.quitButton != null) StyleButton(title.quitButton, Blue, 18, false);
             StyleStatus(title);
 
             foreach (var label in root.GetComponentsInChildren<ObjectHeadLocalizedLabel>(true))
@@ -72,7 +194,7 @@ public static class ObjectHeadTitlePolishAuthoring
     {
         if (title.statusText == null) return;
         var status = title.statusText;
-        Place(status.transform, -410, -412, 690, 34);
+        Place(status.transform, 366, -414, 695, 36);
         status.font = font; status.fontSize = 17; status.color = Cream;
         status.alignment = TextAnchor.MiddleLeft;
         var backing = status.transform.parent.Find("StatusBacking");
@@ -82,20 +204,20 @@ public static class ObjectHeadTitlePolishAuthoring
             go.transform.SetParent(status.transform.parent, false);
             backing = go.transform;
         }
-        Place(backing, -405, -412, 750, 40);
+        Place(backing, 366, -414, 724, 42);
         TintImage(backing.GetComponent<Image>() ?? backing.gameObject.AddComponent<Image>(), new Color32(15, 39, 50, 225));
         backing.GetComponent<Image>().raycastTarget = false;
         backing.SetSiblingIndex(status.transform.GetSiblingIndex());
     }
 
-    private static void StyleCard(GameObject card)
+    private static void StyleCard(GameObject card, bool landing)
     {
         if (card == null) return;
-        Place(card.transform, -428, -82, 680, 622);
+        Place(card.transform, -428, landing ? -82 : -6, 680, landing ? 622 : 770);
         var image = card.GetComponent<Image>();
         if (image != null) { image.sprite = panelSprite; image.type = Image.Type.Sliced; image.color = Ink; }
-        Decoration(card.transform, "CardAccent", -272, 291, 96, 7, Gold);
-        Decoration(card.transform, "CardRule", 0, 213, 564, 2, new Color32(106, 145, 149, 210));
+        Decoration(card.transform, "CardAccent", -272, landing ? 291 : 354, 96, 7, Gold);
+        Decoration(card.transform, "CardRule", 0, landing ? 213 : 250, 564, 2, new Color32(106, 145, 149, 210));
     }
 
     private static void StyleHome(ObjectHeadTitleScreen title, ObjectHeadFrontEnd front, Transform main)
@@ -107,15 +229,18 @@ public static class ObjectHeadTitlePolishAuthoring
         StyleButton(front.playButton, Gold, 28, true);
         StyleButton(front.createButton, Blue, 25, true);
         StyleButton(front.settingsButton, Blue, 25, true);
-        Place(front.playButton.transform, 0, 126, 558, 74);
-        Place(front.createButton.transform, 0, 34, 558, 74);
-        Place(front.settingsButton.transform, 0, -58, 558, 74);
-        MoveAndStyleInput(title.nicknameInput, home, 0, -220, 558, 54);
-        var nickname = main.Find("nickname_label");
+        title.quitButton.transform.SetParent(home, false);
+        StyleButton(title.quitButton, Blue, 23, true);
+        Place(front.playButton.transform, 0, 135, 558, 68);
+        Place(front.createButton.transform, 0, 51, 558, 68);
+        Place(front.settingsButton.transform, 0, -33, 558, 68);
+        Place(title.quitButton.transform, 0, -117, 558, 68);
+        MoveAndStyleInput(title.nicknameInput, home, 0, -258, 558, 48);
+        var nickname = home.Find("nickname_label") ?? main.Find("nickname_label");
         if (nickname != null)
         {
             nickname.SetParent(home, false);
-            Place(nickname, -207, -174, 144, 30);
+            Place(nickname, -207, -207, 144, 30);
             var text = nickname.GetComponent<Text>();
             text.fontSize = 19; text.color = Muted; text.alignment = TextAnchor.MiddleLeft;
         }
@@ -128,10 +253,10 @@ public static class ObjectHeadTitlePolishAuthoring
         StyleButton(front.findButton, Blue, 25, true);
         StyleButton(front.trainingButton, Blue, 25, true);
         StyleButton(title.localPlayButton, Blue, 25, true);
-        Place(front.quickButton.transform, 0, 143, 558, 69);
-        Place(front.findButton.transform, 0, 54, 558, 69);
-        Place(front.trainingButton.transform, 0, -35, 558, 69);
-        Place(title.localPlayButton.transform, 0, -124, 558, 69);
+        Place(front.quickButton.transform, 0, 151, 558, 76);
+        Place(front.findButton.transform, 0, 51, 558, 76);
+        Place(front.trainingButton.transform, 0, -49, 558, 76);
+        Place(title.localPlayButton.transform, 0, -149, 558, 76);
     }
 
     private static void StyleQuick(ObjectHeadTitleScreen title, ObjectHeadFrontEnd front)
@@ -142,9 +267,9 @@ public static class ObjectHeadTitlePolishAuthoring
         StyleButton(title.quickMatch2Button, Gold, 24, true);
         StyleButton(title.quickMatch4Button, Blue, 24, true);
         StyleButton(title.quickMatchTeamsButton, Blue, 24, true);
-        Place(title.quickMatch2Button.transform, 0, 134, 558, 76);
-        Place(title.quickMatch4Button.transform, 0, 32, 558, 76);
-        Place(title.quickMatchTeamsButton.transform, 0, -70, 558, 76);
+        Place(title.quickMatch2Button.transform, 0, 154, 558, 82);
+        Place(title.quickMatch4Button.transform, 0, 37, 558, 82);
+        Place(title.quickMatchTeamsButton.transform, 0, -80, 558, 82);
     }
 
     private static void StyleCreate(ObjectHeadTitleScreen title, ObjectHeadFrontEnd front)
@@ -153,44 +278,51 @@ public static class ObjectHeadTitlePolishAuthoring
         var heading = create.Find("create_room")?.GetComponent<Text>();
         if (heading != null) StyleHeading(heading);
         var mode = create.Find("mode_select")?.GetComponent<Text>();
-        if (mode != null) { Place(mode.transform, -174, 130, 210, 35); mode.alignment = TextAnchor.MiddleLeft; mode.color = Muted; mode.fontSize = 20; }
+        if (mode != null) { Place(mode.transform, -174, 181, 210, 35); mode.alignment = TextAnchor.MiddleLeft; mode.color = Muted; mode.fontSize = 20; }
         StyleButton(title.roomSizeMinusButton, Blue, 25, false);
         StyleButton(title.roomSizePlusButton, Blue, 25, false);
-        Place(title.roomSizeMinusButton.transform, -235, 67, 55, 55);
-        Place(title.roomSizeValueText.transform, 0, 67, 378, 54);
-        Place(title.roomSizePlusButton.transform, 235, 67, 55, 55);
+        Place(title.roomSizeMinusButton.transform, -235, 122, 55, 55);
+        Place(title.roomSizeValueText.transform, 0, 122, 378, 54);
+        Place(title.roomSizePlusButton.transform, 235, 122, 55, 55);
         title.roomSizeValueText.color = Cream;
         title.roomSizeValueText.fontSize = 25;
         var access = title.roomAccess;
         if (access != null)
         {
-            Place(access.visibilityButton.transform, 0, -12, 558, 56);
+            Place(access.visibilityButton.transform, 0, 22, 558, 58);
             StyleButton(access.visibilityButton, Blue, 23, false);
-            MoveAndStyleInput(access.createPassword, create, 0, -88, 558, 56);
+            MoveAndStyleInput(access.createPassword, create, 0, -64, 558, 58);
         }
         StyleButton(title.createRoomButton, Gold, 27, true);
-        Place(title.createRoomButton.transform, 0, -170, 558, 76);
+        Place(title.createRoomButton.transform, 0, -177, 558, 76);
         var privateNotice = create.Find("PrivateRoomNotice")?.GetComponent<Text>();
         if (privateNotice != null)
         {
-            Place(privateNotice.transform, 0, -232, 558, 42);
+            Place(privateNotice.transform, 0, -242, 558, 42);
             privateNotice.font = font; privateNotice.fontSize = 19;
             privateNotice.color = Muted; privateNotice.alignment = TextAnchor.MiddleCenter;
+        }
+        if(access!=null)
+        {
+            access.createRoomButton=title.createRoomButton;
+            access.privateNotice=privateNotice;
+            access.publicCreatePosition=new Vector2(0,-100);
+            access.privateCreatePosition=new Vector2(0,-177);
         }
     }
 
     private static void StyleFind(ObjectHeadTitleScreen title, ObjectHeadFrontEnd front)
     {
         var find = front.find.transform;
-        Place(find, 0, 0, 1560, 790);
+        Place(find, 0, 0, 1520, 790);
         SolidPanel(find.GetComponent<Image>(), new Color32(15, 39, 50, 255));
-        Decoration(find, "CardAccent", -620, 332, 124, 7, Gold);
-        Decoration(find, "CardRule", 0, 259, 1370, 2, new Color32(106, 145, 149, 210));
+        Decoration(find, "CardAccent", -620, 353, 124, 7, Gold);
+        Decoration(find, "CardRule", 0, 270, 1370, 2, new Color32(106, 145, 149, 210));
         Decoration(find, "CodeRule", 0, -196, 1370, 2, new Color32(106, 145, 149, 210));
         var heading = find.Find("find_room")?.GetComponent<Text>();
         if (heading != null)
         {
-            Place(heading.transform, -485, 305, 390, 65);
+            Place(heading.transform, -485, 314, 390, 65);
             heading.font = font; heading.fontSize = 38; heading.color = Cream;
             heading.alignment = TextAnchor.MiddleLeft;
         }
@@ -198,7 +330,7 @@ public static class ObjectHeadTitlePolishAuthoring
         if (browser != null)
         {
             StyleButton(browser.refreshButton, Blue, 23, false);
-            Place(browser.refreshButton.transform, 577, 305, 210, 58);
+            Place(browser.refreshButton.transform, 577, 314, 210, 58);
             Place(browser.statusLabel.transform, 0, 26, 1200, 100);
             browser.statusLabel.font = font; browser.statusLabel.fontSize = 27;
             browser.statusLabel.color = Cream; browser.statusLabel.alignment = TextAnchor.MiddleCenter;
@@ -280,7 +412,7 @@ public static class ObjectHeadTitlePolishAuthoring
                 go.transform.SetParent(lobby, false);
                 row = go.transform;
             }
-            Place(row, -530, 36 - i * 58, 350, 53);
+            Place(row, -530, 36 - i * 61, 350, 53);
             SolidPanel(row.GetComponent<Image>(), new Color32(34, 75, 88, 255));
             row.GetComponent<Image>().raycastTarget = false;
             Decoration(row, "TeamMark", -169, 0, 6, 49, title.lobbyTeamColors[i]);
@@ -336,9 +468,10 @@ public static class ObjectHeadTitlePolishAuthoring
             StyleButton(browser.cardTemplate, Blue, 18, false);
             Place(browser.cardTemplate.transform, 0, 0, 198, 94);
             var cardName = browser.cardTemplate.transform.Find("Label")?.GetComponent<Text>();
-            if (cardName != null) LobbyText(cardName, 0, -31, 188, 25, 18, TextAnchor.MiddleCenter);
+            // Noto CJK's line metrics exceed 25px at 18pt; leave room for the full glyph line.
+            if (cardName != null) LobbyText(cardName, 0, -27, 188, 34, 18, TextAnchor.MiddleCenter);
             var portrait = browser.cardTemplate.transform.Find("Portrait");
-            if (portrait != null) Place(portrait, 0, 12, 116, 57);
+            if (portrait != null) Place(portrait, 0, 18, 116, 52);
         }
         LobbyText(title.characterDescription, 208, -149, 850, 36, 19, TextAnchor.MiddleCenter);
         Place(title.mapPreview.transform, -116, -226, 212, 84);
@@ -355,6 +488,7 @@ public static class ObjectHeadTitlePolishAuthoring
         StyleButton(title.startGameButton, Blue, 22, false);
         Place(title.readyButton.transform, -12, -324, 410, 54);
         Place(title.startGameButton.transform, 438, -324, 410, 54);
+        StyleOnlineLobbyControls(title);
 
         var root = title.transform;
         title.menuOnlyDecorations = new[]
@@ -384,7 +518,7 @@ public static class ObjectHeadTitlePolishAuthoring
         var heading = parent.Find("menu_settings")?.GetComponent<Text>();
         if (heading != null) StyleHeading(heading);
         string[] names = {"resolution", "window_mode", "language", "volume_bgm", "volume_sfx"};
-        float[] y = {145, 77, 9, -59, -127};
+        float[] y = {172, 89, 6, -77, -160};
         for (int i = 0; i < names.Length; i++)
         {
             var label = parent.Find(names[i])?.GetComponent<Text>();
@@ -401,9 +535,9 @@ public static class ObjectHeadTitlePolishAuthoring
         settings.sfxValue = Percentage(parent, "SfxValue", 257, y[4]);
         StyleButton(settings.apply, Gold, 23, false);
         StyleButton(settings.confirm, Blue, 23, false);
-        Place(settings.apply.transform, -143, -225, 268, 60);
-        Place(settings.confirm.transform, 143, -225, 268, 60);
-        Place(settings.status.transform, 0, -279, 558, 38);
+        Place(settings.apply.transform, -143, -265, 268, 60);
+        Place(settings.confirm.transform, 143, -265, 268, 60);
+        Place(settings.status.transform, 0, -207, 558, 38);
         settings.status.color = Cream; settings.status.fontSize = 17;
     }
 
@@ -506,14 +640,14 @@ public static class ObjectHeadTitlePolishAuthoring
 
     private static void Heading(Transform parent, string key)
     {
-        var label = PlainText(parent, "PageHeading", -2, 258, 560, 54, 32, Cream);
+        var label = PlainText(parent, "PageHeading", -2, 302, 560, 54, 32, Cream);
         var loc = label.GetComponent<ObjectHeadLocalizedLabel>() ?? label.gameObject.AddComponent<ObjectHeadLocalizedLabel>();
         loc.LocalizationKey = key;
     }
 
     private static void StyleHeading(Text label)
     {
-        Place(label.transform, 0, 258, 560, 54);
+        Place(label.transform, 0, 302, 560, 54);
         label.font = font; label.fontSize = 32; label.color = Cream; label.alignment = TextAnchor.MiddleCenter;
     }
 

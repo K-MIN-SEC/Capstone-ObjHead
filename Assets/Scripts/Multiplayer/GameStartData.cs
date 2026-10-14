@@ -33,6 +33,14 @@ public sealed class GameStartData
     public long startedAtUnixMilliseconds;
     public ObjectHeadPlayerAssignment[] players = Array.Empty<ObjectHeadPlayerAssignment>();
 
+    // Mode capacity determines the roster/spawn layout, not how many seats are occupied.
+    // A three-player match in a four-seat room still uses the four-seat character rules.
+    public int RosterPlayerCount => ObjectHeadContent.Load()?.Mode(mode)?.players ??
+        (mode == ObjectHeadMatchMode.Duel ? 2 : 4);
+
+    public bool IsAiPlayer(int playerIndex) => Array.Exists(players ?? Array.Empty<ObjectHeadPlayerAssignment>(),
+        player => player != null && player.playerIndex == playerIndex && player.isAi);
+
     public static void Apply(GameStartData data)
     {
         Instance = data;

@@ -41,10 +41,20 @@ public class ObjectHeadCameraController : MonoBehaviour
     private ObjectHeadCameraTuning cinematic;
     private Vector3 shakeOffset;
     private float shakeUntil,shakeAmplitude,impactUntil;
+    private float shakeStarted,shakeDuration;
     private Vector2 confirmedImpact;
     private float preferredViewSize;
+    private bool userZoomOverride;
     private float settlementUntil;
     private Bounds settlementBounds;
+    private float manualZoomTarget;
+    private bool manualZoomPending;
+    private Vector2 zoomAnchor = new Vector2(.5f, .5f);
+    private bool dragging;
+    private PowerChargeController currentCharge;
+    private TurnCharacterController chargeOwner;
+    public bool IsManualView => manualControl || overviewMode;
+    public bool IsZoomSettling => manualZoomPending;
 
     private void OnEnable(){ObjectHeadPresentation.ImpactPresented+=OnImpact;CharacterCombat.DamagePresented+=OnDamagePresented;}
     private void OnDisable()
@@ -59,15 +69,20 @@ public class ObjectHeadCameraController : MonoBehaviour
         confirmedImpact=point;impactUntil=Time.unscaledTime+cinematic.impactHoldSeconds;
         // A short visual punch separates a heavy detonation from a small hit.
         // Keep it on the client camera only; simulation time and aim stay unchanged.
-        if(impulse>0f && targetCamera!=null && !manualControl && !overviewMode)
+        if(impulse>0f && targetCamera!=null && !manualControl && !overviewMode && !userZoomOverride && !manualZoomPending)
         {
             float zoomKick=Mathf.Clamp01(impulse/.3f)*.055f;
             targetCamera.orthographicSize=Mathf.Clamp(targetCamera.orthographicSize*(1f-zoomKick),minSize,maxSize);
         }
         // Store a screen-height fraction, not world units, so overview zoom keeps its punch.
-        float nextShake=.03f*Mathf.Clamp01(impulse/.3f)*cinematic.shakeStrength;
-        shakeAmplitude=Time.unscaledTime<shakeUntil?Mathf.Max(shakeAmplitude,nextShake):nextShake;
-        shakeUntil=Time.unscaledTime+cinematic.shakeSeconds;
+        // Zero-strength utility effects must not prolong or restart an earlier explosion.
+        if (impulse <= 0f || cinematic.shakeStrength <= 0f) return;
+        float nextShake=.04f*Mathf.Clamp01(impulse/.3f)*cinematic.shakeStrength;
+        float remaining=shakeDuration>0 ? Mathf.Clamp01((shakeUntil-Time.unscaledTime)/shakeDuration) : 0;
+        shakeAmplitude=Mathf.Max(shakeAmplitude*remaining,nextShake);
+        shakeStarted=Time.unscaledTime;
+        shakeDuration=Mathf.Max(.08f,cinematic.shakeSeconds*Mathf.Lerp(.55f,1f,Mathf.Clamp01(impulse/.3f)));
+        shakeUntil=shakeStarted+shakeDuration;
     }
     private void OnDamagePresented(Vector2 point,float popupDuration)
     {
@@ -108,7 +123,11 @@ public class ObjectHeadCameraController : MonoBehaviour
         ObserveTurnChange();
         UpdateActionFocusFromProjectile();
         ReadManualInput();
-        if (overviewMode || manualControl)
+        bool settlingZoom = manualZoomPending;
+        UpdateManualZoom();
+        // A cursor-anchored zoom owns framing only while it settles. Merely using
+        // the wheel must not turn off following for the rest of the match.
+        if (overviewMode || manualControl || settlingZoom)
         {
             transform.position = ClampToTerrain(transform.position);
             ApplyImpactShake();
@@ -118,15 +137,15 @@ public class ObjectHeadCameraController : MonoBehaviour
         if(cinematic!=null && cinematic.automaticFraming)
         {
             float desiredSize=preferredViewSize;
-            if(Time.unscaledTime<settlementUntil)
+            if(!userZoomOverride && Time.unscaledTime<settlementUntil)
                 desiredSize=Mathf.Max(desiredSize,settlementBounds.extents.y+2,(settlementBounds.extents.x+2)/targetCamera.aspect);
-            if(frameProjectile!=null && frameProjectile.IsFlying)
+            if(!userZoomOverride && !forceCharacterFocus && frameProjectile!=null && frameProjectile.IsFlying)
             {
                 float speed=frameProjectile.GetComponent<Rigidbody2D>().linearVelocity.magnitude;
                 desiredSize=Mathf.Max(preferredViewSize,Mathf.Clamp(cinematic.flightViewSize+speed*cinematic.lookAheadSeconds*.35f,
                     cinematic.flightViewSize,cinematic.maximumFlightViewSize));
             }
-            targetCamera.orthographicSize=Mathf.Lerp(targetCamera.orthographicSize,Mathf.Clamp(desiredSize,minSize,maxSize),
+            targetCamera.orthographicSize=Mathf.Lerp(targetCamera.orthographicSize,Mathf.Clamp(desiredSize,minSize,MaximumZoomSize()),
                 1f-Mathf.Exp(-cinematic.zoomResponse*Time.unscaledDeltaTime));
         }
 
@@ -137,7 +156,7 @@ public class ObjectHeadCameraController : MonoBehaviour
             transform.position = Vector3.Lerp(
                 transform.position,
                 ClampToTerrain(desired),
-                Time.unscaledDeltaTime * followLerp);
+                ResponseBlend(followLerp, Time.unscaledDeltaTime));
         }
         else
         {
@@ -150,11 +169,20 @@ public class ObjectHeadCameraController : MonoBehaviour
     {
         if(cinematic!=null && Time.unscaledTime<shakeUntil && Time.timeScale>0)
         {
-            float fade=(shakeUntil-Time.unscaledTime)/Mathf.Max(.01f,cinematic.shakeSeconds);
-            shakeOffset=new Vector3(Mathf.Sin(Time.unscaledTime*73),Mathf.Sin(Time.unscaledTime*91),0)
-                *(shakeAmplitude*targetCamera.orthographicSize*fade);
+            shakeOffset=ScreenRelativeShake(targetCamera.orthographicSize,shakeAmplitude,
+                Time.unscaledTime-shakeStarted,shakeDuration);
             transform.position+=shakeOffset;
         }
+    }
+
+    public static Vector3 ScreenRelativeShake(float viewSize,float amplitude,float elapsed,float duration)
+    {
+        if (elapsed < 0 || elapsed >= duration || duration <= 0 || amplitude <= 0) return Vector3.zero;
+        float decay=1f-elapsed/duration;
+        // Start with a readable kick, then settle quickly; no random world/simulation state.
+        Vector2 pulse=new Vector2(Mathf.Cos(elapsed*73),Mathf.Sin(elapsed*91+.65f)*.75f);
+        pulse=Vector2.ClampMagnitude(pulse,1f);
+        return (Vector3)(pulse*(Mathf.Max(.01f,viewSize)*Mathf.Min(.045f,amplitude)*decay*decay));
     }
 
     public void Configure(TerrainManager terrainManager, TurnManager manager)
@@ -208,6 +236,7 @@ public class ObjectHeadCameraController : MonoBehaviour
         float sizeByHeight = heightWorld * 0.5f + paddingWorld.y;
         float sizeByWidth = widthWorld / (2f * Mathf.Max(0.01f, targetCamera.aspect)) + paddingWorld.x;
         targetCamera.orthographicSize = Mathf.Max(minSize, Mathf.Max(sizeByHeight, sizeByWidth));
+        manualZoomPending = false;
         manualOffset = Vector3.zero;
         overviewMode = true;
         manualControl = false;
@@ -220,11 +249,13 @@ public class ObjectHeadCameraController : MonoBehaviour
         if (targetCamera == null) targetCamera = GetComponent<Camera>();
         if (resetZoom)
         {
+            userZoomOverride=false;
             targetCamera.orthographicSize = Mathf.Clamp(defaultPlaySize, minSize, maxSize);
             preferredViewSize=targetCamera.orthographicSize;
         }
 
         overviewMode = false;
+        manualZoomPending = false;
         manualControl = false;
         forceCharacterFocus = true;
         manualOffset = Vector3.zero;
@@ -241,7 +272,8 @@ public class ObjectHeadCameraController : MonoBehaviour
 
     private void ReadManualInput()
     {
-        if (!Application.isFocused || Time.timeScale <= 0f || battleScreen?.BlocksCameraInput == true) return;
+        if (!Application.isFocused || Time.timeScale <= 0f || battleScreen?.BlocksCameraInput == true)
+        { dragging = false; return; }
         var events = UnityEngine.EventSystems.EventSystem.current;
         if (events?.currentSelectedGameObject?.GetComponent<UnityEngine.UI.InputField>()?.isFocused == true) return;
         Vector2 pan = Vector2.zero;
@@ -251,6 +283,8 @@ public class ObjectHeadCameraController : MonoBehaviour
         float wheelNotches = 0f;
         bool focusCharacter = false;
         bool overview = false;
+        bool dragHeld = false;
+        bool dragPressed = false;
 
 #if ENABLE_INPUT_SYSTEM
         Keyboard keyboard = Keyboard.current;
@@ -273,10 +307,9 @@ public class ObjectHeadCameraController : MonoBehaviour
                 InputSystem.settings.scrollDeltaBehavior == InputSettings.ScrollDeltaBehavior.UniformAcrossAllPlatforms,
                 wheelUnitsPerNotch);
             mousePosition = mouse.position.ReadValue();
-            if (middleMouseDragEnabled && mouse.middleButton.isPressed)
-            {
-                dragPixels = -mouse.delta.ReadValue();
-            }
+            dragHeld = mouse.middleButton.isPressed;
+            dragPressed = mouse.middleButton.wasPressedThisFrame;
+            dragPixels = -mouse.delta.ReadValue();
         }
 
         pan += ObjectHeadGamepadInput.CameraPan();
@@ -289,10 +322,9 @@ public class ObjectHeadCameraController : MonoBehaviour
         if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) zoomDelta -= 1f;
         wheelNotches = Input.mouseScrollDelta.y;
         mousePosition = Input.mousePosition;
-        if (middleMouseDragEnabled && Input.GetMouseButton(2))
-        {
-            dragPixels = new Vector2(-Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y")) * 12f;
-        }
+        dragHeld = Input.GetMouseButton(2);
+        dragPressed = Input.GetMouseButtonDown(2);
+        dragPixels = new Vector2(-Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y")) * 12f;
         focusCharacter = Input.GetKeyDown(KeyCode.Home) || Input.GetKeyDown(KeyCode.I);
         overview = Input.GetKeyDown(KeyCode.P);
 #endif
@@ -305,18 +337,29 @@ public class ObjectHeadCameraController : MonoBehaviour
 
         if (focusCharacter)
         {
-            FocusOnCurrentTarget(false);
+            RequestCharacterFocus();
             return;
         }
 
         bool pointerOverUi = events != null && events.IsPointerOverGameObject();
-        Vector2 edge = edgePanEnabled && !pointerOverUi
+        if (!dragHeld) dragging = false;
+        else if (dragPressed) dragging = middleMouseDragEnabled && !pointerOverUi;
+        var actor = turnManager != null ? turnManager.CurrentCharacter : null;
+        if (actor != chargeOwner)
+        { chargeOwner = actor; currentCharge = actor != null ? actor.GetComponent<PowerChargeController>() : null; }
+        // Charging near a screen edge must not unexpectedly take the camera away.
+        bool zoomInput = Mathf.Abs(zoomDelta)>0 || (!pointerOverUi && Mathf.Abs(wheelNotches)>0);
+        Vector2 edge = edgePanEnabled && !pointerOverUi &&
+            AllowsEdgePan(currentCharge?.IsCharging == true,dragging,manualZoomPending,zoomInput)
             ? EdgePanDirection(mousePosition, new Vector2(Screen.width,Screen.height),edgePanScreenFraction) : Vector2.zero;
-        Vector2 step = Vector2.ClampMagnitude(pan,1) * manualPanSpeed * Time.unscaledDeltaTime
+        Vector2 step = Vector2.ClampMagnitude(pan,1) * manualPanSpeed *
+            (targetCamera.orthographicSize / Mathf.Max(1f, defaultPlaySize)) * Time.unscaledDeltaTime
             + edge * (targetCamera.orthographicSize * 2f * edgePanViewHeightsPerSecond * Time.unscaledDeltaTime);
-        if (!pointerOverUi) step += dragPixels * (targetCamera.orthographicSize * 2f / Mathf.Max(1,Screen.height));
+        if (dragging) step += dragPixels * (targetCamera.orthographicSize * 2f / Mathf.Max(1,Screen.height));
         if (step.sqrMagnitude > 0f)
         {
+            // A drag/pan takes over from an unfinished zoom without residual movement.
+            manualZoomPending = false;
             overviewMode = false;
             manualControl = true;
             forceCharacterFocus = false;
@@ -330,16 +373,66 @@ public class ObjectHeadCameraController : MonoBehaviour
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) wheelNotches = 0f;
         if (Mathf.Abs(zoomDelta) > 0f || Mathf.Abs(wheelNotches) > 0f)
         {
-            overviewMode = false;
-            manualControl = true;
-            forceCharacterFocus = false;
-            targetCamera.orthographicSize = Mathf.Clamp(
-                WheelZoomSize(targetCamera.orthographicSize, wheelNotches, wheelZoomFraction) + zoomDelta * zoomSpeed * Time.unscaledDeltaTime,
-                minSize,
-                maxSize);
-            preferredViewSize=targetCamera.orthographicSize;
-            transform.position = ClampToTerrain(transform.position);
+            float basis = manualZoomPending ? manualZoomTarget : targetCamera.orthographicSize;
+            Vector2 anchor = Mathf.Abs(wheelNotches) > 0 && !pointerOverUi
+                ? new Vector2(mousePosition.x / Mathf.Max(1, Screen.width), mousePosition.y / Mathf.Max(1, Screen.height))
+                : new Vector2(.5f, .5f);
+            RequestManualZoom(WheelZoomSize(basis, wheelNotches, wheelZoomFraction) +
+                zoomDelta * zoomSpeed * Time.unscaledDeltaTime, anchor);
         }
+    }
+
+    // The projection anchor is independent of shake, framerate and gameplay transforms.
+    public static Vector2 ZoomAnchorShift(float oldSize, float newSize, float aspect, Vector2 anchor)
+        => new Vector2((anchor.x-.5f)*2f*aspect, (anchor.y-.5f)*2f) * (oldSize-newSize);
+    public static float ResponseBlend(float response, float delta)
+        => 1f-Mathf.Exp(-Mathf.Max(0,response)*Mathf.Max(0,delta));
+    public static bool AllowsEdgePan(bool charging,bool dragging,bool zoomSettling,bool zoomInput)
+        => !charging && !dragging && !zoomSettling && !zoomInput;
+
+    private float MaximumZoomSize()
+    {
+        float upper = maxSize;
+        if (terrain != null && targetCamera != null)
+        {
+            var bounds = terrain.GetTerrainBounds();
+            upper = Mathf.Max(upper, bounds.extents.y+paddingWorld.y,
+                bounds.extents.x/Mathf.Max(.1f,targetCamera.aspect)+paddingWorld.x);
+        }
+        return upper;
+    }
+
+    public void RequestManualZoom(float size, Vector2 anchor)
+    {
+        if (targetCamera == null) return;
+        manualZoomTarget = Mathf.Clamp(size, minSize, MaximumZoomSize());
+        zoomAnchor = new Vector2(Mathf.Clamp01(anchor.x), Mathf.Clamp01(anchor.y));
+        preferredViewSize = manualZoomTarget;
+        userZoomOverride = true;
+        // An overview/free-camera stays free; an automatic camera keeps following.
+        if (overviewMode) manualControl=true;
+        overviewMode = false;
+        manualZoomPending = true;
+    }
+
+    private void UpdateManualZoom()
+    {
+        if (!manualZoomPending) return;
+        float oldSize = targetCamera.orthographicSize;
+        float next = Mathf.Lerp(oldSize, manualZoomTarget, ResponseBlend(18f, Time.unscaledDeltaTime));
+        if (Mathf.Abs(next-manualZoomTarget)<.002f) { next=manualZoomTarget; manualZoomPending=false; }
+        targetCamera.orthographicSize=next;
+        transform.position=ClampToTerrain(transform.position +
+            (Vector3)ZoomAnchorShift(oldSize,next,targetCamera.aspect,zoomAnchor));
+    }
+
+    public void RequestCharacterFocus()
+    {
+        manualControl=false; overviewMode=false; manualZoomPending=false; dragging=false;
+        forceCharacterFocus=true; manualOffset=Vector3.zero;
+        impactUntil=settlementUntil=0;
+        hasLastActionFocusPosition=false; lastSeenProjectile=null;
+        preferredViewSize=Mathf.Clamp(preferredViewSize,minSize,MaximumZoomSize());
     }
 
     public static Vector2 EdgePanDirection(Vector2 cursor,Vector2 screen,float fraction)
@@ -365,7 +458,9 @@ public class ObjectHeadCameraController : MonoBehaviour
     {
         if (overviewMode)
         {
-            FocusOnCurrentTarget(true);
+            preferredViewSize=defaultPlaySize;
+            userZoomOverride=false;
+            RequestCharacterFocus();
             return;
         }
 
@@ -375,7 +470,7 @@ public class ObjectHeadCameraController : MonoBehaviour
     private bool TryGetFollowPosition(out Vector2 targetPosition)
     {
         if(!forceCharacterFocus && ObjectHeadRainbowSweep.Focus!=null){targetPosition=ObjectHeadRainbowSweep.Focus.position;return true;}
-        if(Time.unscaledTime<settlementUntil){targetPosition=settlementBounds.center;return true;}
+        if(!forceCharacterFocus && Time.unscaledTime<settlementUntil){targetPosition=settlementBounds.center;return true;}
         if(!forceCharacterFocus && Time.unscaledTime<impactUntil)
         {targetPosition=confirmedImpact;return true;}
         SkillProjectile projectile = frameProjectile;
@@ -422,9 +517,8 @@ public class ObjectHeadCameraController : MonoBehaviour
 
         lastSeenProjectile = projectile;
         forceCharacterFocus = false;
-        manualControl = false;
-        overviewMode = false;
-        manualOffset = Vector3.zero;
+        // A shot must not cancel the overview/manual zoom chosen by the player.
+        if (!manualControl && !overviewMode) manualOffset = Vector3.zero;
         RememberActionFocus(projectile.transform.position);
     }
 
@@ -442,8 +536,9 @@ public class ObjectHeadCameraController : MonoBehaviour
 
         if(Time.unscaledTime<settlementUntil)return;
         observedTurnSerial = turnManager.TurnSerial;
-        // Return to the next actor smoothly, without leaving the previous manual pan active.
-        manualControl=false;overviewMode=false;forceCharacterFocus=true;
+        // Respect a deliberately selected overview/free camera across turn boundaries.
+        // I/Home explicitly returns control to automatic follow.
+        forceCharacterFocus=true;
         impactUntil=0;manualOffset=Vector3.zero;
         hasLastActionFocusPosition = false;
         lastSeenProjectile = null;

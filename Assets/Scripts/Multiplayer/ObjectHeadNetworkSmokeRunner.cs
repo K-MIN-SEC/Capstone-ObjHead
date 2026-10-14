@@ -13,7 +13,8 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
     private static void AutoCreate()
     {
         string profile = GetArgument(ProfileArgument);
-        if (string.IsNullOrWhiteSpace(profile))
+        if (string.IsNullOrWhiteSpace(profile) && !Environment.GetCommandLineArgs().Contains("-objectHeadEosLifecycleSmoke") &&
+            !Environment.GetCommandLineArgs().Contains("-objectHeadLobbyAISmoke"))
         {
             return;
         }
@@ -30,6 +31,27 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
         try
         {
             ObjectHeadNetworkManager network = await WaitForNetworkManager();
+            if (Environment.GetCommandLineArgs().Contains("-objectHeadLobbyAISmoke"))
+            {
+                await RunLobbyAISmoke(network);
+                Application.Quit(0);
+                return;
+            }
+            if (Environment.GetCommandLineArgs().Contains("-objectHeadEosLifecycleSmoke"))
+            {
+                await network.ConnectAsync("ConnectionTest", "lifecycle-smoke");
+                var settings=network.Config.DefaultRoomSettings;
+                settings.mode=ObjectHeadMatchMode.Duel;settings.minPlayers=settings.maxPlayers=2;
+                settings.fixedMapId="sky_terraces";settings.mapSelectionMode=ObjectHeadMapSelectionMode.Fixed;
+                await network.CreateRoomAsync(settings,true,"TemporaryTest4931");
+                if (!network.IsHost || network.LobbyState?.players?.Length!=1) throw new Exception("Private room host state missing");
+                if (network.LobbyState.settings.fixedMapId!="sky_terraces") throw new Exception("Selected map lost");
+                await network.DisconnectAsync();
+                if(network.IsInMatch || network.IsConnected)throw new Exception("Disconnect did not finish");
+                Debug.Log("[EOS_LIFECYCLE_PASS] Connected, created a temporary private room with the selected map, left and disconnected. This does not verify a second PC joining.");
+                Application.Quit(0);
+                return;
+            }
             network.MatchStarting += HandleMatchStarting;
 
             Debug.Log($"[OBJECT_HEAD_SMOKE] {profile}: connecting");
@@ -80,6 +102,8 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
                 "gameplay bridge initialization");
 
             ObjectHeadGameplayBridge bridge = FindAny<ObjectHeadGameplayBridge>();
+            await WaitUntil(() => FindAny<TurnManager>()?.IsNetworkStartPending == false,
+                "all peers loaded and terrain checksums matched");
             if (network.IsHost)
             {
                 await Task.Delay(1000);
@@ -110,7 +134,8 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
                     () => bridge.ReceivedRemoteSnapshotCount > 0 &&
                           bridge.ReceivedTurnStateCount > 0 &&
                           bridge.ReceivedFireCommandCount > 0 &&
-                          bridge.ReceivedTerrainOperationCount > 0,
+                          bridge.ReceivedTerrainOperationCount > 0 &&
+                          FindAny<ObjectHeadTerrainSync>()?.IsSynchronized == true,
                     "gameplay snapshot, turn-state, fire-command, and terrain-operation synchronization");
             }
 
@@ -127,6 +152,55 @@ public sealed class ObjectHeadNetworkSmokeRunner : MonoBehaviour
     private void HandleMatchStarting(GameStartData unused)
     {
         gameStartObserved = true;
+    }
+
+    private static async Task RunLobbyAISmoke(ObjectHeadNetworkManager network)
+    {
+        // A real EOS host + bots, not a substitute for a three-PC internet test.
+        await network.ConnectAsync("LobbyValidation", "lobby-ai-validation");
+        try
+        {
+            var settings = network.Config.DefaultRoomSettings;
+            settings.mode = ObjectHeadMatchMode.FreeForAll;
+            settings.fixedMapId = "twin_citadels";
+            settings.mapSelectionMode = ObjectHeadMapSelectionMode.Fixed;
+            await network.CreateRoomAsync(settings, true, "LobbyValidation1014");
+            await network.AddAIAsync(); await network.AddAIAsync(); await network.AddAIAsync();
+            if (network.LobbyState.players.Length != 4 || network.LobbyState.players.Count(p => p.isAi) != 3)
+                throw new Exception("Four-seat AI lobby did not fill");
+            var duel = network.LobbyState.settings.Copy(); duel.mode = ObjectHeadMatchMode.Duel;
+            bool rejected = false;
+            try { await network.UpdateRoomSettingsAsync(duel); }
+            catch (InvalidOperationException e) when (e.Message == "room_capacity_too_small") { rejected = true; }
+            if (!rejected || network.IsRoomUpdating || network.LobbyState.settings.mode != ObjectHeadMatchMode.FreeForAll)
+                throw new Exception("Capacity change was not rejected cleanly");
+            await network.RemoveAIAsync();
+            await network.SetAIDifficultyAsync(ObjectHeadAIDifficulty.Normal);
+            await network.SetSelectionAsync(ObjectHeadContent.Load().DefaultSelection(4));
+            await network.SetReadyAsync(true);
+            if (!network.CanStartMatch(out string reason)) throw new Exception("Three-seat start blocked: " + reason);
+            var title = FindAny<ObjectHeadTitleScreen>();
+            string capture = GetArgument("-objectHeadCapture");
+            if (title != null && !string.IsNullOrEmpty(capture))
+            {
+                System.IO.Directory.CreateDirectory(capture);
+                await Task.Delay(250);
+                title.StartCoroutine(ObjectHeadReleaseSmoke.Capture(System.IO.Path.Combine(capture, "online_three_seats.png")));
+                await Task.Delay(800);
+            }
+            await network.StartGameAsync();
+            await WaitUntil(() => FindAny<ObjectHeadGameplayBridge>()?.IsReady == true &&
+                FindAny<TurnManager>()?.IsNetworkStartPending == false, "online AI start barrier");
+            var turns = FindAny<TurnManager>();
+            if (GameStartData.Instance.playerCount != 3 || turns.Characters.Length != 6)
+                throw new Exception("Three-seat mode did not spawn six characters");
+            int hostSeat = GameStartData.Instance.players.First(p => !p.isAi).playerIndex;
+            if (turns.CurrentPlayerIndex == hostSeat) turns.EndCurrentTurn();
+            await WaitUntil(() => ObjectHeadAIDirector.ActionsTaken > 0, "online host AI attack");
+            if (ObjectHeadAIDirector.CandidatesEvaluated == 0) throw new Exception("AI did not plan a shot");
+            Debug.Log("[LOBBY_AI_EOS_PASS] EOS private room; add/remove AI; full-room duel rejected; three-seat start; six characters; terrain barrier; host AI attack. Remote human joins NOT verified.");
+        }
+        finally { await network.DisconnectAsync(); }
     }
 
     private static async Task<ObjectHeadNetworkManager> WaitForNetworkManager()

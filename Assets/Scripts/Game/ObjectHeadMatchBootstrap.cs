@@ -24,7 +24,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     [SerializeField] private int fixedTestSpawnSeed = 6974;
     [SerializeField] private int commonHeadSpawnSeed = 6975;
     [SerializeField] private bool characterSpritesFaceRightByDefault = false;
-    [SerializeField, Min(0.1f)] private float characterMoveSpeed = 3.5f;
+    [SerializeField, Min(0.1f)] private float characterMoveSpeed = 3.15f;
     [SerializeField, Min(0.1f)] private float characterJumpForce = 6f;
     [SerializeField] private float waterSurfaceY = -7.5f;
     [SerializeField] private float terrainWaterContactOffset = 0.05f;
@@ -46,6 +46,7 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
     private Transform mapRoot;
     private ObjectHeadBalanceTable balance;
     private bool built;
+    public static string StartupError { get; private set; }
 
     public static int CurrentMatchSeed { get; private set; } = 6974;
 
@@ -67,7 +68,14 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
     private void Awake()
     {
-        BuildMatch();
+        StartupError = null;
+        try { BuildMatch(); }
+        catch (Exception error)
+        {
+            StartupError = "battle_setup_failed";
+            sceneTurnManager?.SetNetworkStartPending(true);
+            Debug.LogException(error);
+        }
     }
 
     public void BuildMatch()
@@ -434,7 +442,8 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
 
     private TurnCharacterController[] SpawnDefaultTeams(TerrainManager manager)
     {
-        int charactersPerPlayer = content.CharactersPerPlayer(playerCount);
+        int rosterPlayerCount = GameStartData.Instance?.RosterPlayerCount ?? playerCount;
+        int charactersPerPlayer = content.CharactersPerPlayer(rosterPlayerCount);
 
         List<TurnCharacterController>[] teams = new List<TurnCharacterController>[playerCount];
         for (int player = 0; player < playerCount; player++)
@@ -444,8 +453,8 @@ public class ObjectHeadMatchBootstrap : MonoBehaviour
             for (int slot = 0; slot < charactersPerPlayer; slot++)
             {
                 ObjectHeadPlayerAssignment assignment = Array.Find(GameStartData.Instance?.players ?? Array.Empty<ObjectHeadPlayerAssignment>(), p => p.playerIndex == player + 1);
-                ObjectHeadCharacterKind[] team = assignment != null && content.ValidSelection(assignment.characters, playerCount)
-                    ? assignment.characters : content.DefaultSelection(playerCount);
+                ObjectHeadCharacterKind[] team = assignment != null && content.ValidSelection(assignment.characters, rosterPlayerCount)
+                    ? assignment.characters : content.DefaultSelection(rosterPlayerCount);
                 ObjectHeadCharacterKind kind = team[slot];
                 float width = manager != null ? manager.WidthPx / (float)manager.PixelsPerUnit : 10f;
                 float height = manager != null ? manager.HeightPx / (float)manager.PixelsPerUnit : 10f;

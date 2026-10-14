@@ -33,6 +33,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     private string roomCode;
     private string status = "Offline";
     private bool gameStarting;
+    private bool roomMutationPending;
+    private string lobbyJoinError;
 
     public static ObjectHeadNetworkManager Instance { get; private set; }
 
@@ -59,6 +61,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     public bool IsHost => !string.IsNullOrEmpty(LocalUserId) && LocalUserId == HostUserId;
     public bool IsMatchmaking => UseEpicOnlineServices ? eosMatchmaking : matchmakerTicket != null;
     public bool IsGameStarting => gameStarting;
+    public bool IsRoomUpdating => roomMutationPending;
     public ObjectHeadNetworkConfig Config => config;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -203,7 +206,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             gameStarting = false;
             GameStartData.Clear();
             SetStatus("Offline");
-            LobbyChanged?.Invoke(null);
+            InvokeSafely(LobbyChanged, (ObjectHeadLobbyState)null);
             return;
         }
         try
@@ -232,7 +235,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             gameStarting = false;
             GameStartData.Clear();
             SetStatus("Offline");
-            LobbyChanged?.Invoke(null);
+            InvokeSafely(LobbyChanged, (ObjectHeadLobbyState)null);
         }
     }
 
@@ -285,11 +288,37 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         {
             EnsureConnected();
             if (string.IsNullOrWhiteSpace(roomCodeOrMatchId)) throw new ArgumentException("A room code is required.");
-            ObjectHeadEosTransport.Room room = await eos.JoinRoomAsync(roomCodeOrMatchId.Trim(), password);
+            lobbyJoinError = null;
+            ObjectHeadEosTransport.Room room;
+            try { room = await eos.JoinRoomAsync(roomCodeOrMatchId.Trim(), password); }
+            catch
+            {
+                // EOS may have joined the lobby before P2P admission failed. Do not
+                // leave the title showing an empty, half-joined room after that error.
+                await eos.LeaveRoomAsync();
+                lobbyState = null;
+                throw;
+            }
             roomCode = room.code;
             lobbyState = null;
             SetStatus("EOS room joined. Synchronizing host state...");
-            await SendAsync(ObjectHeadNetworkProtocol.PlayerHello, new ObjectHeadPlayerHello { username = displayName });
+            try
+            {
+                DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+                while (eos.InRoom && !(lobbyState?.players?.Any(p => p.userId == LocalUserId) ?? false))
+                {
+                    if (!string.IsNullOrEmpty(lobbyJoinError)) throw new InvalidOperationException(lobbyJoinError);
+                    if (DateTime.UtcNow >= deadline) throw new TimeoutException("connection_help");
+                    await SendAsync(ObjectHeadNetworkProtocol.PlayerHello, new ObjectHeadPlayerHello { username = displayName });
+                    await Task.Delay(500);
+                }
+                if (!eos.InRoom) throw new InvalidOperationException("connection_help");
+            }
+            catch
+            {
+                await LeaveCurrentMatchAsync();
+                throw;
+            }
             return;
         }
         if (UseDedicatedAuthority) { await JoinAuthoritativeRoomAsync(roomCodeOrMatchId,password); return; }
@@ -390,6 +419,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             throw new InvalidOperationException("selection_required");
         if (IsHost)
         {
+            EnsureLobbyEditable();
             ApplySelection(LocalUserId, selection);
             await BroadcastLobbyStateAsync();
         }
@@ -421,7 +451,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     {
         GameStartData.Clear();
         gameStarting = false;
-        foreach (ObjectHeadLobbyPlayer player in lobbyState.players) player.ready = false;
+        ObjectHeadLobbyRules.ResetReady(lobbyState);
         if (IsHost && !UseDedicatedAuthority) IncrementLobbyRevision();
         SceneManager.LoadScene(config.TitleSceneName);
     }
@@ -435,6 +465,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             throw new InvalidOperationException("selection_required");
         if (IsHost)
         {
+            EnsureLobbyEditable();
             UpsertPlayer(LocalUserId, displayName, ready);
             IncrementLobbyRevision();
             NotifyLobbyChanged();
@@ -452,19 +483,27 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         ObjectHeadRoomSettings normalized = NormalizeSettings(settings);
         if (IsHost)
         {
-            if (normalized.maxPlayers < lobbyState.players.Length)
-                throw new InvalidOperationException("room_capacity_too_small");
-            if (UseEpicOnlineServices) await eos.UpdateRoomAsync(normalized);
-            lobbyState.settings = normalized;
-            foreach (ObjectHeadLobbyPlayer player in lobbyState.players)
+            EnsureLobbyEditable();
+            if (!ObjectHeadLobbyRules.CanChangeMode(lobbyState, normalized.mode, out string reason))
+                throw new InvalidOperationException(reason);
+            roomMutationPending = true;
+            NotifyStateChanged();
+            try
             {
-                player.ready = false;
-                if (!ObjectHeadContent.Load().ValidSelection(player.characters, normalized.maxPlayers))
-                    player.characters = Array.Empty<ObjectHeadCharacterKind>();
+                if (UseEpicOnlineServices) await eos.UpdateRoomAsync(normalized, lobbyState.players.Count(p => p.isAi));
+                lobbyState.settings = normalized;
+                foreach (ObjectHeadLobbyPlayer player in lobbyState.players)
+                {
+                    player.ready = player.isAi;
+                    if (!ObjectHeadContent.Load().ValidSelection(player.characters, normalized.maxPlayers))
+                        player.characters = player.isAi ? ObjectHeadContent.Load().DefaultSelection(normalized.maxPlayers)
+                            : Array.Empty<ObjectHeadCharacterKind>();
+                }
+                IncrementLobbyRevision();
+                NotifyLobbyChanged();
+                await BroadcastLobbyStateAsync();
             }
-            IncrementLobbyRevision();
-            NotifyLobbyChanged();
-            await BroadcastLobbyStateAsync();
+            finally { roomMutationPending = false; NotifyStateChanged(); }
             return;
         }
 
@@ -485,10 +524,126 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             throw new InvalidOperationException(reason);
         }
 
-        GameStartData startData = BuildGameStartData();
-        if (UseEpicOnlineServices) await eos.SetRoomOpenAsync(false);
-        await SendAsync(ObjectHeadNetworkProtocol.GameStart, startData);
-        ApplyGameStart(startData);
+        EnsureLobbyEditable();
+        roomMutationPending = true;
+        NotifyStateChanged();
+        bool startWasBroadcast = false;
+        try
+        {
+            if (UseEpicOnlineServices)
+            {
+                await eos.SetRoomOpenAsync(false);
+                // A member may have entered EOS while the host was closing admission.
+                if (eos.LiveMemberCount != lobbyState.players.Count(p => !p.isAi))
+                    throw new InvalidOperationException("room_join_in_progress");
+            }
+            if (!ObjectHeadLobbyRules.CanStart(lobbyState, out reason)) throw new InvalidOperationException(reason);
+            GameStartData startData = BuildGameStartData();
+            startWasBroadcast = true;
+            await BroadcastGameStartAsync(startData);
+            ApplyGameStart(startData);
+        }
+        catch
+        {
+            if (startWasBroadcast)
+            {
+                // Some peers may already be in the battle scene. Destroying this room
+                // makes their normal disconnect recovery return them to the title.
+                // Reopening only on the host would strand those peers at the start barrier.
+                await DisconnectAsync();
+            }
+            else if (UseEpicOnlineServices && eos.InRoom && GameStartData.Instance == null)
+                await eos.SetRoomOpenAsync(true);
+            throw;
+        }
+        finally { roomMutationPending = false; NotifyStateChanged(); }
+    }
+
+    private async Task BroadcastGameStartAsync(GameStartData startData)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { await SendAsync(ObjectHeadNetworkProtocol.GameStart, startData); return; }
+            catch (Exception exception) when (attempt < 2 && IsInMatch)
+            {
+                Log("Retrying match start delivery: " + exception.GetType().Name);
+                await Task.Delay(300);
+            }
+        }
+    }
+
+    public async Task AddAIAsync()
+    {
+        EnsureLobbyEditable();
+        if (lobbyState.players.Length >= lobbyState.settings.maxPlayers) throw new InvalidOperationException("room_full");
+        roomMutationPending = true;
+        NotifyStateChanged();
+        try
+        {
+            int botCount = lobbyState.players.Count(p => p.isAi);
+            // Reserve the bot's seat in EOS before changing the local roster, so an
+            // in-flight human join cannot overfill the room behind the host's UI.
+            if (UseEpicOnlineServices) await eos.UpdateRoomAsync(lobbyState.settings, botCount + 1);
+            var bot = new ObjectHeadLobbyPlayer
+            {
+                userId = "ai-" + Guid.NewGuid().ToString("N"), username = "AI " + (botCount + 1),
+                isAi = true, ready = true,
+                aiDifficulty = lobbyState.players.FirstOrDefault(p => p.isAi)?.aiDifficulty ?? ObjectHeadAIDifficulty.Normal,
+                characters = ObjectHeadAISettings.CreateRoster(ObjectHeadContent.Load(), lobbyState.settings.maxPlayers,
+                    new System.Random(), true)
+            };
+            lobbyState.players = ObjectHeadLobbyRules.AssignSeats(lobbyState.players.Concat(new[] { bot }).ToArray());
+            ObjectHeadLobbyRules.ResetReady(lobbyState);
+            IncrementLobbyRevision();
+            NotifyLobbyChanged();
+            await BroadcastLobbyStateAsync();
+        }
+        finally { roomMutationPending = false; NotifyStateChanged(); }
+    }
+
+    public async Task RemoveAIAsync()
+    {
+        EnsureLobbyEditable();
+        var bot = lobbyState.players.LastOrDefault(p => p.isAi);
+        if (bot == null) throw new InvalidOperationException("ai_not_found");
+        roomMutationPending = true;
+        NotifyStateChanged();
+        try
+        {
+            if (UseEpicOnlineServices) await eos.UpdateRoomAsync(lobbyState.settings, lobbyState.players.Count(p => p.isAi) - 1);
+            RemovePlayer(bot.userId);
+            IncrementLobbyRevision();
+            NotifyLobbyChanged();
+            await BroadcastLobbyStateAsync();
+        }
+        finally { roomMutationPending = false; NotifyStateChanged(); }
+    }
+
+    public async Task SetAIDifficultyAsync(ObjectHeadAIDifficulty difficulty)
+    {
+        EnsureLobbyEditable();
+        if (!Enum.IsDefined(typeof(ObjectHeadAIDifficulty), difficulty)) throw new ArgumentOutOfRangeException(nameof(difficulty));
+        if (!lobbyState.players.Any(p => p.isAi)) throw new InvalidOperationException("ai_not_found");
+        roomMutationPending = true;
+        NotifyStateChanged();
+        try
+        {
+            foreach (var bot in lobbyState.players.Where(p => p.isAi)) bot.aiDifficulty = difficulty;
+            ObjectHeadLobbyRules.ResetReady(lobbyState);
+            IncrementLobbyRevision();
+            NotifyLobbyChanged();
+            await BroadcastLobbyStateAsync();
+        }
+        finally { roomMutationPending = false; NotifyStateChanged(); }
+    }
+
+    private void EnsureLobbyEditable()
+    {
+        EnsureInMatch();
+        if (!IsHost || UseDedicatedAuthority) throw new InvalidOperationException("host_only");
+        if (gameStarting || GameStartData.Instance != null) throw new InvalidOperationException("match_in_progress");
+        if (roomMutationPending) throw new InvalidOperationException("room_update_in_progress");
+        if (lobbyState?.settings == null) throw new InvalidOperationException("lobby_not_ready");
     }
 
     public Task SendGameplayMessageAsync(long opCode, object payload)
@@ -503,33 +658,9 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
     public bool CanStartMatch(out string reason)
     {
-        reason = string.Empty;
-        if (lobbyState == null || lobbyState.settings == null)
-        {
-            reason = "Lobby state is not ready.";
-            return false;
-        }
-
-        ObjectHeadLobbyPlayer[] players = lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>();
-        if (players.Length < lobbyState.settings.minPlayers || players.Length > lobbyState.settings.maxPlayers)
-        {
-            reason = $"Need at least {lobbyState.settings.minPlayers} players.";
-            return false;
-        }
-
-        if (players.Any(player => !player.ready))
-        {
-            reason = "Every player must be ready.";
-            return false;
-        }
-
-        if (players.Any(player => !ObjectHeadContent.Load().ValidSelection(player.characters, players.Length)))
-        {
-            reason = "selection_required";
-            return false;
-        }
-
-        return true;
+        if (roomMutationPending) { reason = "room_update_in_progress"; return false; }
+        if (gameStarting || GameStartData.Instance != null) { reason = "match_in_progress"; return false; }
+        return ObjectHeadLobbyRules.CanStart(lobbyState, out reason);
     }
 
     private void SubscribeSocket(ISocket targetSocket)
@@ -733,9 +864,22 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
                     {
                         ObjectHeadPlayerHello hello = JsonUtility.FromJson<ObjectHeadPlayerHello>(json);
                         if (hello == null || hello.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion) return;
-                        UpsertPlayer(senderUserId, hello.username, false);
-                        IncrementLobbyRevision();
-                        NotifyLobbyChanged();
+                        if (roomMutationPending) return; // The joiner retries after the atomic room change.
+                        if (!(lobbyState.players?.Any(p => p.userId == senderUserId) ?? false))
+                        {
+                            if (GameStartData.Instance != null || gameStarting || lobbyState.players.Length >= lobbyState.settings.maxPlayers)
+                            {
+                                if (UseEpicOnlineServices) await eos.SendToPeerAsync(senderUserId, ObjectHeadNetworkProtocol.LobbyJoinRejected,
+                                    JsonUtility.ToJson(new ObjectHeadLobbyRejection { reason = GameStartData.Instance != null || gameStarting ? "match_in_progress" : "room_full" }));
+                                return;
+                            }
+                            UpsertPlayer(senderUserId, hello.username, false);
+                            IncrementLobbyRevision();
+                            NotifyLobbyChanged();
+                        }
+                        // Do not make a new peer's admission depend on sending successfully
+                        // to every older peer first (especially the third/fourth joiner).
+                        if (UseEpicOnlineServices) await eos.SendToPeerAsync(senderUserId, ObjectHeadNetworkProtocol.LobbyState, JsonUtility.ToJson(lobbyState));
                         await BroadcastLobbyStateAsync();
                     }
                     break;
@@ -758,12 +902,12 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
                     lobbyState = receivedLobby;
                     roomCode = receivedLobby.roomCode;
-                    SetStatus("Lobby synchronized.");
                     NotifyLobbyChanged();
+                    SetStatus("Lobby synchronized.");
                     break;
 
                 case ObjectHeadNetworkProtocol.ReadyRequest:
-                    if (IsHost)
+                    if (IsHost && !roomMutationPending && !gameStarting && GameStartData.Instance == null)
                     {
                         ObjectHeadReadyRequest readyRequest = JsonUtility.FromJson<ObjectHeadReadyRequest>(json);
                         ObjectHeadLobbyPlayer readyPlayer = lobbyState.players.FirstOrDefault(p => p.userId == senderUserId);
@@ -777,7 +921,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
                     break;
 
                 case ObjectHeadNetworkProtocol.SelectionRequest:
-                    if (IsHost && GameStartData.Instance == null)
+                    if (IsHost && !roomMutationPending && !gameStarting && GameStartData.Instance == null)
                     {
                         ObjectHeadSelectionRequest selection = JsonUtility.FromJson<ObjectHeadSelectionRequest>(json);
                         if (selection == null || selection.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion) return;
@@ -792,6 +936,15 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
 
                 case ObjectHeadNetworkProtocol.SettingsRequest:
                     // Reserved for a later host-permission flow. Non-hosts cannot mutate demo rooms.
+                    break;
+
+                case ObjectHeadNetworkProtocol.LobbyJoinRejected:
+                    if (UseEpicOnlineServices && senderUserId == eos.HostUserId)
+                    {
+                        var rejection = JsonUtility.FromJson<ObjectHeadLobbyRejection>(json);
+                        if (rejection?.protocolVersion == ObjectHeadNetworkProtocol.ProtocolVersion)
+                            lobbyJoinError = rejection.reason;
+                    }
                     break;
 
                 case ObjectHeadNetworkProtocol.GameStart:
@@ -855,6 +1008,9 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             .ThenBy(player => player.userId, StringComparer.Ordinal)
             .ToArray();
 
+        string scene = config.ResolveSceneName(mapId);
+        if (!Application.CanStreamedLevelBeLoaded(scene)) throw new InvalidOperationException("Map is not included in this build: " + mapId);
+
         return new GameStartData
         {
             matchId = MatchId,
@@ -873,6 +1029,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
                 username = player.username,
                 playerIndex = player.playerIndex,
                 allianceId = ObjectHeadContent.Load().Mode(settings.mode).Alliance(player.playerIndex),
+                isAi = player.isAi,
+                aiDifficulty = player.aiDifficulty,
                 characters = (ObjectHeadCharacterKind[])player.characters.Clone()
             }).ToArray()
         };
@@ -884,11 +1042,13 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         {
             return;
         }
+        if (GameStartData.Instance != null && GameStartData.Instance.matchId == startData.matchId &&
+            GameStartData.Instance.startedAtUnixMilliseconds == startData.startedAtUnixMilliseconds) return;
 
         gameStarting = true;
         GameStartData.Apply(startData);
         SetStatus($"Starting {startData.mapId} (seed {startData.mapSeed})...");
-        MatchStarting?.Invoke(startData);
+        InvokeSafely(MatchStarting, startData);
         StartCoroutine(ReloadPlayableScene());
     }
 
@@ -897,7 +1057,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         yield return null;
         Scene activeScene = SceneManager.GetActiveScene();
         string targetScene = config.ResolveSceneName(GameStartData.Instance != null ? GameStartData.Instance.mapId : null);
-        SceneManager.LoadScene(string.IsNullOrWhiteSpace(targetScene) ? activeScene.name : targetScene);
+        yield return SceneManager.LoadSceneAsync(targetScene);
         gameStarting = false;
     }
 
@@ -1038,7 +1198,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         if (existing == null)
         {
             if (GameStartData.Instance != null || players.Count >= lobbyState.settings.maxPlayers) return;
-            foreach (var player in players) player.ready = false;
+            ObjectHeadLobbyRules.ResetReady(lobbyState);
             players.Add(new ObjectHeadLobbyPlayer
             {
                 userId = userId,
@@ -1052,14 +1212,7 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             existing.ready = ready;
         }
 
-        lobbyState.players = players
-            .OrderBy(player => player.userId, StringComparer.Ordinal)
-            .Select((player, index) =>
-            {
-                player.playerIndex = index + 1;
-                return player;
-            })
-            .ToArray();
+        lobbyState.players = ObjectHeadLobbyRules.AssignSeats(players.ToArray());
     }
 
     private void RemovePlayer(string userId)
@@ -1068,17 +1221,10 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
         {
             return;
         }
-        foreach (var player in lobbyState.players) player.ready = false;
+        ObjectHeadLobbyRules.ResetReady(lobbyState);
 
-        lobbyState.players = (lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>())
-            .Where(player => player.userId != userId)
-            .OrderBy(player => player.userId, StringComparer.Ordinal)
-            .Select((player, index) =>
-            {
-                player.playerIndex = index + 1;
-                return player;
-            })
-            .ToArray();
+        lobbyState.players = ObjectHeadLobbyRules.AssignSeats((lobbyState.players ?? Array.Empty<ObjectHeadLobbyPlayer>())
+            .Where(player => player.userId != userId).ToArray());
     }
 
     private string FindPresenceUsername(string userId)
@@ -1104,7 +1250,8 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
             ? ObjectHeadRoomSettings.CurrentRulesetVersion
             : result.rulesetVersion.Trim();
         var definition = ObjectHeadContent.Load().Mode(result.mode) ?? throw new ArgumentException("unsupported_mode");
-        result.minPlayers = result.maxPlayers = definition.players;
+        result.minPlayers = 2;
+        result.maxPlayers = definition.players;
         result.fixedMapId = string.IsNullOrWhiteSpace(result.fixedMapId) ? config.FallbackMapId : result.fixedMapId.Trim();
         result.randomMapPool = result.randomMapPool != null && result.randomMapPool.Length > 0
             ? result.randomMapPool.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct().ToArray()
@@ -1165,17 +1312,28 @@ public sealed partial class ObjectHeadNetworkManager : MonoBehaviour
     private void Log(string value)
     {
         Debug.Log("[ObjectHead Network] " + value);
-        LogMessage?.Invoke(value);
+        InvokeSafely(LogMessage, value);
     }
 
     private void NotifyStateChanged()
     {
-        StateChanged?.Invoke();
+        if (StateChanged == null) return;
+        foreach (Action handler in StateChanged.GetInvocationList())
+            try { handler(); } catch (Exception exception) { Debug.LogException(exception); }
     }
 
     private void NotifyLobbyChanged()
     {
-        LobbyChanged?.Invoke(lobbyState);
+        // Presentation failures must never stop admission replies or keep a room
+        // mutation locked before its async operation enters the finally block.
+        InvokeSafely(LobbyChanged, lobbyState);
         NotifyStateChanged();
+    }
+
+    private static void InvokeSafely<T>(Action<T> handlers, T value)
+    {
+        if (handlers == null) return;
+        foreach (Action<T> handler in handlers.GetInvocationList())
+            try { handler(value); } catch (Exception exception) { Debug.LogException(exception); }
     }
 }

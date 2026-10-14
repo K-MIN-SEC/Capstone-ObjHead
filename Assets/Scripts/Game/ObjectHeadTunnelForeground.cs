@@ -13,6 +13,7 @@ public sealed class ObjectHeadTunnelForeground : MonoBehaviour
     private TurnManager turns;
     private Texture2D runtimeTexture;
     private Sprite runtimeSprite;
+    private Color32[] networkPixels;
 
     public void Configure(TerrainManager terrainManager, ObjectHeadMapRecipe mapRecipe)
     {
@@ -45,13 +46,14 @@ public sealed class ObjectHeadTunnelForeground : MonoBehaviour
         Texture2D source = recipe.bakedTunnelForeground.texture;
         runtimeTexture = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
         runtimeTexture.filterMode = FilterMode.Bilinear;
-        runtimeTexture.SetPixels32(source.GetPixels32());
+        networkPixels = source.GetPixels32();
+        runtimeTexture.SetPixels32(networkPixels);
         runtimeTexture.Apply();
         runtimeSprite = Sprite.Create(runtimeTexture, new Rect(0, 0, source.width, source.height),
             Vector2.zero, recipe.pixelsPerUnit);
         cover.sprite = runtimeSprite;
         cover.sortingOrder = 20;
-        if (terrain != null) terrain.OperationApplied += OnTerrainOperation;
+        if (terrain != null) terrain.RegisterNetworkForeground(this);
     }
 
     private void Update()
@@ -90,9 +92,25 @@ public sealed class ObjectHeadTunnelForeground : MonoBehaviour
         return false;
     }
 
-    private void OnTerrainOperation(TerrainEditOperation operation)
+    public Color32 ReadNetworkPixel(int x, int y) => runtimeTexture != null && x < runtimeTexture.width && y < runtimeTexture.height
+        ? networkPixels[y * runtimeTexture.width + x] : Color.clear;
+
+    public void WriteNetworkPixel(int x, int y, Color32 color)
     {
-        if (runtimeTexture == null || operation.kind != TerrainEditOperationKind.DestroyCircle) return;
+        if (runtimeTexture != null && x < runtimeTexture.width && y < runtimeTexture.height)
+            networkPixels[y * runtimeTexture.width + x] = color;
+    }
+
+    public void FlushNetworkPixels()
+    {
+        if (runtimeTexture == null) return;
+        runtimeTexture.SetPixels32(networkPixels);
+        runtimeTexture.Apply(false);
+    }
+
+    public bool ApplyTerrainOperation(TerrainEditOperation operation)
+    {
+        if (runtimeTexture == null || operation.kind != TerrainEditOperationKind.DestroyCircle) return false;
         int radius = operation.radiusXPx;
         int minX = Mathf.Max(0, operation.centerPixelX - radius);
         int maxX = Mathf.Min(runtimeTexture.width - 1, operation.centerPixelX + radius);
@@ -104,17 +122,27 @@ public sealed class ObjectHeadTunnelForeground : MonoBehaviour
         {
             int dx = x - operation.centerPixelX, dy = y - operation.centerPixelY;
             if (dx * dx + dy * dy > radius * radius) continue;
-            if (runtimeTexture.GetPixel(x, y).a <= 0f) continue;
-            runtimeTexture.SetPixel(x, y, Color.clear);
+            int pixel = y * runtimeTexture.width + x;
+            if (networkPixels[pixel].a == 0) continue;
+            networkPixels[pixel] = Color.clear;
+            terrain.InvalidateNetworkPixel(x, y);
             changed = true;
         }
-        if (changed) runtimeTexture.Apply(false);
+        if (changed) FlushNetworkPixels();
+        return changed;
     }
 
     private void OnDestroy()
     {
-        if (terrain != null) terrain.OperationApplied -= OnTerrainOperation;
-        if (runtimeSprite != null) Destroy(runtimeSprite);
-        if (runtimeTexture != null) Destroy(runtimeTexture);
+        if (Application.isPlaying)
+        {
+            if (runtimeSprite != null) Destroy(runtimeSprite);
+            if (runtimeTexture != null) Destroy(runtimeTexture);
+        }
+        else
+        {
+            if (runtimeSprite != null) DestroyImmediate(runtimeSprite);
+            if (runtimeTexture != null) DestroyImmediate(runtimeTexture);
+        }
     }
 }

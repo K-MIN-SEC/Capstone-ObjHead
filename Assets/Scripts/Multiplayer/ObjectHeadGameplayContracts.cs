@@ -10,12 +10,17 @@ public enum ObjectHeadGameplayMessageKind
     CommonUseAccepted = 6,
     MovementInput = 7,
     FireAccepted = 8,
-    ImpactPresentation = 9
+    ImpactPresentation = 9,
+    ProjectileLanded = 10
 }
 
 [Serializable]
 public sealed class ObjectHeadGameplayMessage
 {
+    public long matchEpoch;
+    public ObjectHeadProjectileState[] projectiles;
+    public string projectileId;
+    public bool projectileCulled;
     public ObjectHeadCombatState[] combatStates;
     public ObjectHeadInventoryState[] inventoryStates;
     public ObjectHeadWorldItemState[] worldItems;
@@ -39,6 +44,7 @@ public sealed class ObjectHeadGameplayMessage
     public float remainingTurnSeconds;
     public float remainingResidualSeconds;
     public bool settlementPending;
+    public bool networkStartPending;
     public float positionX;
     public float positionY;
     public float velocityX;
@@ -56,6 +62,13 @@ public sealed class ObjectHeadGameplayMessage
 }
 
 [Serializable]
+public sealed class ObjectHeadProjectileState
+{
+    public string id;
+    public float x,y,vx,vy,rotation;
+}
+
+[Serializable]
 public sealed class ObjectHeadTerrainOperationMessage
 {
     public int protocolVersion = ObjectHeadNetworkProtocol.ProtocolVersion;
@@ -67,6 +80,12 @@ public sealed class ObjectHeadTerrainOperationMessage
 [Serializable]
 public sealed class ObjectHeadCombatState
 {
+    public bool grounded;
+    public bool facingRight;
+    public int selectedSkill;
+    public int commonSlot = -1;
+    public int[] cooldowns;
+    public float aimX, aimY;
     public ObjectHeadGourdCharge[] gourdCharges;
     public string characterId;
     public int hp;

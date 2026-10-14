@@ -7,8 +7,8 @@ public sealed class ObjectHeadFrontEnd : MonoBehaviour
     public GameObject home,play,quick,create,find,settings;
     public Button playButton,createButton,settingsButton,quickButton,findButton,trainingButton,backButton;
     [Header("Editable back-button positions")]
-    public Vector2 compactBackPosition = new Vector2(-260, -356);
-    public Vector2 roomBrowserBackPosition = new Vector2(-540, -347);
+    public Vector2 compactBackPosition = new Vector2(-660, -350);
+    public Vector2 roomBrowserBackPosition = new Vector2(-660, -350);
     public ObjectHeadSettingsPanel settingsController;
     private GameObject current;
     private void Awake()
@@ -39,7 +39,13 @@ public sealed class ObjectHeadFrontEnd : MonoBehaviour
         foreach(var panel in new[]{home,play,quick,create,find,settings})if(panel!=null)panel.SetActive(!inLobby && panel==current);
         if(title.menuOnlyDecorations!=null)
             foreach(var decoration in title.menuOnlyDecorations)
-                if(decoration!=null)decoration.SetActive(!inLobby && current!=find);
+                if(decoration!=null)
+                {
+                    // Connection feedback belongs to every menu. The large title, language
+                    // shortcuts and help/quit controls belong only to the landing screen.
+                    bool feedback=decoration==title.statusText?.gameObject || decoration.name=="StatusBacking";
+                    decoration.SetActive(!inLobby && (feedback ? title.HasMenuStatus : current==home));
+                }
         if(backButton!=null)
         {
             ((RectTransform)backButton.transform).anchoredPosition=current==find?roomBrowserBackPosition:compactBackPosition;

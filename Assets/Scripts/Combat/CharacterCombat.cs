@@ -216,7 +216,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void ApplyKnockback(Vector2 force)
     {
-        if (isDead || body == null || ObjectHeadCaptivity.Captured(this))
+        if (UseExternalHealth || isDead || body == null || ObjectHeadCaptivity.Captured(this))
         {
             return;
         }
@@ -235,7 +235,7 @@ public class CharacterCombat : MonoBehaviour
 
     public void ApplyExplosionKnockback(Vector2 explosionCenterWorld, float maxDamage)
     {
-        if (isDead || body == null || maxDamage <= 0f || ObjectHeadCaptivity.Captured(this))
+        if (UseExternalHealth || isDead || body == null || maxDamage <= 0f || ObjectHeadCaptivity.Captured(this))
         {
             return;
         }

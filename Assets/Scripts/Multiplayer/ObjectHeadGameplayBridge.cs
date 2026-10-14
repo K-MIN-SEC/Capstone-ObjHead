@@ -12,10 +12,11 @@ using UnityEngine.InputSystem;
 [DefaultExecutionOrder(1000)]
 public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 {
-    private const float SnapshotIntervalSeconds = 0.1f;
-    private const float TurnStateIntervalSeconds = 0.25f;
+    private const float InputIntervalSeconds = 0.1f;
+    private const float TurnStateIntervalSeconds = 0.1f;
 
     private readonly HashSet<string> processedMessages = new HashSet<string>();
+    private readonly Queue<string> processedMessageOrder = new Queue<string>();
     private readonly Dictionary<string, TurnCharacterController> charactersById =
         new Dictionary<string, TurnCharacterController>();
 
@@ -30,6 +31,10 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
     private long localMessageSequence;
     private long hostStateSequence,lastHostStateSequence;
     private PlayerInventoryManager inventoryManager;
+    private ObjectHeadTerrainSync terrainSync;
+    private bool networkPending = true;
+    private float lastHostStateAt;
+    private bool hostStartPending = true;
     private readonly Dictionary<string,CommonHeadItem> replicaItems=new Dictionary<string,CommonHeadItem>();
     public int AcceptedCommonUseCount {get;private set;}
     public int ReceivedCommonUseCount {get;private set;}
@@ -39,8 +44,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
     public int ReceivedRemoteSnapshotCount { get; private set; }
     public int ReceivedTurnStateCount { get; private set; }
     public int ReceivedFireCommandCount { get; private set; }
-    public int ReceivedTerrainOperationCount { get; private set; }
-    public int SentTerrainOperationCount { get; private set; }
+    public int ReceivedTerrainOperationCount => terrainSync != null ? terrainSync.AppliedOperations : 0;
+    public int SentTerrainOperationCount => terrainSync != null ? terrainSync.SentOperations : 0;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void InstallSceneHook()
@@ -84,10 +89,11 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
         if (terrainManager != null)
         {
-            terrainManager.OperationApplied -= HandleAuthoritativeTerrainOperation;
+            ObjectHeadPresentation.ImpactCommitted -= HandleConfirmedImpact;
         }
 
         SkillFireController.FireCommitted -= HandleLocalFireCommitted;
+        SkillProjectile.LandingCommitted -= HandleProjectileLanding;
         CommonHeadUseController.UseCommitted -= HandleCommonUseCommitted;
     }
 
@@ -127,20 +133,29 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         localPlayerIndex = localAssignment.playerIndex;
         IndexCharacters();
         foreach (var character in charactersById.Values)
+        {
             character.GetComponent<CharacterCombat>().UseExternalHealth = !network.IsHost;
+            if (!network.IsHost) character.ConfigureAuthoritativeMotion();
+            if (network.IsHost && GetPlayerIndex(character) != localPlayerIndex)
+                character.UseNetworkInput = true;
+        }
         terrainManager = FindAny<TerrainManager>();
         inventoryManager = FindAny<PlayerInventoryManager>();
-        turnManager.ConfigureNetworkControl(localPlayerIndex, !network.IsHost);
+        turnManager.ConfigureNetworkControl(localPlayerIndex, !network.IsHost, network.IsHost);
+        turnManager.SetNetworkStartPending(true);
         network.GameplayMessageReceived += HandleGameplayMessage;
         turnManager.TurnStarted += HandleTurnStateChanged;
         turnManager.TurnPhaseChanged += HandleTurnPhaseChanged;
         SkillFireController.FireCommitted += HandleLocalFireCommitted;
         CommonHeadUseController.UseCommitted += HandleCommonUseCommitted;
 
-        if (network.IsHost && terrainManager != null)
+        if (terrainManager != null)
         {
-            terrainManager.OperationApplied += HandleAuthoritativeTerrainOperation;
+            terrainSync = gameObject.AddComponent<ObjectHeadTerrainSync>();
+            terrainSync.Initialize(network, terrainManager, startData);
         }
+        ObjectHeadPresentation.ImpactCommitted += HandleConfirmedImpact;
+        SkillProjectile.LandingCommitted += HandleProjectileLanding;
 
         if (network.IsHost)
         {
@@ -153,15 +168,23 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private void Update()
     {
-        if (network == null || turnManager == null || !network.IsInMatch)
+        if (!IsReady || network == null || turnManager == null || !network.IsInMatch)
         {
             return;
         }
 
+        bool pending = terrainSync == null || !terrainSync.InitialBarrierPassed ||
+            (!network.IsHost && (hostStartPending || lastHostStateSequence == 0 || Time.unscaledTime-lastHostStateAt > 3f));
+        if (pending != networkPending)
+        {
+            networkPending = pending;
+            turnManager.SetNetworkStartPending(pending);
+        }
+
         if (Time.unscaledTime >= nextSnapshotTime)
         {
-            nextSnapshotTime = Time.unscaledTime + SnapshotIntervalSeconds;
-            SendOwnedCharacterSnapshot();
+            nextSnapshotTime = Time.unscaledTime + InputIntervalSeconds;
+            SendOwnedMovementInput();
         }
 
         if (network.IsHost && Time.unscaledTime >= nextTurnStateTime)
@@ -170,7 +193,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             SendTurnState();
         }
 
-        if (!network.IsHost &&
+        if (!network.IsHost && !networkPending &&
             turnManager.CurrentPlayerIndex == localPlayerIndex &&
             endTurnRequestSerial != turnManager.TurnSerial &&
             WasEndTurnPressed())
@@ -188,7 +211,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     public void RequestEndTurn()
     {
-        if (!IsReady || network.IsHost || turnManager.CurrentPlayerIndex != localPlayerIndex || endTurnRequestSerial == turnManager.TurnSerial) return;
+        if (!IsReady || networkPending || network.IsHost || turnManager.CurrentPlayerIndex != localPlayerIndex || endTurnRequestSerial == turnManager.TurnSerial) return;
         endTurnRequestSerial = turnManager.TurnSerial;
         Send(new ObjectHeadGameplayMessage { kind = ObjectHeadGameplayMessageKind.EndTurnRequest,
             messageId = NextMessageId(), turnSerial = turnManager.TurnSerial, currentPlayerIndex = localPlayerIndex }, ObjectHeadNetworkProtocol.GameplayCommand);
@@ -207,34 +230,31 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         }
     }
 
-    private void SendOwnedCharacterSnapshot()
+    private void SendOwnedMovementInput()
     {
+        if (network.IsHost) return;
         TurnCharacterController character = turnManager.CurrentCharacter;
         if (character == null || GetPlayerIndex(character) != localPlayerIndex)
         {
             return;
         }
 
-        Rigidbody2D body = character.GetComponent<Rigidbody2D>();
         AimController aim = character.GetComponent<AimController>();
-        DemoSkillSelector selector = character.GetComponent<DemoSkillSelector>();
-        Vector2 velocity = body != null ? body.linearVelocity : Vector2.zero;
         Vector2 direction = aim != null ? aim.AimDirection : Vector2.right;
 
         Send(new ObjectHeadGameplayMessage
         {
-            kind = ObjectHeadGameplayMessageKind.CharacterSnapshot,
+            kind = ObjectHeadGameplayMessageKind.MovementInput,
             messageId = NextMessageId(),
             characterId = GetCharacterId(character),
             turnSerial = turnManager.TurnSerial,
-            positionX = character.transform.position.x,
-            positionY = character.transform.position.y,
-            velocityX = velocity.x,
-            velocityY = velocity.y,
+            moveX = character.InputMoveX,
+            jumpHeld = character.InputJumpHeld,
+            jumpPressed = character.ConsumeJumpPress(),
+            commonSlot = character.GetComponent<CommonHeadUseController>()?.SelectedSlotIndex ?? -1,
             aimX = direction.x,
             aimY = direction.y,
-            selectedSkillIndex = selector != null ? selector.SelectedSkillIndex : 0
-            ,commonSlot=character.GetComponent<CommonHeadUseController>()?.SelectedSlotIndex ?? -1
+            selectedSkillIndex = character.GetComponent<DemoSkillSelector>().SelectedSkillIndex
         }, ObjectHeadNetworkProtocol.GameplayCommand);
     }
 
@@ -250,52 +270,59 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         }
 
         TurnCharacterController character = fireController.GetComponent<TurnCharacterController>();
-        if (GetPlayerIndex(character) != localPlayerIndex)
+        if (!network.IsHost || !CanSubmitLocalAction(startData,GetPlayerIndex(character),localPlayerIndex,true))
         {
             return;
         }
 
         Send(new ObjectHeadGameplayMessage
         {
-            kind = ObjectHeadGameplayMessageKind.FireCommand,
+            kind = ObjectHeadGameplayMessageKind.FireAccepted,
             messageId = NextMessageId(),
             characterId = GetCharacterId(character),
             turnSerial = turnManager.TurnSerial,
             aimX = aimDirection.x,
             aimY = aimDirection.y,
+            positionX = character.transform.position.x,
+            positionY = character.transform.position.y,
             selectedSkillIndex = skillIndex,
             gourdChoiceId = character.GetComponent<ObjectHeadGourd>()?.LastResolvedId,
             normalizedPower = normalizedPower
-        }, ObjectHeadNetworkProtocol.GameplayCommand);
+        }, ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
     private void HandleGameplayMessage(long opCode, string senderUserId, string json)
     {
-        if (opCode == ObjectHeadNetworkProtocol.TerrainOperation)
-        {
-            ApplyTerrainOperation(senderUserId, json);
-            return;
-        }
+        if (opCode == ObjectHeadNetworkProtocol.TerrainOperation || opCode == ObjectHeadNetworkProtocol.TerrainSync) return;
 
         ObjectHeadGameplayMessage message = JsonUtility.FromJson<ObjectHeadGameplayMessage>(json);
-        if (message == null || message.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion)
+        if (message == null || message.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion ||
+            message.matchEpoch != startData.startedAtUnixMilliseconds)
         {
             return;
         }
 
-        if (!string.IsNullOrEmpty(message.messageId) && !processedMessages.Add(message.messageId))
+        if (string.IsNullOrEmpty(message.messageId) || message.messageId.Length > 160) return;
+        string deduplicationKey = senderUserId + "/" + message.messageId;
+        if (!processedMessages.Add(deduplicationKey))
         {
             return;
         }
 
         int senderPlayerIndex = GetPlayerIndex(senderUserId);
+        if (!string.IsNullOrEmpty(message.messageId))
+        {
+            processedMessageOrder.Enqueue(deduplicationKey);
+            while (processedMessageOrder.Count > 4096) processedMessages.Remove(processedMessageOrder.Dequeue());
+        }
         switch (message.kind)
         {
-            case ObjectHeadGameplayMessageKind.CharacterSnapshot:
-                ApplyCharacterSnapshot(senderPlayerIndex, message);
+            case ObjectHeadGameplayMessageKind.MovementInput:
+                ApplyMovementInput(senderPlayerIndex, message);
                 break;
 
             case ObjectHeadGameplayMessageKind.FireCommand:
+                if (!network.IsHost) break;
                 if(message.gourdRequest){if(network.IsHost)AcceptGourdFire(senderPlayerIndex,message);}
                 else ApplyFireCommand(senderPlayerIndex, message);
                 break;
@@ -305,10 +332,15 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                     charactersById.TryGetValue(message.characterId??"",out var borrowedActor) && borrowedActor==turnManager.CurrentCharacter &&
                     message.selectedSkillIndex>=0 && message.selectedSkillIndex<3)
                 {
-                    var gourd=borrowedActor.GetComponent<ObjectHeadGourd>();if(gourd==null)break;
+                    // This branch is guest-only and accepts the host's position, never a client's claim.
+                    if (!Finite(message.positionX) || !Finite(message.positionY) || !Finite(message.normalizedPower) ||
+                        !Finite(message.aimX) || !Finite(message.aimY)) break;
+                    borrowedActor.transform.position=new Vector3(message.positionX,message.positionY,borrowedActor.transform.position.z);
+                    borrowedActor.GetComponent<Rigidbody2D>().position=new Vector2(message.positionX,message.positionY);
                     borrowedActor.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex,false);
                     borrowedActor.GetComponent<AimController>().SetAimDirection(new Vector2(message.aimX,message.aimY));
-                    gourd.ConfirmedId=message.gourdChoiceId;
+                    var gourd=borrowedActor.GetComponent<ObjectHeadGourd>();
+                    if(gourd!=null)gourd.ConfirmedId=message.gourdChoiceId;
                     if(borrowedActor.GetComponent<SkillFireController>().FireReplicated(message.normalizedPower))ReceivedFireCommandCount++;
                 }
                 break;
@@ -332,6 +364,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                 if (senderUserId == network.HostUserId && !network.IsHost && message.stateSequence>lastHostStateSequence)
                 {
                     lastHostStateSequence=message.stateSequence;
+                    lastHostStateAt=Time.unscaledTime;
+                    hostStartPending=message.networkStartPending;
                     ReceivedTurnStateCount++;
                     ApplyCommonState(message);
                     foreach (var state in message.combatStates ?? Array.Empty<ObjectHeadCombatState>())
@@ -341,8 +375,8 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                             target.GetComponent<ObjectHeadGourd>()?.Apply(state.gourdCharges);
                             ObjectHeadCaptivity.ApplyReplica(target,state.captiveTurns);
                         }
-                    if (message.matchOver) { turnManager.ApplyNetworkMatchResult(message.winner); break; }
-                    turnManager.ApplyAuthoritativeTurnState(
+                    if (message.matchOver) turnManager.ApplyNetworkMatchResult(message.winner);
+                    else turnManager.ApplyAuthoritativeTurnState(
                         message.currentTurnIndex,
                         message.turnSerial,
                         message.roundSerial,
@@ -352,11 +386,32 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
                         message.residualTimeActive,
                         message.actionUsed,
                         message.settlementPending);
+                    ApplyAuthoritativeCharacterPositions(message.combatStates);
+                    var projectiles=FindObjectsByType<SkillProjectile>(FindObjectsSortMode.None);
+                    foreach (var state in message.projectiles ?? Array.Empty<ObjectHeadProjectileState>())
+                        if (state!=null)
+                            foreach (var projectile in projectiles)
+                                if (projectile.NetworkId==state.id) projectile.ApplyNetworkState(state);
                 }
+                break;
+
+            case ObjectHeadGameplayMessageKind.ProjectileLanded:
+                if (!network.IsHost && senderUserId==network.HostUserId && Finite(message.positionX) && Finite(message.positionY))
+                    foreach (var projectile in FindObjectsByType<SkillProjectile>(FindObjectsSortMode.None))
+                        if (projectile.NetworkId==message.projectileId)
+                            projectile.ConfirmNetworkLanding(new Vector2(message.positionX,message.positionY),message.projectileCulled);
+                break;
+
+            case ObjectHeadGameplayMessageKind.ImpactPresentation:
+                if (!network.IsHost && senderUserId == network.HostUserId &&
+                    Finite(message.positionX) && Finite(message.positionY) && Finite(message.radius) && message.radius >= 0)
+                    ObjectHeadPresentation.PresentConfirmedImpact(message.skillId,
+                        new Vector2(message.positionX,message.positionY),message.radius);
                 break;
 
             case ObjectHeadGameplayMessageKind.EndTurnRequest:
                 if (network.IsHost &&
+                    !networkPending &&
                     message.turnSerial == turnManager.TurnSerial &&
                     senderPlayerIndex == turnManager.CurrentPlayerIndex)
                 {
@@ -366,74 +421,78 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         }
     }
 
-    private void HandleAuthoritativeTerrainOperation(TerrainEditOperation operation)
+    private void HandleConfirmedImpact(int skillId, Vector2 point, float radius)
     {
-        if (network == null || turnManager == null || !network.IsHost)
+        if (network == null || !network.IsHost) return;
+        Send(new ObjectHeadGameplayMessage
         {
-            return;
-        }
-
-        Send(new ObjectHeadTerrainOperationMessage
-        {
-            messageId = NextMessageId(),
-            turnSerial = turnManager.TurnSerial,
-            operation = operation
-        }, ObjectHeadNetworkProtocol.TerrainOperation);
-        SentTerrainOperationCount++;
+            kind=ObjectHeadGameplayMessageKind.ImpactPresentation, messageId=NextMessageId(),
+            skillId=skillId,positionX=point.x,positionY=point.y,radius=radius
+        },ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
-    private void ApplyTerrainOperation(string senderUserId, string json)
+    private void HandleProjectileLanding(string projectileId, Vector2 point, bool culled)
     {
-        if (network == null || network.IsHost || senderUserId != network.HostUserId)
-        {
-            return;
-        }
-
-        ObjectHeadTerrainOperationMessage message =
-            JsonUtility.FromJson<ObjectHeadTerrainOperationMessage>(json);
-        if (message == null ||
-            message.protocolVersion != ObjectHeadNetworkProtocol.ProtocolVersion ||
-            string.IsNullOrEmpty(message.messageId) ||
-            !processedMessages.Add(message.messageId))
-        {
-            return;
-        }
-
-        if (terrainManager == null)
-        {
-            terrainManager = FindAny<TerrainManager>();
-        }
-
-        if (terrainManager == null)
-        {
-            Debug.LogWarning("[ObjectHead Network] Terrain operation arrived before TerrainManager was ready.");
-            return;
-        }
-
-        terrainManager.ApplyOperation(message.operation);
-        ReceivedTerrainOperationCount++;
+        if (network == null || !network.IsHost) return;
+        Send(new ObjectHeadGameplayMessage { kind=ObjectHeadGameplayMessageKind.ProjectileLanded,
+            messageId=NextMessageId(),projectileId=projectileId,positionX=point.x,positionY=point.y,projectileCulled=culled },
+            ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
-    private void ApplyCharacterSnapshot(int senderPlayerIndex, ObjectHeadGameplayMessage message)
+    private void ApplyMovementInput(int senderPlayerIndex, ObjectHeadGameplayMessage message)
     {
-        if (!charactersById.TryGetValue(message.characterId, out TurnCharacterController character) ||
+        if (!network.IsHost || !charactersById.TryGetValue(message.characterId ?? string.Empty, out TurnCharacterController character) ||
             GetPlayerIndex(character) != senderPlayerIndex ||
             senderPlayerIndex == localPlayerIndex ||
             message.turnSerial != turnManager.TurnSerial ||
             senderPlayerIndex != turnManager.CurrentPlayerIndex ||
-            character != turnManager.CurrentCharacter)
+            character != turnManager.CurrentCharacter ||
+            !Finite(message.moveX) || !Finite(message.aimX) || !Finite(message.aimY))
         {
             return;
         }
 
-        ObjectHeadNetworkSmoother smoother=character.GetComponent<ObjectHeadNetworkSmoother>()??character.gameObject.AddComponent<ObjectHeadNetworkSmoother>();
-        smoother.Push(new Vector2(message.positionX,message.positionY),new Vector2(message.velocityX,message.velocityY));
-
+        character.SetNetworkInput(message.moveX, message.jumpHeld, message.jumpPressed);
         AimController aim = character.GetComponent<AimController>();
-        aim?.SetAimDirection(new Vector2(message.aimX, message.aimY));
-        character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex,false);
-        if(message.commonSlot>=0)character.GetComponent<CommonHeadUseController>()?.TrySelectCommonHeadSlot(message.commonSlot);
+        Vector2 direction = new Vector2(message.aimX, message.aimY);
+        if (direction.sqrMagnitude > 0.0001f) aim?.SetAimDirection(direction.normalized);
+        if (message.selectedSkillIndex >= 0 && message.selectedSkillIndex < 3)
+        {
+            var selector=character.GetComponent<DemoSkillSelector>();
+            if(selector.SelectedSkillIndex!=message.selectedSkillIndex)selector.SetSkillIndex(message.selectedSkillIndex,false);
+        }
+        character.GetComponent<CommonHeadUseController>()?.ApplyNetworkSelection(message.commonSlot);
         ReceivedRemoteSnapshotCount++;
+    }
+
+    private void ApplyAuthoritativeCharacterPositions(ObjectHeadCombatState[] states)
+    {
+        if (states != null && states.Length > 0) ReceivedRemoteSnapshotCount++;
+        foreach (var state in states ?? Array.Empty<ObjectHeadCombatState>())
+        {
+            if (state == null || !charactersById.TryGetValue(state.characterId ?? string.Empty, out var character) ||
+                !Finite(state.x) || !Finite(state.y) || !Finite(state.vx) || !Finite(state.vy)) continue;
+
+            var body = character.GetComponent<Rigidbody2D>();
+            if (body == null) continue;
+            character.ApplyNetworkGrounded(state.grounded);
+            var selector = character.GetComponent<DemoSkillSelector>();
+            selector?.ApplyNetworkCooldowns(state.cooldowns);
+            if (GetPlayerIndex(character) != localPlayerIndex || turnManager.CurrentCharacter != character)
+            {
+                if(selector!=null && selector.SelectedSkillIndex!=state.selectedSkill)selector.SetSkillIndex(state.selectedSkill,false);
+                character.GetComponent<AimController>()?.SetAimDirection(new Vector2(state.aimX,state.aimY));
+                character.GetComponent<CharacterVisual>()?.SetFacingRight(state.facingRight);
+                character.GetComponent<CommonHeadUseController>()?.ApplyNetworkSelection(state.commonSlot);
+            }
+            Vector2 position = new Vector2(state.x, state.y);
+            Vector2 velocity = new Vector2(state.vx, state.vy);
+            if (!body.simulated) { body.position=position; character.transform.position=new Vector3(position.x,position.y,character.transform.position.z); continue; }
+            var smoother = character.GetComponent<ObjectHeadNetworkSmoother>() ??
+                           character.gameObject.AddComponent<ObjectHeadNetworkSmoother>();
+            smoother.enabled = true;
+            smoother.Push(position, velocity);
+        }
     }
 
     private void ApplyFireCommand(int senderPlayerIndex, ObjectHeadGameplayMessage message)
@@ -442,20 +501,33 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             GetPlayerIndex(character) != senderPlayerIndex ||
             senderPlayerIndex == localPlayerIndex ||
             message.turnSerial != turnManager.TurnSerial ||
-            character != turnManager.CurrentCharacter)
+            character != turnManager.CurrentCharacter ||
+            message.selectedSkillIndex < 0 || message.selectedSkillIndex >= 3 ||
+            !Finite(message.normalizedPower) || message.normalizedPower < 0 || message.normalizedPower > 1 ||
+            !Finite(message.aimX) || !Finite(message.aimY))
         {
             return;
         }
 
+        Vector2 direction = new Vector2(message.aimX, message.aimY);
+        if (direction.sqrMagnitude < 0.0001f || (network.IsHost && !turnManager.CanCharacterFire(character))) return;
         character.GetComponent<DemoSkillSelector>()?.SetSkillIndex(message.selectedSkillIndex,false);
         var gourd=character.GetComponent<ObjectHeadGourd>();
         if(gourd!=null && GetPlayerIndex(network.HostUserId)!=senderPlayerIndex)return;
         if(gourd!=null){gourd.ConfirmedId=message.gourdChoiceId;gourd.Select(message.gourdChoiceId);}
-        character.GetComponent<AimController>()?.SetAimDirection(new Vector2(message.aimX, message.aimY));
+        character.GetComponent<AimController>()?.SetAimDirection(direction.normalized);
         SkillFireController fire = character.GetComponent<SkillFireController>();
         if (fire != null && fire.FireReplicated(message.normalizedPower))
         {
             ReceivedFireCommandCount++;
+            if (network.IsHost)
+            {
+                message.kind = ObjectHeadGameplayMessageKind.FireAccepted;
+                message.positionX = character.transform.position.x;
+                message.positionY = character.transform.position.y;
+                message.messageId = NextMessageId();
+                Send(message, ObjectHeadNetworkProtocol.GameplayEvent);
+            }
         }
     }
 
@@ -486,6 +558,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         {
             kind = ObjectHeadGameplayMessageKind.TurnState,
             stateSequence=++hostStateSequence,
+            projectiles=FindObjectsByType<SkillProjectile>(FindObjectsSortMode.None).Where(p=>p.IsFlying).Select(p=>p.CaptureNetworkState()).ToArray(),
             inventoryStates=(startData.players ?? Array.Empty<ObjectHeadPlayerAssignment>()).Select(p=>new ObjectHeadInventoryState{
                 playerIndex=p.playerIndex,slots=inventoryManager.GetInventory(p.playerIndex).CaptureSlots()}).ToArray(),
             worldItems=FindObjectsByType<CommonHeadItem>(FindObjectsSortMode.None).Select(item=>new ObjectHeadWorldItemState{
@@ -494,9 +567,19 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             winner = turnManager.WinningPlayerIndex,
             combatStates = charactersById.Select(pair => new ObjectHeadCombatState {
                 characterId=pair.Key, hp=pair.Value.GetComponent<CharacterCombat>().CurrentHp,
+                grounded=pair.Value.IsGrounded,
+                facingRight=pair.Value.GetComponent<CharacterVisual>().IsFacingRight,
+                selectedSkill=pair.Value.GetComponent<DemoSkillSelector>().SelectedSkillIndex,
+                commonSlot=pair.Value.GetComponent<CommonHeadUseController>()?.SelectedSlotIndex ?? -1,
+                cooldowns=Enumerable.Range(0,3).Select(i=>pair.Value.GetComponent<DemoSkillSelector>().GetRemainingCooldown(i)).ToArray(),
+                aimX=pair.Value.GetComponent<AimController>().AimDirection.x,
+                aimY=pair.Value.GetComponent<AimController>().AimDirection.y,
                 gourdCharges=pair.Value.GetComponent<ObjectHeadGourd>()?.Capture(),
                 captiveTurns=pair.Value.GetComponent<ObjectHeadCaptivity>()?.RemainingOwnTurns??0,
-                pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage,shield=pair.Value.GetComponent<CharacterCombat>().ShieldAbsorption }).ToArray(),
+                pending=pair.Value.GetComponent<CharacterCombat>().PendingDamage,shield=pair.Value.GetComponent<CharacterCombat>().ShieldAbsorption,
+                x=pair.Value.transform.position.x,y=pair.Value.transform.position.y,
+                vx=pair.Value.GetComponent<Rigidbody2D>().linearVelocity.x,
+                vy=pair.Value.GetComponent<Rigidbody2D>().linearVelocity.y }).ToArray(),
             messageId = NextMessageId(),
             turnSerial = turnManager.TurnSerial,
             roundSerial = turnManager.RoundSerial,
@@ -506,19 +589,22 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
             actionUsed = turnManager.ActionUsedThisTurn,
             residualTimeActive = turnManager.IsResidualTimeActive,
             settlementPending = turnManager.IsTurnEndResolving || turnManager.IsSettlementTimeActive,
+            networkStartPending = turnManager.IsNetworkStartPending,
             remainingTurnSeconds = turnManager.RemainingTurnSeconds,
             remainingResidualSeconds = turnManager.RemainingResidualSeconds
         }, ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
-    public void RequestGourdFire(SkillFireController fire,float power)
+    public void RequestFire(SkillFireController fire,float power)
     {
         var actor=fire!=null?fire.GetComponent<TurnCharacterController>():null;
         if(!IsReady || actor==null || GetPlayerIndex(actor)!=localPlayerIndex || !turnManager.CanCharacterFire(actor))return;
         var aim=actor.GetComponent<AimController>().AimDirection;
-        Send(new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.FireCommand,gourdRequest=true,
+        var selector=actor.GetComponent<DemoSkillSelector>();
+        bool gourdRequest=ObjectHeadGourd.IsMeta(selector.GetCurrentSkillSettings().effectType);
+        Send(new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.FireCommand,gourdRequest=gourdRequest,
             messageId=NextMessageId(),characterId=GetCharacterId(actor),turnSerial=turnManager.TurnSerial,
-            selectedSkillIndex=actor.GetComponent<DemoSkillSelector>().SelectedSkillIndex,gourdChoiceId=actor.GetComponent<ObjectHeadGourd>()?.SelectedId,
+            selectedSkillIndex=selector.SelectedSkillIndex,gourdChoiceId=actor.GetComponent<ObjectHeadGourd>()?.SelectedId,
             normalizedPower=power,aimX=aim.x,aimY=aim.y},ObjectHeadNetworkProtocol.GameplayCommand);
     }
     private void AcceptGourdFire(int senderPlayerIndex,ObjectHeadGameplayMessage message)
@@ -531,20 +617,24 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
         actor.GetComponent<DemoSkillSelector>().SetSkillIndex(message.selectedSkillIndex,false);actor.GetComponent<AimController>().SetAimDirection(aim.normalized);
         if(!actor.GetComponent<SkillFireController>().FireReplicated(message.normalizedPower))return;
         message.gourdRequest=false;message.kind=ObjectHeadGameplayMessageKind.FireAccepted;message.messageId=NextMessageId();message.gourdChoiceId=gourd.LastResolvedId;
+        message.positionX=actor.transform.position.x;message.positionY=actor.transform.position.y;
         Send(message,ObjectHeadNetworkProtocol.GameplayEvent);
     }
 
     public bool RequestCommonUse(CommonHeadUseController use,int slot,CommonHeadType type,float power)
     {
         var character=use!=null?use.GetComponent<TurnCharacterController>():null;
-        if(!IsReady || character==null || GetPlayerIndex(character)!=localPlayerIndex || !turnManager.CanCharacterFire(character))return false;
+        if(!IsReady || character==null || !CanSubmitLocalAction(startData,GetPlayerIndex(character),localPlayerIndex,network.IsHost) || !turnManager.CanCharacterFire(character))return false;
         Vector2 aim=character.GetComponent<AimController>().AimDirection;
         var message=new ObjectHeadGameplayMessage{kind=ObjectHeadGameplayMessageKind.CommonUseRequest,
             messageId=NextMessageId(),characterId=GetCharacterId(character),turnSerial=turnManager.TurnSerial,
             commonSlot=slot,commonType=type,normalizedPower=power,aimX=aim.x,aimY=aim.y};
-        if(network.IsHost)return AcceptCommonUse(localPlayerIndex,message);
+        if(network.IsHost)return AcceptCommonUse(GetPlayerIndex(character),message);
         Send(message,ObjectHeadNetworkProtocol.GameplayCommand);return true;
     }
+
+    public static bool CanSubmitLocalAction(GameStartData match,int actorPlayerIndex,int localPlayerIndex,bool isHost) =>
+        actorPlayerIndex>0 && (actorPlayerIndex==localPlayerIndex || (isHost && match?.IsAiPlayer(actorPlayerIndex)==true));
 
     private static bool Finite(float value)=>!float.IsNaN(value)&&!float.IsInfinity(value);
     private bool AcceptCommonUse(int senderPlayerIndex,ObjectHeadGameplayMessage message)
@@ -599,6 +689,7 @@ public sealed class ObjectHeadGameplayBridge : MonoBehaviour
 
     private async void Send(object message, long opCode)
     {
+        if (message is ObjectHeadGameplayMessage gameplay) gameplay.matchEpoch=startData.startedAtUnixMilliseconds;
         try
         {
             await network.SendGameplayMessageAsync(opCode, message);

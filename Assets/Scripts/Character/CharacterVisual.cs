@@ -61,6 +61,7 @@ public class CharacterVisual : MonoBehaviour
     private bool isFacingRight = true;
     private Vector3 recoilOffset;
     private float recoilUntil;
+    private float hitPunchUntil;
 
     public ObjectHeadCharacterKind CharacterKind => characterKind;
     public int SelectedSkillIndex => selectedSkillIndex;
@@ -225,13 +226,21 @@ public class CharacterVisual : MonoBehaviour
         if(bodyRenderer==null)return;
         bodyRenderer.transform.localPosition-=recoilOffset;recoilOffset=Vector3.zero;
         var feedback=ObjectHeadMicroFeedback.Load();
-        if(feedback==null || !feedback.effectsEnabled || isDead || Time.time>=recoilUntil)return;
+        if(feedback==null || !feedback.effectsEnabled || isDead)return;
+        if(Time.time<hitPunchUntil)
+        {
+            float remaining=(hitPunchUntil-Time.time)/.16f;
+            recoilOffset=new Vector3(Mathf.Sin((1f-remaining)*28f)*.065f*remaining,0,0);
+            bodyRenderer.transform.localPosition+=recoilOffset;
+            return;
+        }
+        if(Time.time>=recoilUntil)return;
         float t=1-(recoilUntil-Time.time)/Mathf.Max(.01f,feedback.recoilSeconds);
         recoilOffset=Vector3.right*((isFacingRight?-1:1)*feedback.recoilDistance*Mathf.Sin(t*Mathf.PI));
         bodyRenderer.transform.localPosition+=recoilOffset;
     }
     private void OnDisable()
-    {if(bodyRenderer!=null)bodyRenderer.transform.localPosition-=recoilOffset;recoilOffset=Vector3.zero;recoilUntil=0;}
+    {if(bodyRenderer!=null)bodyRenderer.transform.localPosition-=recoilOffset;recoilOffset=Vector3.zero;recoilUntil=hitPunchUntil=0;}
 
     public void PlayHitFlash(Color flashColor, float seconds)
     {
@@ -239,6 +248,8 @@ public class CharacterVisual : MonoBehaviour
         {
             return;
         }
+
+        hitPunchUntil=Time.time+.16f;
 
         if (temporaryStateRoutine != null)
         {

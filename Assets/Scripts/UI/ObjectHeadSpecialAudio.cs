@@ -1,12 +1,14 @@
 using UnityEngine;
 
-// Plays authored WAV assets only. The removed generic throw/impact sounds are not reintroduced.
+// Existing loops remain authored; attack one-shots use the supplied SFX collection.
 public sealed class ObjectHeadSpecialAudio:MonoBehaviour
 {
     private AudioSource source;private bool loop;
     public static AudioSource Play(string cue,Transform parent=null,bool loop=false)
     {
         if(ObjectHeadNetworkManager.Instance?.IsDedicatedWorker==true)return null;
+        if(cue=="mg" || cue=="rocket" || cue=="final")
+        {ObjectHeadCombatAudio.Play(cue,parent!=null?(Vector2)parent.position:Vector2.zero);return null;}
         var library=Resources.Load<ObjectHeadAudioLibrary>("ObjectHeadAudioLibrary");if(library==null)return null;
         var clip=cue=="rotor"?library.helicopterLoop:cue=="mg"?library.supportMachineGun:cue=="rocket"?library.supportRocket:cue=="final"?library.supportFinal:library.rainbowLoop;
         if(clip==null)return null;

@@ -31,10 +31,20 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public GameObject helpPanel;
     public Button closeHelpButton;
     public Button quitButton;
+    [Header("Connection progress (authored in the title prefab)")]
+    public GameObject loadingOverlay;
+    public Text loadingTitle;
+    public Text loadingDetail;
+    public RectTransform loadingSpinner;
+    private string pendingOperation;
+    private float busySince;
+    private bool changingScene;
+    private bool applyingRoomSettings;
     public Text localPlayerLabel;
     public ObjectHeadCharacterBrowser characterBrowser;
     public ObjectHeadFrontEnd frontEnd;
     public bool InLobby => localLobby || (network != null && network.IsInMatch);
+    public bool HasMenuStatus => statusKey != "status_offline" && statusKey != "status_connected";
     public ObjectHeadLanguage Language => language;
     public event Action LanguageChanged;
     public string Translate(string key) => L(key);
@@ -91,6 +101,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     public Text aiRosterModeText;
     public Button aiDifficultyButton;
     public Text aiDifficultyText;
+    public Button onlineAIAddButton;
+    public Button onlineAIRemoveButton;
+    public Button onlineAIDifficultyButton;
+    public Text onlineAIDifficultyText;
+    public Text lobbyStartHint;
     public Button editLocalSquadButton;
     public Text editLocalSquadText;
     public Button startGameButton;
@@ -179,13 +194,16 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         readyButton?.onClick.AddListener(ToggleReady);
         aiRosterModeButton?.onClick.AddListener(ToggleAIRosterMode);
         aiDifficultyButton?.onClick.AddListener(CycleAIDifficulty);
+        onlineAIAddButton?.onClick.AddListener(() => Run(network.AddAIAsync, "status_adding_ai"));
+        onlineAIRemoveButton?.onClick.AddListener(() => Run(network.RemoveAIAsync, "status_removing_ai"));
+        onlineAIDifficultyButton?.onClick.AddListener(CycleAIDifficulty);
         editLocalSquadButton?.onClick.AddListener(ChangeLocalSelectionPlayer);
         startGameButton?.onClick.AddListener(StartGame);
         leaveRoomButton?.onClick.AddListener(LeaveRoom);
         localPlayButton?.onClick.AddListener(EnterLocalLobby);
         helpButton?.onClick.AddListener(() => helpPanel.SetActive(true));
         closeHelpButton?.onClick.AddListener(() => helpPanel.SetActive(false));
-        quitButton?.onClick.AddListener(() => Application.Quit());
+        quitButton?.onClick.AddListener(QuitGame);
         previousMapButton?.onClick.AddListener(() => ChangeMap(-1));
         nextMapButton?.onClick.AddListener(() => ChangeMap(1));
         for (int i = 0; i < slotButtons.Length; i++)
@@ -211,35 +229,59 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void ChangeRoomSize(int delta)
     {
-        int at = Array.FindIndex(content.modes, m => m.mode == selectedMode);
-        var mode = content.modes[(at + delta + content.modes.Length) % content.modes.Length];
-        selectedMode = mode.mode;
-        roomSize = mode.players;
+        if (busy || (network != null && network.IsInMatch && !network.IsHost)) return;
+        if (!TryFindNextMode(delta, out var nextMode)) return;
+        selectedMode = nextMode;
+        roomSize = content.Mode(nextMode).players;
         if (localLobby) { EnterLocalLobby(); return; }
-        RefreshAll();
+        CommitMapSettings();
+    }
+
+    private bool TryFindNextMode(int direction, out ObjectHeadMatchMode nextMode)
+    {
+        nextMode = selectedMode;
+        if (content?.modes == null || content.modes.Length < 2) return false;
+        int current = Array.FindIndex(content.modes, mode => mode.mode == selectedMode);
+        int step = direction < 0 ? -1 : 1;
+        var lobby = !localLobby && network != null && network.IsInMatch ? network.LobbyState : null;
+        for (int offset = 1; offset < content.modes.Length; offset++)
+        {
+            var candidate = content.modes[(current + step * offset + content.modes.Length) % content.modes.Length];
+            // Skip a smaller mode before changing the displayed state or sending a request.
+            if (lobby != null && !ObjectHeadLobbyRules.CanChangeMode(lobby, candidate.mode, out _)) continue;
+            nextMode = candidate.mode;
+            return true;
+        }
+        return false;
     }
 
     private void CreateRoom()
     {
+        bool isPrivate = roomAccess != null && roomAccess.IsPrivate;
+        string password = roomAccess?.CreatePassword;
+        var settings = BuildRoomSettings();
         Run(async () =>
         {
             await EnsureConnectedAsync();
-            await network.CreateRoomAsync(BuildRoomSettings(),roomAccess!=null && roomAccess.IsPrivate,roomAccess?.CreatePassword);
+            await network.CreateRoomAsync(settings,isPrivate,password);
             roomAccess?.ClearPasswords();
             statusKey = "status_room_created";
-        }, "status_connecting");
+        }, "creating_room");
     }
 
     public async Task JoinDiscoveredRoomAsync(string code)
     {
-        await EnsureConnectedAsync();
-        await network.JoinRoomAsync(code);
-        statusKey = "status_joined_room";
-        if(this != null) RefreshAll();
+        if (busy) return;
+        await RunAsync(async () => {
+            await EnsureConnectedAsync();
+            await network.JoinRoomAsync(code);
+            statusKey = "status_joined_room";
+        }, "joining_room");
     }
 
     private void JoinRoom()
     {
+        string password = roomAccess?.JoinPassword;
         string code = roomCodeInput != null ? roomCodeInput.text.Trim() : string.Empty;
         if (string.IsNullOrWhiteSpace(code))
         {
@@ -250,10 +292,10 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         Run(async () =>
         {
             await EnsureConnectedAsync();
-            await network.JoinRoomAsync(code,roomAccess?.JoinPassword);
+            await network.JoinRoomAsync(code,password);
             roomAccess?.ClearPasswords();
             statusKey = "status_joined_room";
-        }, "status_connecting");
+        }, "joining_room");
     }
 
     private void StartQuickMatch(ObjectHeadMatchMode mode)
@@ -291,13 +333,28 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         selectedMapMode = selectedMapMode == ObjectHeadMapSelectionMode.Fixed
             ? ObjectHeadMapSelectionMode.Random
             : ObjectHeadMapSelectionMode.Fixed;
-        RefreshAll();
+        CommitMapSettings();
+    }
+
+    private void CommitMapSettings()
+    {
+        if (localLobby || network == null || !network.IsInMatch) { RefreshAll(); return; }
+        if (!network.IsHost || busy) return;
+        var settings = BuildRoomSettings();
+        Run(async () => {
+            applyingRoomSettings = true;
+            try { await network.UpdateRoomSettingsAsync(settings); }
+            finally {
+                applyingRoomSettings = false;
+                if (this != null) HandleLobbyChanged(network.LobbyState);
+            }
+        }, "status_applying_settings");
     }
 
     private void ApplyRoomSettings()
     {
         if (localLobby) { EnterLocalLobby(); return; }
-        Run(() => network.UpdateRoomSettingsAsync(BuildRoomSettings()), "status_applying_settings");
+        CommitMapSettings();
     }
 
     private void ToggleReady()
@@ -358,7 +415,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     {
         ObjectHeadRoomSettings settings = network.Config.DefaultRoomSettings;
         settings.mode = selectedMode;
-        settings.minPlayers = roomSize;
+        settings.minPlayers = 2;
         settings.maxPlayers = roomSize;
         settings.mapSelectionMode = selectedMapMode;
         settings.fixedMapId = content.maps[selectedMap].id;
@@ -368,21 +425,35 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private async void Run(Func<Task> operation, string pendingStatusKey)
     {
+        await RunAsync(operation, pendingStatusKey);
+    }
+
+    private async Task RunAsync(Func<Task> operation, string pendingStatusKey)
+    {
         if (busy || operation == null)
         {
             return;
         }
 
         busy = true;
+        pendingOperation = pendingStatusKey;
+        busySince = Time.unscaledTime;
         rawStatus = string.Empty;
         statusKey = pendingStatusKey;
-        RefreshAll();
         try
         {
+            // Rendering may fail before an async operation even starts. Keep it
+            // inside the guarded scope so busy/loading is always released.
+            RefreshAll();
             await operation();
         }
         catch (Exception exception)
         {
+            if (!localLobby && network != null && network.IsInMatch)
+            {
+                applyingRoomSettings = false;
+                RestoreLobbySelection(network.LobbyState);
+            }
             statusKey = "status_error";
             string errorKey=ObjectHeadRoomAccessPanel.ErrorKey(exception.Message);
             rawStatus = L(errorKey) != errorKey ? L(errorKey) : L("connection_help");
@@ -408,22 +479,62 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void HandleLobbyChanged(ObjectHeadLobbyState lobby)
     {
-        if (lobby != null)
+        if (lobby != null && !applyingRoomSettings)
         {
-            selectedMode = lobby.settings.mode;
-            roomSize = content.Mode(selectedMode).players;
-            selectedMapMode = lobby.settings.mapSelectionMode;
-            int mapIndex = Array.FindIndex(content.maps, m => m.id == lobby.settings.fixedMapId);
-            if (mapIndex >= 0) selectedMap = mapIndex;
+            RestoreLobbySelection(lobby);
             statusKey = "status_in_lobby";
         }
 
         RefreshAll();
     }
 
+    private void RestoreLobbySelection(ObjectHeadLobbyState lobby)
+    {
+        if (lobby?.settings == null || content == null) return;
+        var mode = content.Mode(lobby.settings.mode);
+        if (mode == null) return;
+        selectedMode = lobby.settings.mode;
+        roomSize = mode.players;
+        selectedMapMode = lobby.settings.mapSelectionMode;
+        int mapIndex = Array.FindIndex(content.maps, map => map.id == lobby.settings.fixedMapId);
+        if (mapIndex >= 0) selectedMap = mapIndex;
+        var aiPlayer = lobby.players?.FirstOrDefault(player => player != null && player.isAi);
+        if (aiPlayer != null) selectedAiDifficulty = aiPlayer.aiDifficulty;
+    }
+
     private void HandleMatchStarting(GameStartData unused)
     {
+        changingScene = true;
+        pendingOperation = "status_starting_game";
+        busySince = Time.unscaledTime;
         SetStatus("status_starting_game");
+    }
+
+    private void Update()
+    {
+        bool loading = busy || changingScene;
+        if (loadingOverlay == null) return;
+        if (loadingOverlay.activeSelf != loading) loadingOverlay.SetActive(loading);
+        if (!loading) return;
+        loadingOverlay.transform.SetAsLastSibling();
+        bool ko = language == ObjectHeadLanguage.Korean;
+        string label = pendingOperation == "creating_room" ? (ko ? "방을 만드는 중" : "Creating room")
+            : pendingOperation == "joining_room" ? (ko ? "방에 참가하는 중" : "Joining room")
+            : pendingOperation == "quitting_game" ? (ko ? "연결을 정리하는 중" : "Disconnecting")
+            : L(pendingOperation ?? "status_connecting");
+        loadingTitle.text = label + new string('.', 1 + (int)(Time.unscaledTime * 2) % 3);
+        loadingDetail.text = Time.unscaledTime - busySince > 7
+            ? (ko ? "응답을 기다리고 있어요. 연결이 지연되면 안내해 드릴게요." : "Waiting for a response. Connection delays will be reported.")
+            : (ko ? "잠시만 기다려 주세요." : "Please wait a moment.");
+        if (loadingSpinner != null) loadingSpinner.localRotation = Quaternion.Euler(0,0,-Time.unscaledTime*150);
+    }
+
+    private void QuitGame()
+    {
+        Run(async () => {
+            try { if (network != null) await network.DisconnectAsync(); }
+            finally { Application.Quit(); }
+        }, "quitting_game");
     }
 
     private void RefreshAll()
@@ -437,6 +548,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         {
             label.Apply(localization, language);
         }
+
+        // The English name is much longer than its Korean counterpart. Keep it
+        // clear of the character illustration without shrinking the Korean logo.
+        var gameTitle = transform.Find("GameTitle")?.GetComponent<Text>();
+        if (gameTitle != null) gameTitle.fontSize = language == ObjectHeadLanguage.English ? 49 : 62;
 
         ObjectHeadLobbyState lobby = network != null ? network.LobbyState : null;
         bool inMatch = localLobby || (network != null && network.IsInMatch);
@@ -474,6 +590,8 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         if (lobbyModeText != null) lobbyModeText.text = L(content.Mode(selectedMode).nameKey);
         if (localLobby)
         {
+            SetOnlineAIControls(false, null);
+            if (lobbyStartHint != null) lobbyStartHint.gameObject.SetActive(false);
             bool aiBattle=localPlayers.Any(player=>player.isAi);
             lobbyTitleText.text = L("local_title");
             lobbyRoomCodeText.text = L("local_shared_screen");
@@ -484,10 +602,11 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
                 {
                     playerIndex = p.playerIndex, allianceId = p.allianceId,
                     name = p.username,
-                    detail = p.isAi ? L("ai_difficulty_" + p.aiDifficulty.ToString().ToLowerInvariant()) : L("not_ready_state"),
+                    detail = p.isAi ? L("ai_difficulty_" + p.aiDifficulty.ToString().ToLowerInvariant())
+                        : L(content.ValidSelection(p.characters, roomSize) ? "ready_state" : "not_ready_state"),
                     characters = p.characters
                 }).ToArray();
-            DisplayRoster(localRoster);
+            DisplayRoster(localRoster, selectedMode);
             readyButtonText.text = L("confirm_team");
             readyButton.interactable = !busy;
             startGameButton.gameObject.SetActive(true);
@@ -525,7 +644,7 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
         {
             lobbyMapModeText.text = L(selectedMapMode == ObjectHeadMapSelectionMode.Fixed ? "map_fixed" : "map_random");
         }
-        DisplayRoster(BuildPlayerRoster(lobby));
+        DisplayRoster(BuildPlayerRoster(lobby), lobby?.settings?.mode ?? selectedMode);
 
         ObjectHeadLobbyPlayer localPlayer = FindLocalPlayer();
         bool localReady = localPlayer != null && localPlayer.ready;
@@ -536,14 +655,61 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
         bool isHost = network.IsHost;
         SetHostControls(isHost);
-        lobbySizeMinusButton.interactable = !busy && isHost;
-        lobbySizePlusButton.interactable = !busy && isHost;
-        toggleMapModeButton.interactable = !busy && isHost;
-        applySettingsButton.interactable = !busy && isHost;
-        readyButton.interactable = !busy && lobby != null;
+        SetOnlineAIControls(isHost && network.UseEpicOnlineServices, lobby);
+        readyButton.interactable = !busy && !network.IsRoomUpdating && localPlayer != null;
         leaveRoomButton.interactable = !busy;
         startGameButton.gameObject.SetActive(isHost);
         startGameButton.interactable = !busy && network.CanStartMatch(out _);
+        RefreshLobbyHint(lobby);
+    }
+
+    private void SetOnlineAIControls(bool visible, ObjectHeadLobbyState lobby)
+    {
+        int count = lobby?.players?.Length ?? 0;
+        bool hasAI = lobby?.players?.Any(player => player.isAi) ?? false;
+        bool available = !busy && network != null && !network.IsGameStarting && !network.IsRoomUpdating;
+        if (onlineAIAddButton != null)
+        {
+            onlineAIAddButton.gameObject.SetActive(visible);
+            onlineAIAddButton.interactable = available && lobby != null && count < lobby.settings.maxPlayers;
+        }
+        if (onlineAIRemoveButton != null)
+        {
+            onlineAIRemoveButton.gameObject.SetActive(visible);
+            onlineAIRemoveButton.interactable = available && hasAI;
+        }
+        if (onlineAIDifficultyButton != null)
+        {
+            onlineAIDifficultyButton.gameObject.SetActive(visible);
+            onlineAIDifficultyButton.interactable = available && hasAI;
+        }
+        if (onlineAIDifficultyText != null)
+            onlineAIDifficultyText.text = L("ai_difficulty_" + selectedAiDifficulty.ToString().ToLowerInvariant());
+    }
+
+    private void RefreshLobbyHint(ObjectHeadLobbyState lobby)
+    {
+        if (lobbyStartHint == null) return;
+        lobbyStartHint.gameObject.SetActive(true);
+        // Menu status is hidden in the room. Keep failures visible beside the start controls.
+        if (statusKey == "status_error" && !string.IsNullOrWhiteSpace(rawStatus))
+        {
+            lobbyStartHint.text = rawStatus;
+            return;
+        }
+        if (lobby?.players == null)
+        {
+            lobbyStartHint.text = L("waiting_for_players");
+            return;
+        }
+        int count = lobby.players.Length;
+        if (count == 3)
+        {
+            lobbyStartHint.text = L(lobby.settings.mode == ObjectHeadMatchMode.Teams ? "lobby_three_team_hint" : "lobby_three_ffa_hint");
+            return;
+        }
+        lobbyStartHint.text = L(count < 2 ? "lobby_need_opponent" :
+            lobby.players.Any(player => !player.ready) ? "lobby_ready_hint" : "lobby_can_start");
     }
 
     private sealed class LobbyRosterLine
@@ -556,29 +722,40 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
     private LobbyRosterLine[] BuildPlayerRoster(ObjectHeadLobbyState lobby)
     {
         if (lobby?.players == null) return Array.Empty<LobbyRosterLine>();
-        return lobby.players.OrderBy(p => selectedMode == ObjectHeadMatchMode.Teams
-                ? content.Mode(selectedMode).Alliance(p.playerIndex) : p.playerIndex)
+        // StateChanged can run before the mode-selection callback. Never map an
+        // incoming 4-player roster through a stale local Duel selection.
+        var mode = lobby.settings?.mode ?? ObjectHeadMatchMode.FreeForAll;
+        return lobby.players.Where(p => p != null).OrderBy(p => mode == ObjectHeadMatchMode.Teams
+                ? LobbyAlliance(content, mode, p.playerIndex) : p.playerIndex)
             .ThenBy(p => p.playerIndex).Select(p => new LobbyRosterLine
             {
                 playerIndex = p.playerIndex,
-                allianceId = content.Mode(selectedMode).Alliance(p.playerIndex),
+                allianceId = LobbyAlliance(content, mode, p.playerIndex),
                 name = p.username,
-                detail = L(p.ready ? "ready_state" : "not_ready_state") +
+                detail = (p.isAi ? L("ai_difficulty_" + p.aiDifficulty.ToString().ToLowerInvariant())
+                         : L(p.ready ? "ready_state" : "not_ready_state")) +
                          (p.userId == lobby.hostUserId ? " · " + L("host_mark") : ""),
                 characters = p.characters
             }).ToArray();
     }
 
-    private void DisplayRoster(LobbyRosterLine[] players)
+    public static int LobbyAlliance(ObjectHeadContent content, ObjectHeadMatchMode mode, int playerIndex)
+    {
+        var definition = content != null ? content.Mode(mode) : null;
+        return definition?.alliances != null && playerIndex > 0 && playerIndex <= definition.alliances.Length
+            ? definition.alliances[playerIndex - 1] : Mathf.Max(1, playerIndex);
+    }
+
+    private void DisplayRoster(LobbyRosterLine[] players, ObjectHeadMatchMode mode)
     {
         string[] lines = players.Select(p =>
         {
-            string team = selectedMode == ObjectHeadMatchMode.Teams
+            string team = mode == ObjectHeadMatchMode.Teams
                 ? string.Format(L("alliance_label"), p.allianceId) + " · " : "";
             string characters = p.characters != null && p.characters.Length > 0
                 ? string.Join(" / ", p.characters.Select(k => L(content.Character(k).nameKey)))
-                : L("not_ready_state");
-            return $"{team}P{p.playerIndex}  {p.name}\n{p.detail} · {characters}";
+                : string.Empty;
+            return $"{team}P{p.playerIndex}  {p.name}\n{ComposeRosterDetail(p.detail, characters)}";
         }).ToArray();
         bool cards = lobbyPlayerRows != null && lobbyPlayerRows.Length > 0;
         if (lobbyPlayerListText != null)
@@ -599,6 +776,14 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
                 lobbyTeamColors != null && lobbyTeamColors.Length > 0)
                 lobbyPlayerTeamMarks[i].color = lobbyTeamColors[(Mathf.Max(1, players[i].allianceId) - 1) % lobbyTeamColors.Length];
         }
+    }
+
+    public static string ComposeRosterDetail(string status, string characters)
+    {
+        // An unconfirmed squad has no head list yet. Show its readiness exactly once.
+        if (string.IsNullOrWhiteSpace(characters)) return status ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(status)) return characters;
+        return status + " · " + characters;
     }
 
     private ObjectHeadLobbyPlayer FindLocalPlayer()
@@ -661,15 +846,18 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void SetHostControls(bool host)
     {
-        previousMapButton.interactable = nextMapButton.interactable = host && !busy;
-        lobbySizeMinusButton.interactable = lobbySizePlusButton.interactable = host && !busy;
-        toggleMapModeButton.interactable = applySettingsButton.interactable = host && !busy;
+        bool editable = host && !busy && (localLobby || network == null || !network.IsRoomUpdating);
+        previousMapButton.interactable = nextMapButton.interactable = editable;
+        lobbySizeMinusButton.interactable = editable && TryFindNextMode(-1, out _);
+        lobbySizePlusButton.interactable = editable && TryFindNextMode(1, out _);
+        toggleMapModeButton.interactable = applySettingsButton.interactable = editable;
     }
 
     private void ChangeMap(int delta)
     {
         selectedMap = (selectedMap + delta + content.maps.Length) % content.maps.Length;
-        RefreshAll();
+        selectedMapMode = ObjectHeadMapSelectionMode.Fixed;
+        CommitMapSettings();
     }
 
     private void EnsureSelection()
@@ -747,6 +935,13 @@ public sealed class ObjectHeadTitleScreen : MonoBehaviour
 
     private void CycleAIDifficulty()
     {
+        if (!localLobby)
+        {
+            if (busy || network == null || !network.IsHost) return;
+            var next = (ObjectHeadAIDifficulty)(((int)selectedAiDifficulty + 1) % Enum.GetValues(typeof(ObjectHeadAIDifficulty)).Length);
+            Run(() => network.SetAIDifficultyAsync(next), "status_ai_difficulty");
+            return;
+        }
         selectedAiDifficulty=(ObjectHeadAIDifficulty)(((int)selectedAiDifficulty+1)%Enum.GetValues(typeof(ObjectHeadAIDifficulty)).Length);
         if(localPlayers!=null)foreach(var player in localPlayers.Where(player=>player.isAi))player.aiDifficulty=selectedAiDifficulty;
         RefreshAll();

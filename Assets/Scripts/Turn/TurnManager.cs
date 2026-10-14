@@ -45,9 +45,11 @@ public class TurnManager : MonoBehaviour
     private Coroutine damageSettlementRoutine;
     private bool useExternalTurnAuthority;
     private int locallyControlledPlayerIndex;
+    private bool simulateAllNetworkPlayers;
     private bool trainingTimerPaused;
     private bool resolvingTurnEnd;
     public bool IsTurnEndResolving => resolvingTurnEnd;
+    public bool IsNetworkStartPending => networkStartPending;
     public bool DefersCombatDamage => residualTimeActive || resolvingTurnEnd;
 
     // Input ownership is distinct from simulation permission (AI/worker movement).
@@ -177,10 +179,11 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    public void ConfigureNetworkControl(int localPlayerIndex, bool externalTurnAuthority)
+    public void ConfigureNetworkControl(int localPlayerIndex, bool externalTurnAuthority, bool simulateAllPlayers = false)
     {
         locallyControlledPlayerIndex = Mathf.Clamp(localPlayerIndex, 0, 4);
         useExternalTurnAuthority = externalTurnAuthority;
+        simulateAllNetworkPlayers = simulateAllPlayers;
         ApplyCharacterControlState();
     }
 
@@ -299,6 +302,7 @@ public class TurnManager : MonoBehaviour
 
     public void NotifyPostImpactDelay()
     {
+        if (useExternalTurnAuthority) return;
         if (!isMatchOver && CurrentCharacter != null)
         {
             SetPhase(TurnPhase.PostImpactDelay);
@@ -307,6 +311,7 @@ public class TurnManager : MonoBehaviour
 
     public void NotifyResolving()
     {
+        if (useExternalTurnAuthority) return;
         if (!isMatchOver && CurrentCharacter != null)
         {
             SetPhase(TurnPhase.Resolving);
@@ -315,6 +320,7 @@ public class TurnManager : MonoBehaviour
 
     public void NotifyActionResolved(bool unusedLegacyAutoEnd = false)
     {
+        if (useExternalTurnAuthority) return;
         if (isMatchOver)
         {
             return;
@@ -775,7 +781,7 @@ public class TurnManager : MonoBehaviour
                 }
 
                 ObjectHeadTeamMember member = character.GetComponent<ObjectHeadTeamMember>();
-                bool belongsToLocalPlayer = locallyControlledPlayerIndex <= 0 ||
+                bool belongsToLocalPlayer = simulateAllNetworkPlayers || locallyControlledPlayerIndex <= 0 ||
                     (member != null && member.PlayerIndex == locallyControlledPlayerIndex);
                 bool canMove = belongsToLocalPlayer && character == CurrentCharacter && CanCharacterMove(character);
                 character.SetControlEnabled(canMove);

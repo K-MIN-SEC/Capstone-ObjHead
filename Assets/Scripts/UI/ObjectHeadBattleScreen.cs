@@ -53,6 +53,7 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
     private Vector3 authoredTurnScale;
     public bool BlocksCameraInput => interrupted || ObjectHeadHeadInventoryPanel.AnyOpen || (menuPanel != null && menuPanel.activeSelf) || (resultPanel != null && resultPanel.activeSelf);
     private bool navigating;
+    private float waitingSince = -1f;
     private ObjectHeadLanguage Language => language;
     private string L(string key) => localization.Get(key, Language);
 
@@ -118,6 +119,14 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
     private void Update()
     {
         if (turns == null) return;
+        if (!interrupted && !string.IsNullOrEmpty(ObjectHeadMatchBootstrap.StartupError))
+            ShowPreparationFailure(false);
+        if (!interrupted && Online && (turns.IsNetworkStartPending || turns.CurrentCharacter == null))
+        {
+            if (waitingSince < 0) waitingSince = Time.unscaledTime;
+            if (Time.unscaledTime - waitingSince > 45f) ShowPreparationFailure(true);
+        }
+        else waitingSince = -1f;
         if(accentTurn!=turns.TurnSerial){accentTurn=turns.TurnSerial;accentUntil=Time.unscaledTime+turnAccentSeconds;}
         float accent=Mathf.Clamp01((accentUntil-Time.unscaledTime)/turnAccentSeconds);
         turnText.transform.localScale=authoredTurnScale*(1+turnAccentScale*Mathf.Sin(accent*Mathf.PI));
@@ -131,6 +140,8 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
         turnText.text = current != null ? string.Format(L("turn_player"), turns.CurrentPlayerIndex, turns.RoundSerial) : L("loading_battle");
         float seconds = turns.IsSettlementTimeActive ? turns.RemainingSettlementSeconds : turns.IsResidualTimeActive ? turns.RemainingResidualSeconds : turns.RemainingTurnSeconds;
         timerText.text = string.Format(L(turns.IsSettlementTimeActive ? "timer_settlement" : turns.IsResidualTimeActive ? "timer_residual" : "timer_turn"), seconds);
+        if (turns.IsNetworkStartPending) timerText.text = language == ObjectHeadLanguage.Korean
+            ? "전장 동기화 중 · 상대 연결 확인" : "Synchronizing battlefield · waiting for peers";
         timerText.color = seconds <= 5 ? new Color32(255, 172, 122, 255) : new Color32(255, 241, 216, 255);
         for (int i = 0; i < teamHealthTexts.Length; i++)
         {
@@ -196,6 +207,17 @@ public sealed class ObjectHeadBattleScreen : MonoBehaviour
         resultDetail.text = L("disconnect_return");
         replayButton.gameObject.SetActive(false);
         foreach (var c in turns.Characters) if (c != null) c.SetControlEnabled(false);
+    }
+
+    private void ShowPreparationFailure(bool timeout)
+    {
+        Interrupted("connection_help");
+        turns.SetNetworkStartPending(true);
+        bool ko = language == ObjectHeadLanguage.Korean;
+        resultTitle.text = ko ? "전장을 준비하지 못했어요" : "Battle preparation failed";
+        resultDetail.text = timeout
+            ? (ko ? "상대의 준비 응답을 받지 못했습니다. 두 분 모두 같은 최신 빌드인지 확인한 뒤 다시 참가해 주세요." : "No ready response from the peer. Use the same latest build and rejoin.")
+            : (ko ? "맵 시작 위치를 구성하지 못했습니다. 타이틀로 돌아가 다시 시도해 주세요. 오류는 로그에 기록했습니다." : "Map setup failed. Return to the title and retry. Details were saved to the log.");
     }
 
     private void EndTurn()

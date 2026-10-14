@@ -22,8 +22,8 @@ MonoBehaviour:
   airborneGrace: 0.12
   landingSpeed: 1.8
   hitInterval: 0.15
-  recoilDistance: 0.055
-  recoilSeconds: 0.12
+  recoilDistance: 0.1
+  recoilSeconds: 0.16
   profiles:
   - cue: 0
     sprite: {fileID: 1489031960, guid: 437a44bacbeff3e41b9caec8efb57cba, type: 3}

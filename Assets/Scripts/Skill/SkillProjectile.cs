@@ -34,6 +34,32 @@ public class SkillProjectile : MonoBehaviour
 
     public bool IsFlying => isFlying && !isCompleted;
     public event Action Resolved;
+    public static event System.Action<string,Vector2,bool> LandingCommitted;
+    public string NetworkId { get; private set; }
+    private bool networkReplica, confirmingLanding;
+    private ObjectHeadNetworkSmoother networkSmoother;
+
+    public ObjectHeadProjectileState CaptureNetworkState() => new ObjectHeadProjectileState {
+        id=NetworkId,x=transform.position.x,y=transform.position.y,
+        vx=body.linearVelocity.x,vy=body.linearVelocity.y,rotation=transform.eulerAngles.z };
+
+    public void ApplyNetworkState(ObjectHeadProjectileState state)
+    {
+        if (!networkReplica || !IsFlying) return;
+        networkSmoother.Push(new Vector2(state.x,state.y),new Vector2(state.vx,state.vy));
+        if (!float.IsNaN(state.rotation) && !float.IsInfinity(state.rotation))
+            transform.rotation=Quaternion.Euler(0,0,state.rotation);
+    }
+
+    public void ConfirmNetworkLanding(Vector2 point, bool culled)
+    {
+        if (!networkReplica || isCompleted) return;
+        confirmingLanding=true;
+        networkSmoother.enabled=false;
+        transform.position=point;
+        if (culled) ResolveCameraExit(); else ResolveImpact(point);
+        confirmingLanding=false;
+    }
 
     public void Initialize(
         Vector2 velocity,
@@ -111,10 +137,22 @@ public class SkillProjectile : MonoBehaviour
         body.angularVelocity = skillSettings.straightShot ? 0 : CalculateFlightSpinVelocity(velocity);
         if(skillSettings.straightShot)transform.rotation=Quaternion.Euler(0,0,Mathf.Atan2(velocity.y,velocity.x)*Mathf.Rad2Deg);
         ObjectHeadPresentation.Launch(skillSettings.skillId, transform);
+        var member=ownerCombat!=null?ownerCombat.GetComponent<ObjectHeadTeamMember>():null;
+        NetworkId=$"{manager?.TurnSerial ?? 0}:p{member?.PlayerIndex ?? 0}-s{member?.TeamSlotIndex ?? 0}";
+        networkReplica=ObjectHeadCommonAuthority.Online && !ObjectHeadCommonAuthority.IsDedicatedMatch && !ObjectHeadCommonAuthority.CanWrite;
+        if (networkReplica)
+        {
+            body.bodyType=RigidbodyType2D.Kinematic;
+            body.linearVelocity=Vector2.zero; body.angularVelocity=0;
+            circleCollider.enabled=false;
+            networkSmoother=gameObject.AddComponent<ObjectHeadNetworkSmoother>();
+            networkSmoother.Push(transform.position,velocity);
+        }
     }
 
     private void FixedUpdate()
     {
+        if (networkReplica) return;
         if (isCompleted || terrain == null || !hasPreviousPosition)
         {
             previousPosition = transform.position;
@@ -140,6 +178,7 @@ public class SkillProjectile : MonoBehaviour
 
     private void Update()
     {
+        if (networkReplica) return;
         if (isCompleted)
         {
             return;
@@ -179,11 +218,14 @@ public class SkillProjectile : MonoBehaviour
 
     private void ResolveImpact(Vector2 impactPoint)
     {
+        if (networkReplica && !confirmingLanding) return;
         if (isCompleted)
         {
             return;
         }
 
+        if (ObjectHeadCommonAuthority.Online && ObjectHeadCommonAuthority.CanWrite)
+            LandingCommitted?.Invoke(NetworkId,impactPoint,false);
         isCompleted = true;
         isFlying = false;
 
@@ -417,9 +459,12 @@ public class SkillProjectile : MonoBehaviour
 
     private IEnumerator ApplyAirstrikeRoutine(Vector2 target)
     {
+        int count=Mathf.Clamp(skillSettings.chainCount,1,12);
+        Vector2 halfPass=Vector2.right*((count-1)*.5f*skillSettings.chainSpacingWorld);
+        // Follow the actual bomb order, including a future right-to-left authored pattern.
+        ObjectHeadCombatAudio.PlayFlyby(target-halfPass,target+halfPass);
         // Warning is not an explosion: impacts are shown only when each bomb actually lands.
         yield return new WaitForSeconds(Mathf.Max(.1f,skillSettings.delaySeconds));
-        int count=Mathf.Clamp(skillSettings.chainCount,1,12);
         for(int i=0;i<count;i++)
         {
             Vector2 point=target+Vector2.right*((i-(count-1)*.5f)*skillSettings.chainSpacingWorld);
@@ -435,8 +480,10 @@ public class SkillProjectile : MonoBehaviour
                 bomb.transform.position=from;
             }
             float duration=art!=null?Mathf.Max(.1f,art.airstrikeFallSeconds):.45f;
+            ObjectHeadCombatAudio.Play("whistle",point,.55f);
             for(float elapsed=0;elapsed<duration;elapsed+=Time.deltaTime){if(bomb!=null)bomb.transform.position=Vector2.Lerp(from,point,Mathf.Pow(elapsed/duration,1.5f));yield return null;}
             if(bomb!=null)Destroy(bomb);
+            ObjectHeadCombatAudio.FadeCue("whistle");
             // All targets, including the owner and allies, share the existing explosion rules.
             DestroyTerrainAtImpact(point);
             DamageSystem.ApplyExplosion(point,owner,skillSettings.explosionRadiusWorld,
@@ -969,6 +1016,8 @@ public class SkillProjectile : MonoBehaviour
             return;
         }
 
+        if (ObjectHeadCommonAuthority.Online && ObjectHeadCommonAuthority.CanWrite)
+            LandingCommitted?.Invoke(NetworkId,transform.position,true);
         isCompleted = true;
         isFlying = false;
         DisablePhysicsAtImpact(transform.position);

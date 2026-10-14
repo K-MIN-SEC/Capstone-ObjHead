@@ -9,6 +9,10 @@ public sealed class ObjectHeadRoomAccessPanel:MonoBehaviour
     public Button visibilityButton;
     public Text visibilityLabel;
     public InputField createPassword,joinPassword;
+    public Button createRoomButton;
+    public Text privateNotice;
+    public Vector2 publicCreatePosition = new Vector2(0, -100);
+    public Vector2 privateCreatePosition = new Vector2(0, -177);
     public bool IsPrivate {get;private set;}
     public string CreatePassword=>IsPrivate?createPassword.text:null;
     public string JoinPassword=>joinPassword.text;
@@ -19,8 +23,10 @@ public sealed class ObjectHeadRoomAccessPanel:MonoBehaviour
     private void Refresh()
     {
         visibilityLabel.text=title.Translate(IsPrivate?"room_private":"room_public");
-        createPassword.interactable=IsPrivate;
-        createPassword.GetComponent<CanvasGroup>().alpha=IsPrivate?1:.4f;
+        createPassword.gameObject.SetActive(IsPrivate);
+        if(privateNotice!=null)privateNotice.gameObject.SetActive(IsPrivate);
+        if(createRoomButton!=null)
+            ((RectTransform)createRoomButton.transform).anchoredPosition=IsPrivate?privateCreatePosition:publicCreatePosition;
     }
     public void ClearPasswords(){createPassword.text="";joinPassword.text="";}
     public static string ErrorKey(string message)

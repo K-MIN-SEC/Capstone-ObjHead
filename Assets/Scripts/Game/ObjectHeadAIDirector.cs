@@ -5,9 +5,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Local turn driver for computer-controlled player seats. Decisions use only
-/// public gameplay APIs so the same brain can later be hosted by the authority
-/// worker without changing skill or combat code.
+/// Turn driver for computer-controlled seats. Offline games and the online room
+/// host run the same brain; guests only receive authoritative movement/actions.
 /// </summary>
 public sealed class ObjectHeadAIDirector : MonoBehaviour
 {
@@ -33,9 +32,15 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     private static void SceneLoaded(Scene scene,LoadSceneMode mode)
     {
         GameStartData data=GameStartData.Instance;
-        if(data==null || !data.localMatch || data.players==null || !data.players.Any(player=>player.isAi) || FindAnyObjectByType<TurnManager>()==null)return;
-        if(FindAnyObjectByType<ObjectHeadAIDirector>()==null)new GameObject("LocalAIDirector").AddComponent<ObjectHeadAIDirector>();
+        if(!CanDriveAi(data,ObjectHeadNetworkManager.Instance?.IsHost==true) || FindAnyObjectByType<TurnManager>()==null)return;
+        if(FindAnyObjectByType<ObjectHeadAIDirector>()==null)new GameObject("AuthoritativeAIDirector").AddComponent<ObjectHeadAIDirector>();
     }
+
+    public static bool CanDriveAi(GameStartData data,bool isHost) => data!=null &&
+        (data.localMatch || (!data.dedicatedAuthority && isHost)) &&
+        data.players!=null && data.players.Any(player=>player!=null && player.isAi);
+
+    private bool HasAuthority => CanDriveAi(GameStartData.Instance,ObjectHeadNetworkManager.Instance?.IsHost==true);
 
     private void Awake()
     {
@@ -51,17 +56,27 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
     private void Start(){if(turns?.CurrentCharacter!=null)TurnStarted(turns.CurrentCharacter);}
     private void OnDestroy(){if(turns!=null)turns.TurnStarted-=TurnStarted;}
 
+    private void Update()
+    {
+        // The first turn can be announced before peers finish loading terrain.
+        // Releasing that barrier does not announce a new turn, so resume its AI here.
+        if(HasAuthority && decision==null && turns!=null && !turns.IsNetworkStartPending &&
+            turns.CanCharacterFire(turns.CurrentCharacter) && IsAi(turns.CurrentCharacter))
+            decision=StartCoroutine(Act(turns.CurrentCharacter,turns.TurnSerial));
+    }
+
     private void TurnStarted(TurnCharacterController character)
     {
         if(decision!=null)StopCoroutine(decision);
         decision=null;
-        if(IsAi(character))decision=StartCoroutine(Act(character,turns.TurnSerial));
+        if(HasAuthority && !turns.IsNetworkStartPending && IsAi(character))
+            decision=StartCoroutine(Act(character,turns.TurnSerial));
     }
 
     private bool IsAi(TurnCharacterController character)
     {
         int player=character?.GetComponent<ObjectHeadTeamMember>()?.PlayerIndex??0;
-        return GameStartData.Instance?.players?.FirstOrDefault(entry=>entry.playerIndex==player)?.isAi==true;
+        return GameStartData.Instance?.IsAiPlayer(player)==true;
     }
 
     private IEnumerator Act(TurnCharacterController actor,int serial)
@@ -71,7 +86,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         ObjectHeadAIProfile profile=ObjectHeadAISettings.Profile(difficulty);
         actor.UseNetworkInput=true;
         yield return new WaitForSeconds(profile.decisionDelay*UnityEngine.Random.Range(.9f,1.1f));
-        if(!StillCurrent(actor,serial)){decision=null;yield break;}
+        if(!StillCurrent(actor,serial)){FinishDecision(serial);yield break;}
 
         var tuning=ObjectHeadAITuning.Load();
         var terrain=FindAnyObjectByType<TerrainManager>();
@@ -79,7 +94,7 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         TurnCharacterController target=turns.Characters.Where(c=>c!=null && c!=actor &&
             c.GetComponent<CharacterCombat>()?.IsDead==false && !ObjectHeadAIPlanner.SameTeam(actor,c))
             .OrderBy(c=>Vector2.Distance(actor.transform.position,c.transform.position)).FirstOrDefault();
-        if(target==null){turns.EndCurrentTurn();decision=null;yield break;}
+        if(target==null){FinishDecision(serial);turns.EndCurrentTurn();yield break;}
         var planner=new ObjectHeadAIPlanner(actor,turns.Characters,terrain);
         yield return planner.Search(difficulty,()=>StillCurrent(actor,serial));
         CandidatesEvaluated+=planner.Evaluated;
@@ -103,17 +118,23 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
             yield return MoveToFiringPosition(actor,target,serial);
             float landingDeadline=Time.time+tuning.landingWaitSeconds;
             while(StillCurrent(actor,serial) && !actor.IsGrounded && Time.time<landingDeadline)yield return null;
-            if(!StillCurrent(actor,serial)){decision=null;yield break;}
+            if(!StillCurrent(actor,serial)){FinishDecision(serial);yield break;}
             yield return planner.Search(difficulty,()=>StillCurrent(actor,serial));
             CandidatesEvaluated+=planner.Evaluated;
         }
-        if(!StillCurrent(actor,serial)){decision=null;yield break;}
+        if(!StillCurrent(actor,serial)){FinishDecision(serial);yield break;}
         var shot=planner.Best;
         if(!shot.valid)
         {
             if(ObjectHeadAIHover.TryPlan(actor,target,terrain,out var hoverGoal))
-            {yield return ObjectHeadAIHover.Move(actor,hoverGoal,turns,serial);decision=null;yield break;}
-            actor.SetNetworkInput(0,false);turns.EndCurrentTurn();decision=null;yield break;
+            {yield return ObjectHeadAIHover.Move(actor,hoverGoal,turns,serial);FinishDecision(serial);yield break;}
+            // Only after useful attacks and safe movement fail, open real blocking
+            // terrain with a legal destructive skill. Zero-score random shots do not help.
+            yield return planner.SearchObstruction(()=>StillCurrent(actor,serial));
+            CandidatesEvaluated+=planner.Evaluated;
+            if(!StillCurrent(actor,serial)){FinishDecision(serial);yield break;}
+            shot=planner.Best;
+            if(!shot.valid){actor.SetNetworkInput(0,false);FinishDecision(serial);turns.EndCurrentTurn();yield break;}
         }
         if(shot.commonType==CommonHeadType.None)
         {
@@ -133,15 +154,34 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
                 float error=((float)random.NextDouble()*2f-1f)*profile.aimErrorDegrees;
                 Vector2 candidateDirection=Quaternion.Euler(0,0,error)*shot.direction;
                 float candidatePower=Mathf.Clamp01(shot.power+((float)random.NextDouble()*2f-1f)*profile.powerError);
-                float safety=planner.Trace(shot.settings,candidateDirection,candidatePower,out var impact,shot.commonType)
-                    ? planner.Score(shot.settings,impact) : 0f;
+                bool hit=planner.Trace(shot.settings,candidateDirection,candidatePower,out var impact,shot.commonType);
+                float safety=shot.opensObstruction
+                    ? (hit?planner.ScoreObstructionProgress(shot.settings,impact,shot.progressTarget):0f)
+                    : (hit?planner.Score(shot.settings,impact):0f);
                 if(safety>safest){safest=safety;direction=candidateDirection;power=candidatePower;}
-                if(safety>=0f)break;
+                if(shot.opensObstruction?safety>0f:safety>=0f)break;
             }
+            // Keep the selected difficulty's execution error. Never replace an
+            // unsafe perturbed excavation with the perfect, unperturbed shot.
+            if(shot.opensObstruction && safest<=0f)
+            {actor.SetNetworkInput(0,false);FinishDecision(serial);turns.EndCurrentTurn();yield break;}
         }
         aim.SetAimDirection(direction);
         yield return new WaitForSeconds(profile.decisionDelay*.45f);
-        if(!StillCurrent(actor,serial)){decision=null;yield break;}
+        if(!StillCurrent(actor,serial)){FinishDecision(serial);yield break;}
+        // Landing/knockback can change the launch point during the aiming delay.
+        // Recheck even Pro without correcting aim or granting a different skill.
+        if(shot.opensObstruction)
+        {
+            // The displayed facing can change during the aiming delay. Validate
+            // the same direction the Fire API actually consumes, without a yield.
+            aim.SetAimDirection(direction);
+            direction=aim.AimDirection;
+            if(!planner.Trace(shot.settings,direction,power,out var finalImpact,shot.commonType) ||
+                planner.ScoreObstructionProgress(shot.settings,finalImpact,shot.progressTarget)<=0)
+            {actor.SetNetworkInput(0,false);FinishDecision(serial);turns.EndCurrentTurn();yield break;}
+            shot.impact=finalImpact;
+        }
         if(shot.commonType!=CommonHeadType.None)
         {
             var common=actor.GetComponent<CommonHeadUseController>();
@@ -151,13 +191,14 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         if(turns.ActionUsedThisTurn)
         {
             ActionsTaken++;
+            if(shot.opensObstruction)Debug.Log($"[AI_OBSTRUCTION] turn={serial} actor={actor.name} skill={shot.settings.skillId} impact={shot.impact} utility={shot.score:F2}");
             // Wait for the legal escape window, not while a projectile is still resolving.
             while(turns.TurnSerial==serial && !turns.IsResidualTimeActive && turns.IsActionPending)yield return null;
             if(turns.TurnSerial==serial && turns.IsResidualTimeActive && shot.settings.effectType!=SkillEffectType.HealBurst)
                 yield return Retreat(actor,shot.impact,shot.settings.explosionRadiusWorld,serial);
         }
         actor.SetNetworkInput(0,false);
-        decision=null;
+        FinishDecision(serial);
     }
 
     private IEnumerator MoveToFiringPosition(TurnCharacterController actor,TurnCharacterController target,int serial)
@@ -299,5 +340,8 @@ public sealed class ObjectHeadAIDirector : MonoBehaviour
         return GameStartData.Instance?.players?.FirstOrDefault(entry=>entry.playerIndex==player);
     }
 
-    private bool StillCurrent(TurnCharacterController actor,int serial)=>turns!=null && !turns.IsMatchOver && turns.TurnSerial==serial && turns.CurrentCharacter==actor && turns.CanCharacterFire(actor);
+    // EndCurrentTurn invokes TurnStarted synchronously. An old coroutine must not
+    // erase the new turn's coroutine handle after that callback has installed it.
+    private void FinishDecision(int serial){if(turns==null || turns.TurnSerial==serial)decision=null;}
+    private bool StillCurrent(TurnCharacterController actor,int serial)=>HasAuthority && turns!=null && !turns.IsMatchOver && turns.TurnSerial==serial && turns.CurrentCharacter==actor && turns.CanCharacterFire(actor);
 }

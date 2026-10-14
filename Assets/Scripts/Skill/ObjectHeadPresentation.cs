@@ -80,6 +80,7 @@ public sealed class ObjectHeadPresentation : ScriptableObject
     public static void Launch(int id, Transform projectile)
     {
         if(ObjectHeadNetworkManager.Instance?.IsDedicatedWorker==true)return;
+        ObjectHeadCombatAudio.Play(id == 41 ? "shot" : "throw", projectile.position);
         var library=Load(); var profile=library != null ? library.Find(id) : null;
         if(profile==null)return;
         Spawn(profile.launchPrefab,projectile.position,1);
@@ -93,10 +94,10 @@ public sealed class ObjectHeadPresentation : ScriptableObject
 
     public static bool Impact(int id, Vector2 point, float radius)
     {
-        if(ObjectHeadCommonAuthority.IsDedicatedMatch)
+        if(ObjectHeadCommonAuthority.Online)
         {
             if(ObjectHeadCommonAuthority.CanWrite)ImpactCommitted?.Invoke(id,point,radius);
-            return true; // Network clients display only the confirmed impact, not their predicted collision.
+            if (!ObjectHeadCommonAuthority.CanWrite || ObjectHeadCommonAuthority.IsDedicatedMatch) return true;
         }
         return PresentConfirmedImpact(id,point,radius);
     }
@@ -104,15 +105,28 @@ public sealed class ObjectHeadPresentation : ScriptableObject
     {
         if(ObjectHeadNetworkManager.Instance?.IsDedicatedWorker==true)return true;
         var library=Load(); var profile=library != null ? library.Find(id) : null;
-        if(profile?.impactPrefab==null)return false;
-        Spawn(profile.impactPrefab,point,Mathf.Max(.3f,radius)*profile.impactScale);
+        if(profile==null)return false;
+        ObjectHeadCombatAudio.Play(ObjectHeadCombatAudio.ImpactCue(id),point);
+        if(profile.impactPrefab!=null)
+            Spawn(profile.impactPrefab,point,Mathf.Max(.3f,radius)*profile.impactScale);
         // Reuse the game's hand-drawn hit fragments for weightier impacts.
         // This remains cosmetic and is emitted only after a confirmed collision.
-        if(profile.cameraImpulse>=.1f)
+        float impulse = FeedbackImpulse(id, radius, profile.cameraImpulse);
+        if(impulse>=.05f) ObjectHeadImpactAccent.Show(point,impulse);
+        if(impulse>=.1f)
             ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Hit,point,Vector2.up,
-                Mathf.Lerp(1f,2f,Mathf.Clamp01(profile.cameraImpulse/.3f)));
-        ImpactPresented?.Invoke(point,radius,profile.cameraImpulse);
-        return true;
+                Mathf.Lerp(1f,2f,Mathf.Clamp01(impulse/.3f)));
+        ImpactPresented?.Invoke(point,radius,impulse);
+        return profile.impactPrefab!=null;
+    }
+
+    public static float FeedbackImpulse(int id, float radius, float authored)
+    {
+        // Tiny terrain-growth stamps must not shake the camera every frame.
+        if (id >= 21 && id <= 23 && radius <= .3f) return 0;
+        if (id >= 11 && id <= 13) return Mathf.Max(authored, .055f);
+        if (id == 41) return Mathf.Max(authored, .075f);
+        return authored;
     }
 
     public static GameObject Warning(int id, Vector2 point, float radius)

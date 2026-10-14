@@ -64,6 +64,22 @@ public class CommonHeadUseController : MonoBehaviour
     public int SelectedSlotIndex => selectedSlotIndex;
     public CommonHeadType SelectedType => selectedType;
     public Sprite SelectedSprite => selectedSprite;
+    // Repeated snapshots must not toggle a slot as a second user click would.
+    public void ApplyNetworkSelection(int slot)
+    {
+        if (commonActionInProgress) return;
+        RefreshReferences();
+        if (slot < 0 || slot >= CommonHeadInventory.SlotCount || inventory == null || inventory.GetSlot(slot) == CommonHeadType.None)
+        {
+            if (HasSelectedCommonHead) CancelSelectionAndRestoreUniqueHead();
+            return;
+        }
+        if (selectedSlotIndex != slot || selectedType != inventory.GetSlot(slot))
+        {
+            if (selectedSlotIndex == slot) CancelSelectionAndRestoreUniqueHead();
+            SelectSlot(slot);
+        }
+    }
     public float MinJetJumpSpeed => minJetJumpSpeed;
     public float MaxJetJumpSpeed => maxJetJumpSpeed;
     // Read-only launch parameters let the AI predict the same projectile that gameplay fires.

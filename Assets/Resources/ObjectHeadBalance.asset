@@ -46,7 +46,7 @@ MonoBehaviour:
     unit: px/unit
     description: "TerrainManager\uAC00 \uC5C6\uC744 \uB54C \uD658\uC0B0\uAC12"
   - key: character.move_speed
-    value: 3.5
+    value: 3.15
     unit: unit/s
     description: "\uACF5\uD1B5 \uC774\uB3D9 \uC18D\uB3C4"
   - key: character.jump_force

@@ -22,6 +22,8 @@ public static class ObjectHeadHelicopterSupport
             ObjectHeadPresentation.Impact(111,target,skill.explosionRadiusWorld*.75f);
             if(visible)ObjectHeadMicroParticles.Emit(ObjectHeadMicroCue.Dust,target,Vector2.up,2);
             yield return new WaitForSeconds(art.supportOpeningSeconds);
+            // Respect the authored joke: the opening boom must actually stop before the pause.
+            if(visible)ObjectHeadCombatAudio.FadeCue("final");
             yield return new WaitForSeconds(art.supportSilenceSeconds);
             Vector2 hover=target+Vector2.up*art.supportHoverHeight;
             var cam=Camera.main;
@@ -74,7 +76,7 @@ public static class ObjectHeadHelicopterSupport
                 }
                 yield return null;
             }
-            if(visible)ObjectHeadSpecialAudio.Play("final");
+            // The final sound is played by the confirmed impact, not ahead of damage.
             // Leave a short departing silhouette while the shared final explosion is committed.
             if(helicopter!=null)
             {helicopter.AddComponent<ObjectHeadSupportDeparture>().direction=Vector2.right*12+Vector2.up*3;helicopter=null;}

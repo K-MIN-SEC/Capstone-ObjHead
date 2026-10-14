@@ -5,7 +5,7 @@ using UnityEngine.Serialization;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(SpriteRenderer))]
-public class TerrainManager : MonoBehaviour
+public partial class TerrainManager : MonoBehaviour
 {
     [Header("Source")]
     [FormerlySerializedAs("sourceTexture")]
@@ -266,6 +266,7 @@ public class TerrainManager : MonoBehaviour
         ApplyRuntimeSprite();
         BuildChunks();
         initialized = true;
+        ResetNetworkTileCache();
 
         if (buildCollidersOnStart)
         {
@@ -683,6 +684,7 @@ public class TerrainManager : MonoBehaviour
                 return false;
         }
 
+        changed |= networkForeground != null && networkForeground.ApplyTerrainOperation(operation);
         ApplyTextureAndDirtyChunks(changed);
         return changed;
     }
@@ -714,6 +716,8 @@ public class TerrainManager : MonoBehaviour
 
     private void PublishOperation(bool changed, TerrainEditOperation operation)
     {
+        // Covers can be destroyed even where the collision mask is already empty.
+        changed |= networkForeground != null && networkForeground.ApplyTerrainOperation(operation);
         if (changed)
         {
             OperationApplied?.Invoke(operation);
@@ -1295,6 +1299,7 @@ public class TerrainManager : MonoBehaviour
 
     private void MarkDirtyPixelAndNeighbors(int x, int y)
     {
+        MarkNetworkTileDirty(x, y);
         MarkDirtyChunkAtPixel(x, y);
         int localX = ((x % chunkSizePx) + chunkSizePx) % chunkSizePx;
         int localY = ((y % chunkSizePx) + chunkSizePx) % chunkSizePx;

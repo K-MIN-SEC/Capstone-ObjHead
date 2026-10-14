@@ -40,6 +40,7 @@ public class TurnCharacterController : MonoBehaviour
     private bool jumpRequested;
     private bool jumpHeld;
     private bool jumpReleased;
+    private readonly ObjectHeadJumpWindow jumpWindow = new ObjectHeadJumpWindow();
     private bool isJumping;
     private bool isGrounded;
     private bool hasControl;
@@ -60,6 +61,7 @@ public class TurnCharacterController : MonoBehaviour
     public void BeginVacuumHover(float charge,ObjectHeadVacuumDefinition tuning)
     {
         if(tuning==null || !ObjectHeadCommonAuthority.CanWrite)return;
+        jumpWindow.Reset();
         hoverTuning=tuning;hoverRemaining=tuning.hoverSeconds;
         hoverClearance=Mathf.Lerp(tuning.hoverHeight.x,tuning.hoverHeight.y,Mathf.Clamp01(charge));
         hoverTargetY=hoverMinimumY=body.position.y+hoverClearance;
@@ -96,6 +98,15 @@ public class TurnCharacterController : MonoBehaviour
         }
     }
     public bool UseNetworkInput {get;set;}
+    // Replicas read their owner's controls, but never solve movement or gravity locally.
+    public bool UsesAuthoritativeMotion { get; private set; }
+    public void ConfigureAuthoritativeMotion()
+    {
+        UsesAuthoritativeMotion = true;
+        body.bodyType = RigidbodyType2D.Kinematic;
+        body.linearVelocity = Vector2.zero;
+    }
+    public void ApplyNetworkGrounded(bool grounded) { isGrounded = grounded; }
     public float InputMoveX => horizontalInput;
     public bool InputJumpHeld => jumpHeld;
     private bool unsentJumpPress;
@@ -156,7 +167,7 @@ public class TurnCharacterController : MonoBehaviour
             if(!hasControl || Time.unscaledTime>networkInputUntil)ResetInput();
             return;
         }
-        if (!AcceptsLocalInput)
+        if (!AcceptsLocalInput || !Application.isFocused || Time.timeScale <= 0f)
         {
             ResetInput();
             return;
@@ -171,6 +182,7 @@ public class TurnCharacterController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if (UsesAuthoritativeMotion) return;
         if(ObjectHeadCaptivity.Captured(this))
         { body.linearVelocity=Vector2.zero;body.angularVelocity=0;ResetInput();return; }
         if(TickVacuumHover())return;
@@ -202,9 +214,10 @@ public class TurnCharacterController : MonoBehaviour
             fallGravityTimer = 0f;
         }
 
-        if (canUseInput && jumpRequested && isGrounded)
+        if (jumpWindow.Tick(Time.time, isGrounded && velocity.y <= 0.05f, canUseInput, jumpRequested))
         {
-            velocity.y = jumpForce;
+            // A tap buffered before landing remains a short jump after the key is released.
+            velocity.y = jumpForce * (jumpHeld ? 1f : minJumpVelocityMultiplier);
             isJumping = true;
             fallGravityTimer = 0f;
         }
@@ -404,6 +417,7 @@ public class TurnCharacterController : MonoBehaviour
 
     private void ResetInput()
     {
+        jumpWindow.Reset();
         unsentJumpPress = false;
         horizontalInput = 0f;
         jumpRequested = false;
@@ -482,7 +496,11 @@ public class TurnCharacterController : MonoBehaviour
         filter.useTriggers = false;
         filter.SetLayerMask(groundLayer);
         filter.useLayerMask = true;
-        return bodyCollider != null && bodyCollider.Cast(Vector2.down, filter, groundHits, groundCheckDistance) > 0;
+        if (bodyCollider == null) return false;
+        int count = bodyCollider.Cast(Vector2.down, filter, groundHits, groundCheckDistance);
+        for (int i=0;i<count;i++)
+            if (groundHits[i].normal.y >= .55f) return true;
+        return false; // Side walls do not replenish the ledge-jump window.
     }
 
     private void UpdateFallDamageImmunity()
